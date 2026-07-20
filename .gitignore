@@ -1,6 +1,5 @@
-# Runtime-generated user data
-LMM_Settings.cfg
-LMM_Log/
+# v0.7 起，仓库有意包含初始化设置与实飞测试日志样本。
+# 插件本身仍只会在本地生成新记录，不会主动上传数据。
 
 # X-Plane / FlyWithLua logs
 *.log

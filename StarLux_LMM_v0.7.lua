@@ -1,25 +1,41 @@
--- StarLux Landing Meter v0.6
--- For X-Plane 12 + FlyWithLua
--- v0.6 adds a dedicated settings window, persistent settings, and one TXT log per landing.
+-- StarLux 落地率插件 v0.7 相对稳定测试版
+-- 适用于 X-Plane 12 + FlyWithLua
+-- v0.7 通过初步实飞测试，整合独立设置窗口、布局/透明度选项和延迟存档。
 
 -- =========================
--- User Config
+-- 用户设置
 -- =========================
 
 local POPUP_MODE = "touchdown"
--- "touchdown" = show shortly after touchdown
--- "taxi"      = show when ground speed drops below 30 kt
+-- "touchdown" = 触地并完成 G 值采集后显示
+-- "taxi"      = 地速降低到 30 节以下时显示
 
 local DISPLAY_SECONDS = 30
--- Shorter G capture reduces post-touchdown gear compression / rolling oscillation influence.
+-- 较短的 G 值采集窗口可减小触地后起落架压缩和滑跑振动的影响。
 local G_CAPTURE_SECONDS = 0.22
 local TAXI_POPUP_SPEED_KT = 30
 
--- Compact popup position. The settings window exposes nine screen positions.
+-- 紧凑型数据窗；设置窗口提供九种屏幕位置。
 local POPUP_POSITION = "middle_left"
-local PANEL_W = 340
-local PANEL_H = 112
-local PANEL_ALPHA = 0.58
+local POPUP_LAYOUT = "horizontal"
+-- "horizontal" = 横向数据窗，状态色粗边位于左侧
+-- "vertical"   = 竖向数据窗，状态色粗边位于上方
+local HORIZONTAL_PANEL_W = 340
+local HORIZONTAL_PANEL_H = 112
+local VERTICAL_PANEL_W = 215
+local VERTICAL_PANEL_H = 168
+local ACCENT_THICKNESS = 12
+local BORDER_ALPHA = 0.78
+local PANEL_OPACITY_LEVEL = 25
+-- 25 档为默认浅透明效果；50 档保持 v0.6.3 的视觉效果；100 档强度最高。
+local PANEL_ALPHA_LEVELS = {
+    [25] = 0.18,
+    [50] = 0.30,
+    [100] = 0.60
+}
+
+-- TXT 写入延后到弹窗出现之后，避免在触地关键帧执行磁盘和日志操作。
+local LOG_WRITE_DELAY_SECONDS = 1.5
 
 local PATH_SEPARATOR = package.config:sub(1, 1)
 local LMM_BASE_DIRECTORY = SCRIPT_DIRECTORY or "."
@@ -35,22 +51,21 @@ end
 local SETTINGS_FILE_PATH = join_path(LMM_BASE_DIRECTORY, "LMM_Settings.cfg")
 local LOG_DIRECTORY_PATH = join_path(LMM_BASE_DIRECTORY, "LMM_Log")
 
--- FPM capture logic.
--- "minimum_final" = use the strongest downward VS in the last short window before touchdown.
--- "last_frame"    = use the last airborne frame value.
+-- 接地率采集逻辑。
+-- "minimum_final" = 使用触地前短时间窗口内最大的向下垂直速度。
+-- "last_frame"    = 使用离地状态最后一帧的垂直速度。
 local FPM_CAPTURE_MODE = "minimum_final"
 local VS_SAMPLE_WINDOW_SECONDS = 0.85
 local VS_SAMPLE_MAX_AGL_FT = 120
 
--- G scoring.
--- true  = use short-window peak G shortly after touchdown.
--- false = use touchdown-frame G only.
+-- G 值评分方式。
+-- true  = 使用触地后短时间窗口内的峰值 G。
+-- false = 只使用触地帧的 G 值。
 local USE_PEAK_G_FOR_SCORE = true
 
--- G robustness logic.
--- Raw peak G can spike after touchdown during gear compression, bounce, wheel spin-up,
--- or aggressive roll/pitch inputs. The displayed/scored G is therefore:
--- robust short-window G -> optionally capped by a simple FPM/G physics consistency guard.
+-- G 值稳健处理逻辑。
+-- 触地后起落架压缩、弹跳、机轮加速或较大的俯仰/横滚输入，都可能造成原始 G 值尖峰。
+-- 因此最终显示和评分使用短窗口稳健 G 值，并可由简化的 FPM/G 物理一致性保护进行限幅。
 local G_ROBUST_PERCENTILE = 0.85
 local ENABLE_G_FPM_LOGIC_GUARD = true
 local G_FPM_DECEL_TIME_SECONDS = 0.42
@@ -58,49 +73,73 @@ local G_LOGIC_MARGIN_SOFT = 0.10
 local G_LOGIC_MARGIN_NORMAL = 0.14
 local G_LOGIC_MARGIN_HARD = 0.20
 
--- Scoring thresholds
+-- 评分阈值
 local FPM_STABLE_MAX = 220
 local FPM_ATTENTION_MAX = 350
 
 local G_STABLE_MAX = 1.30
 local G_ATTENTION_MAX = 1.45
 
--- Optional external interface placeholder.
--- Keep nil for now. Later you can feed other computed quality indicators here.
--- Expected value: nil, "STABLE", "ATTENTION", or "UNSTABLE".
+-- 预留的外部评分接口。
+-- 当前保持为 nil，以后可在这里接入其他计算得到的着陆质量指标。
+-- 可接受的值：nil、"STABLE"、"ATTENTION" 或 "UNSTABLE"。
 local EXTERNAL_SCORE_HINT = nil
 
--- Debug display. Can be toggled from the settings window.
+-- 调试数据显示，可在设置窗口中开关。
 local DEBUG_MODE = false
 
 -- =========================
--- DataRefs
+-- DataRef 数据读取
 -- =========================
 
--- Core landing data
-dataref("ma_vs_fpm", "sim/flightmodel/position/vh_ind_fpm", "readonly")
-dataref("ma_y_agl_m", "sim/flightmodel/position/y_agl", "readonly")
-dataref("ma_on_ground", "sim/flightmodel/failures/onground_any", "readonly")
-dataref("ma_g_normal", "sim/flightmodel/forces/g_nrml", "readonly")
-dataref("ma_roll_deg", "sim/flightmodel/position/phi", "readonly")
-dataref("ma_groundspeed_mps", "sim/flightmodel/position/groundspeed", "readonly")
-dataref("ma_running_time_sec", "sim/time/total_running_time_sec", "readonly")
+-- 直接使用 XPLM 句柄不会占用 FlyWithLua 的 DataRef 表槽位。
+-- 当用户同时运行许多注册了大量 DataRef 的脚本时，这种方式更加稳定。
+local LMM_DATAREF_SPECS = {
+    { key = "vs_fpm", path = "sim/flightmodel/position/vh_ind_fpm", kind = "float" },
+    { key = "y_agl_m", path = "sim/flightmodel/position/y_agl", kind = "float" },
+    { key = "on_ground", path = "sim/flightmodel/failures/onground_any", kind = "int" },
+    { key = "g_normal", path = "sim/flightmodel/forces/g_nrml", kind = "float" },
+    { key = "roll_deg", path = "sim/flightmodel/position/phi", kind = "float" },
+    { key = "groundspeed_mps", path = "sim/flightmodel/position/groundspeed", kind = "float" },
+    { key = "running_time_sec", path = "sim/time/total_running_time_sec", kind = "float" },
+    { key = "ias_kts", path = "sim/cockpit2/gauges/indicators/airspeed_kts_pilot", kind = "float" },
+    { key = "tas_kts", path = "sim/cockpit2/gauges/indicators/true_airspeed_kts_pilot", kind = "float" },
+    { key = "aoa_deg", path = "sim/flightmodel/position/alpha", kind = "float" },
+    { key = "wind_speed_kts", path = "sim/cockpit2/gauges/indicators/wind_speed_kts", kind = "float" },
+    { key = "wind_heading_deg_mag", path = "sim/cockpit2/gauges/indicators/wind_heading_deg_mag", kind = "float" },
+    { key = "heading_deg_mag", path = "sim/flightmodel/position/mag_psi", kind = "float" }
+}
 
--- Touchdown speed data
-dataref("ma_ias_kts", "sim/cockpit2/gauges/indicators/airspeed_kts_pilot", "readonly")
-dataref("ma_tas_kts", "sim/cockpit2/gauges/indicators/true_airspeed_kts_pilot", "readonly")
+local LMM_DATAREFS = {}
+local lmm_missing_datarefs = {}
 
--- Angle of attack
-dataref("ma_aoa_deg", "sim/flightmodel/position/alpha", "readonly")
+for i = 1, #LMM_DATAREF_SPECS do
+    local spec = LMM_DATAREF_SPECS[i]
+    local handle = XPLMFindDataRef(spec.path)
+    LMM_DATAREFS[spec.key] = handle
+    if handle == nil then
+        table.insert(lmm_missing_datarefs, spec.path)
+    end
+end
 
--- Wind information.
--- If a specific aircraft does not feed these correctly, replace these two datarefs later.
-dataref("ma_wind_speed_kts", "sim/cockpit2/gauges/indicators/wind_speed_kts", "readonly")
-dataref("ma_wind_heading_deg_mag", "sim/cockpit2/gauges/indicators/wind_heading_deg_mag", "readonly")
-dataref("ma_heading_deg_mag", "sim/flightmodel/position/mag_psi", "readonly")
+local function lmm_get_float(key)
+    local handle = LMM_DATAREFS[key]
+    if handle == nil then return 0 end
+    return XPLMGetDataf(handle)
+end
+
+local function lmm_get_int(key)
+    local handle = LMM_DATAREFS[key]
+    if handle == nil then return 0 end
+    return XPLMGetDatai(handle)
+end
+
+if #lmm_missing_datarefs > 0 and logMsg then
+    logMsg("[StarLux LMM] Missing required DataRefs: " .. table.concat(lmm_missing_datarefs, ", "))
+end
 
 -- =========================
--- Internal State
+-- 内部状态
 -- =========================
 
 local armed = false
@@ -108,17 +147,20 @@ local was_on_ground = 1
 
 local vs_samples = {}
 
-local last_airborne_vs_fpm = 0
-local selected_final_vs_fpm = 0
-
-local last_airborne_ias_kts = 0
-local last_airborne_tas_kts = 0
-local last_airborne_gs_kts = 0
-local last_airborne_aoa_deg = 0
-local last_airborne_roll_deg = 0
-local last_airborne_wind_speed_kts = 0
-local last_airborne_wind_heading_deg = 0
-local last_airborne_heading_deg = 0
+-- 将相关数值集中到表中，使回调函数低于 Lua 5.1 单函数 60 个 upvalue 的限制。
+-- 旧版使用大量平铺局部变量，导致主更新回调捕获超过 60 个值并在执行前编译失败。
+local approach_data = {
+    vs_fpm = 0,
+    selected_vs_fpm = 0,
+    ias_kts = 0,
+    tas_kts = 0,
+    gs_kts = 0,
+    aoa_deg = 0,
+    roll_deg = 0,
+    wind_speed_kts = 0,
+    wind_heading_deg = 0,
+    heading_deg = 0
+}
 
 local landing_active = false
 local landing_complete = false
@@ -141,17 +183,21 @@ local landing_wind_relative_text = ""
 local landing_status = "STABLE"
 local landing_timestamp = ""
 
-local debug_last_frame_fpm = 0
-local debug_selected_fpm = 0
-local debug_touch_g = 0
-local debug_peak_g = 0
-local debug_robust_g = 0
-local debug_expected_max_g = 0
-local debug_used_g = 0
+local debug_data = {
+    last_frame_fpm = 0,
+    selected_fpm = 0,
+    touch_g = 0,
+    peak_g = 0,
+    robust_g = 0,
+    expected_max_g = 0,
+    used_g = 0
+}
 
 local show_until = 0
 local taxi_popup_done = false
 local settings_window = nil
+local landing_log_pending = false
+local landing_log_write_after = 0
 
 local POSITION_OPTIONS = {
     { id = "top_left", label = "Top left" },
@@ -166,7 +212,7 @@ local POSITION_OPTIONS = {
 }
 
 -- =========================
--- Utility
+-- 工具函数
 -- =========================
 
 local function round_num(n)
@@ -197,16 +243,16 @@ local function normalize_deg(deg)
 end
 
 local function angular_diff_180(from_deg, to_deg)
-    -- Returns signed shortest difference from aircraft heading to wind direction.
-    -- Negative = wind from left side. Positive = wind from right side.
+    -- 返回飞机航向到来风方向之间带正负号的最短角度差。
+    -- 负值表示风从左侧吹来，正值表示风从右侧吹来。
     local diff = normalize_deg(from_deg - to_deg)
     if diff > 180 then diff = diff - 360 end
     return diff
 end
 
 local function build_wind_relative_text(wind_from_deg, wind_speed_kts, aircraft_heading_deg)
-    -- X-Plane wind heading is the direction the wind is FROM.
-    -- Six relative categories are used for a more precise landing readout:
+    -- X-Plane 的风向表示风吹来的方向。
+    -- 使用六种相对风类别，让落地数据显示得更准确：
     -- 顶风 / 左前侧风 / 右前侧风 / 左后侧风 / 右后侧风 / 顺风
     local diff = angular_diff_180(wind_from_deg, aircraft_heading_deg)
     local abs_diff = abs_value(diff)
@@ -230,8 +276,8 @@ local function build_wind_relative_text(wind_from_deg, wind_speed_kts, aircraft_
 end
 
 local function format_roll_text(roll_deg)
-    -- X-Plane phi is normally positive for right bank and negative for left bank.
-    -- Very tiny values are treated as level to avoid distracting +/-0.1° flicker.
+    -- X-Plane 的 phi 通常右倾为正、左倾为负。
+    -- 很小的数值按水平处理，避免出现干扰视线的 +/-0.1° 跳动。
     local abs_roll = abs_value(roll_deg)
     if abs_roll < 0.05 then
         return "横滚 LEVEL 0.0°"
@@ -245,7 +291,7 @@ end
 local function classify_landing(fpm, g, external_hint)
     local abs_fpm = abs_value(fpm)
     local level = 0
-    -- 0 = stable, 1 = attention, 2 = unstable
+    -- 0 = 稳定，1 = 需注意，2 = 不稳定
 
     if abs_fpm > FPM_ATTENTION_MAX or g > G_ATTENTION_MAX then
         level = 2
@@ -253,7 +299,7 @@ local function classify_landing(fpm, g, external_hint)
         level = 1
     end
 
-    -- External score interface reserved for future use.
+    -- 为以后使用预留的外部评分接口。
     if external_hint == "UNSTABLE" then
         level = math.max(level, 2)
     elseif external_hint == "ATTENTION" then
@@ -271,11 +317,11 @@ end
 
 local function status_color(status)
     if status == "UNSTABLE" then
-        return 0.85, 0.08, 0.05, PANEL_ALPHA
+        return 0.72, 0.10, 0.12
     elseif status == "ATTENTION" then
-        return 0.95, 0.70, 0.05, PANEL_ALPHA
+        return 0.78, 0.52, 0.06
     else
-        return 0.05, 0.45, 0.10, PANEL_ALPHA
+        return 0.08, 0.50, 0.24
     end
 end
 
@@ -287,6 +333,10 @@ local function status_short(status)
     else
         return "STABLE"
     end
+end
+
+local function panel_alpha()
+    return PANEL_ALPHA_LEVELS[PANEL_OPACITY_LEVEL] or PANEL_ALPHA_LEVELS[25]
 end
 
 local function clear_vs_samples()
@@ -304,16 +354,16 @@ end
 
 local function select_final_vs_fpm()
     if #vs_samples == 0 then
-        return last_airborne_vs_fpm
+        return approach_data.vs_fpm
     end
 
     if FPM_CAPTURE_MODE == "last_frame" then
-        return last_airborne_vs_fpm
+        return approach_data.vs_fpm
     end
 
-    -- Use strongest downward rate in final window.
-    -- In X-Plane this often correlates better with touchdown G than the last airborne frame,
-    -- because the last frame may already be affected by wheel contact / dataref smoothing.
+    -- 使用最后采样窗口内最大的向下速度。
+    -- 在 X-Plane 中，这通常比离地状态最后一帧更能对应触地 G 值，
+    -- 因为最后一帧可能已经受到机轮接触或 DataRef 平滑处理的影响。
     local min_vs = vs_samples[1].vs
     for i = 2, #vs_samples do
         if vs_samples[i].vs < min_vs then
@@ -329,8 +379,8 @@ local function clear_g_samples()
 end
 
 local function sanitize_g(g)
-    -- Normal touchdown G should be positive and within a sane range.
-    -- Do not use abs(g): a bad negative spike should not become a hard landing.
+    -- 正常触地 G 值应为正数并处于合理范围内。
+    -- 不使用 abs(g)，避免异常负向尖峰被转换成重着陆数值。
     if g == nil then return nil end
     if g > 0.5 and g < 3.0 then
         return g
@@ -361,7 +411,7 @@ local function select_robust_g()
     end
     table.sort(values)
 
-    -- Very short sample sets cannot form a useful percentile; use max in that case.
+    -- 样本数量过少时无法得到有意义的百分位数，此时直接使用最大值。
     if #values < 4 then
         return values[#values]
     end
@@ -374,9 +424,9 @@ local function select_robust_g()
 end
 
 local function estimate_g_from_fpm(fpm)
-    -- Simple physical sanity estimate:
-    -- touchdown load roughly depends on sink-rate energy being arrested over gear/strut time.
-    -- It is not meant to replace measured G; it only prevents obviously impossible pairings.
+    -- 简化的物理合理性估算：
+    -- 触地载荷大致取决于下沉速度能量在起落架和减震支柱作用时间内被吸收的过程。
+    -- 该估算不会替代实测 G 值，只用于排除明显不合理的 FPM/G 组合。
     local sink_mps = abs_value(fpm) * 0.00508
     local extra_g = sink_mps / (G_FPM_DECEL_TIME_SECONDS * 9.80665)
     return 1.0 + extra_g
@@ -411,8 +461,8 @@ local function compute_landing_g(fpm)
     return used_g, robust_g, logical_cap_g
 end
 
-local function draw_panel_border(x, y, w, h)
-    glColor4f(1, 1, 1, 0.18)
+local function draw_panel_border(x, y, w, h, r, g, b)
+    glColor4f(r, g, b, BORDER_ALPHA)
     glRectf(x, y + h - 1, x + w, y + h)
     glRectf(x, y, x + w, y + 1)
     glRectf(x, y, x + 1, y + h)
@@ -420,8 +470,9 @@ local function draw_panel_border(x, y, w, h)
 end
 
 local function current_sim_time()
-    if ma_running_time_sec ~= nil then
-        return ma_running_time_sec
+    local sim_time = lmm_get_float("running_time_sec")
+    if sim_time > 0 then
+        return sim_time
     end
     return os.clock()
 end
@@ -485,6 +536,8 @@ local function save_settings()
     file:write("popup_mode=" .. POPUP_MODE .. "\n")
     file:write("display_seconds=" .. tostring(DISPLAY_SECONDS) .. "\n")
     file:write("popup_position=" .. POPUP_POSITION .. "\n")
+    file:write("popup_layout=" .. POPUP_LAYOUT .. "\n")
+    file:write("panel_opacity=" .. tostring(PANEL_OPACITY_LEVEL) .. "\n")
     file:write("debug_mode=" .. tostring(DEBUG_MODE) .. "\n")
     file:close()
     settings_save_ok = true
@@ -509,6 +562,13 @@ local function load_settings()
             end
         elseif key == "popup_position" and is_valid_position(value) then
             POPUP_POSITION = value
+        elseif key == "popup_layout" and (value == "horizontal" or value == "vertical") then
+            POPUP_LAYOUT = value
+        elseif key == "panel_opacity" then
+            local opacity = tonumber(value)
+            if opacity == 25 or opacity == 50 or opacity == 100 then
+                PANEL_OPACITY_LEVEL = opacity
+            end
         elseif key == "debug_mode" then
             DEBUG_MODE = value == "true"
         end
@@ -591,8 +651,32 @@ local function next_log_file_path()
     return join_path(LOG_DIRECTORY_PATH, base_name .. "_extra.txt")
 end
 
+local function log_landing_summary()
+    if logMsg then
+        logMsg(string.format(
+            "[StarLux LMM] FPM last=%d selected=%d | G touch=%.2f rawPeak=%.2f robust=%.2f cap=%.2f used=%.2f | IAS=%.0f GS=%.0f AoA=%.1f Roll=%.1f | Wind=%03d/%dkt | WindRel=%s | Mode=%s | Layout=%s",
+            debug_data.last_frame_fpm,
+            debug_data.selected_fpm,
+            landing_touch_g,
+            landing_peak_g,
+            debug_data.robust_g,
+            debug_data.expected_max_g,
+            landing_g,
+            landing_ias_kts,
+            landing_gs_kts,
+            landing_aoa_deg,
+            landing_roll_deg,
+            round_num(normalize_deg(landing_wind_heading_deg)),
+            round_num(landing_wind_speed_kts),
+            landing_wind_relative_text,
+            POPUP_MODE,
+            POPUP_LAYOUT
+        ))
+    end
+end
+
 local function write_landing_log()
-    ensure_log_directory()
+    -- 日志目录已在脚本加载阶段创建；落地时不再调用 os.execute，避免瞬时卡顿。
     local log_path = next_log_file_path()
     local file, err = io.open(log_path, "w")
     if file == nil then
@@ -626,8 +710,8 @@ local function write_landing_log()
     file:write("------------------------------------------------------------\n")
     file:write(string.format("触地帧过载: %.2f G\n", landing_touch_g))
     file:write(string.format("短窗口原始峰值: %.2f G\n", landing_peak_g))
-    file:write(string.format("稳健采样值: %.2f G\n", debug_robust_g))
-    file:write(string.format("FPM/G 一致性上限: %.2f G\n", debug_expected_max_g))
+    file:write(string.format("稳健采样值: %.2f G\n", debug_data.robust_g))
+    file:write(string.format("FPM/G 一致性上限: %.2f G\n", debug_data.expected_max_g))
     file:write(string.format("最终显示和评分值: %.2f G\n\n", landing_g))
 
     file:write("评分阈值\n")
@@ -641,6 +725,8 @@ local function write_landing_log()
     file:write("弹窗时机: " .. (POPUP_MODE == "touchdown" and "触地时" or "地速低于 30 kt 时") .. "\n")
     file:write("显示时长: " .. tostring(DISPLAY_SECONDS) .. " 秒\n")
     file:write("屏幕位置: " .. position_log_label(POPUP_POSITION) .. "\n")
+    file:write("窗口布局: " .. (POPUP_LAYOUT == "vertical" and "竖向" or "横向") .. "\n")
+    file:write("背景透明度档位: " .. tostring(PANEL_OPACITY_LEVEL) .. "%\n")
     file:close()
 
     if logMsg then
@@ -649,11 +735,20 @@ local function write_landing_log()
     return true
 end
 
-ensure_log_directory()
-load_settings()
+local storage_init_ok, storage_init_error = pcall(function()
+    ensure_log_directory()
+    load_settings()
+end)
+
+if not storage_init_ok then
+    settings_save_ok = false
+    if logMsg then
+        logMsg("[StarLux LMM] Storage initialization failed; the meter will continue without persistence: " .. tostring(storage_init_error))
+    end
+end
 
 -- =========================
--- Settings Window
+-- 设置窗口
 -- =========================
 
 function ma_settings_window_closed(wnd)
@@ -672,14 +767,14 @@ function ma_open_settings_window()
         return
     end
 
-    settings_window = float_wnd_create(520, 430, 1, true)
+    settings_window = float_wnd_create(520, 555, 1, true)
     float_wnd_set_title(settings_window, "StarLux Landing Meter - Settings")
     float_wnd_set_imgui_builder(settings_window, "ma_build_settings_window")
     float_wnd_set_onclose(settings_window, "ma_settings_window_closed")
 
     local screen_w = SCREEN_WIDTH or 1920
     local screen_h = SCREEN_HIGHT or 1080
-    float_wnd_set_position(settings_window, math.floor((screen_w - 520) / 2), math.floor((screen_h - 430) / 2))
+    float_wnd_set_position(settings_window, math.floor((screen_w - 520) / 2), math.floor((screen_h - 555) / 2))
 end
 
 function ma_build_settings_window(wnd, x, y)
@@ -724,6 +819,34 @@ function ma_build_settings_window(wnd, x, y)
     end
 
     imgui.Separator()
+    imgui.TextUnformatted("Popup layout")
+    if imgui.RadioButton("Horizontal - accent on the left", POPUP_LAYOUT == "horizontal") then
+        POPUP_LAYOUT = "horizontal"
+        save_settings()
+    end
+    if imgui.RadioButton("Vertical - accent on the top", POPUP_LAYOUT == "vertical") then
+        POPUP_LAYOUT = "vertical"
+        save_settings()
+    end
+
+    imgui.Separator()
+    imgui.TextUnformatted("Background opacity")
+    if imgui.RadioButton("25%", PANEL_OPACITY_LEVEL == 25) then
+        PANEL_OPACITY_LEVEL = 25
+        save_settings()
+    end
+    imgui.SameLine()
+    if imgui.RadioButton("50%", PANEL_OPACITY_LEVEL == 50) then
+        PANEL_OPACITY_LEVEL = 50
+        save_settings()
+    end
+    imgui.SameLine()
+    if imgui.RadioButton("100%", PANEL_OPACITY_LEVEL == 100) then
+        PANEL_OPACITY_LEVEL = 100
+        save_settings()
+    end
+
+    imgui.Separator()
     local changed, new_debug_value = imgui.Checkbox("Show measurement debug details", DEBUG_MODE)
     if changed then
         DEBUG_MODE = new_debug_value
@@ -754,19 +877,32 @@ create_command(
 )
 
 -- =========================
--- Core Logic
+-- 核心逻辑
 -- =========================
 
 function ma_landing_meter_update()
     local now = current_sim_time()
 
-    local radio_alt_ft = meters_to_feet(ma_y_agl_m)
-    local gs_kt = mps_to_kt(ma_groundspeed_mps)
-    local current_g = ma_g_normal
+    -- 每帧通过 XPLM 句柄读取一次所有必需数据，避免重复读取。
+    local vs_fpm = lmm_get_float("vs_fpm")
+    local y_agl_m = lmm_get_float("y_agl_m")
+    local on_ground = lmm_get_int("on_ground")
+    local current_g = lmm_get_float("g_normal")
+    local roll_deg = lmm_get_float("roll_deg")
+    local groundspeed_mps = lmm_get_float("groundspeed_mps")
+    local ias_kts = lmm_get_float("ias_kts")
+    local tas_kts = lmm_get_float("tas_kts")
+    local aoa_deg = lmm_get_float("aoa_deg")
+    local wind_speed_kts = lmm_get_float("wind_speed_kts")
+    local wind_heading_deg_mag = lmm_get_float("wind_heading_deg_mag")
+    local heading_deg_mag = lmm_get_float("heading_deg_mag")
 
-    -- Arm only after aircraft is airborne enough.
-    -- This prevents popup when loading the aircraft already parked on ground.
-    if ma_on_ground == 0 and radio_alt_ft > 20 and gs_kt > 50 then
+    local radio_alt_ft = meters_to_feet(y_agl_m)
+    local gs_kt = mps_to_kt(groundspeed_mps)
+
+    -- 只有飞机达到一定离地高度和速度后才进入待触发状态。
+    -- 这样可以避免载入已经停在地面的飞机时误弹出数据窗。
+    if on_ground == 0 and radio_alt_ft > 20 and gs_kt > 50 then
         if armed == false then
             clear_vs_samples()
             clear_g_samples()
@@ -776,32 +912,32 @@ function ma_landing_meter_update()
         taxi_popup_done = false
     end
 
-    -- While airborne near landing, keep the final approach data snapshot.
-    -- The final VS buffer is intentionally limited to low AGL.
-    if ma_on_ground == 0 and armed == true and radio_alt_ft < 500 then
-        last_airborne_vs_fpm = ma_vs_fpm
-        last_airborne_ias_kts = ma_ias_kts
-        last_airborne_tas_kts = ma_tas_kts
-        last_airborne_gs_kts = gs_kt
-        last_airborne_aoa_deg = ma_aoa_deg
-        last_airborne_roll_deg = ma_roll_deg
-        last_airborne_wind_speed_kts = ma_wind_speed_kts
-        last_airborne_wind_heading_deg = ma_wind_heading_deg_mag
-        last_airborne_heading_deg = ma_heading_deg_mag
+    -- 在近地进近阶段持续保存最后的飞行数据快照。
+    -- 垂直速度采样缓冲区只在较低离地高度内工作。
+    if on_ground == 0 and armed == true and radio_alt_ft < 500 then
+        approach_data.vs_fpm = vs_fpm
+        approach_data.ias_kts = ias_kts
+        approach_data.tas_kts = tas_kts
+        approach_data.gs_kts = gs_kt
+        approach_data.aoa_deg = aoa_deg
+        approach_data.roll_deg = roll_deg
+        approach_data.wind_speed_kts = wind_speed_kts
+        approach_data.wind_heading_deg = wind_heading_deg_mag
+        approach_data.heading_deg = heading_deg_mag
 
         if radio_alt_ft <= VS_SAMPLE_MAX_AGL_FT then
-            add_vs_sample(now, ma_vs_fpm)
+            add_vs_sample(now, vs_fpm)
         end
     end
 
-    -- Touchdown detection: transition from airborne to on-ground.
-    if armed == true and was_on_ground == 0 and ma_on_ground == 1 and gs_kt > 35 then
+    -- 触地检测：状态从离地变为接地。
+    if armed == true and was_on_ground == 0 and on_ground == 1 and gs_kt > 35 then
         landing_active = true
         landing_complete = false
         landing_timestamp = os.date("%Y-%m-%d %H:%M:%S")
 
-        selected_final_vs_fpm = select_final_vs_fpm()
-        landing_fpm = round_num(selected_final_vs_fpm)
+        approach_data.selected_vs_fpm = select_final_vs_fpm()
+        landing_fpm = round_num(approach_data.selected_vs_fpm)
 
         clear_g_samples()
         local clean_touch_g = sanitize_g(current_g)
@@ -814,39 +950,36 @@ function ma_landing_meter_update()
         landing_g = clean_touch_g
         add_g_sample(now, clean_touch_g)
 
-        landing_ias_kts = last_airborne_ias_kts
-        landing_tas_kts = last_airborne_tas_kts
-        landing_gs_kts = last_airborne_gs_kts
-        landing_aoa_deg = last_airborne_aoa_deg
-        landing_roll_deg = last_airborne_roll_deg
-        landing_wind_speed_kts = last_airborne_wind_speed_kts
-        landing_wind_heading_deg = last_airborne_wind_heading_deg
-        landing_heading_deg = last_airborne_heading_deg
+        landing_ias_kts = approach_data.ias_kts
+        landing_tas_kts = approach_data.tas_kts
+        landing_gs_kts = approach_data.gs_kts
+        landing_aoa_deg = approach_data.aoa_deg
+        landing_roll_deg = approach_data.roll_deg
+        landing_wind_speed_kts = approach_data.wind_speed_kts
+        landing_wind_heading_deg = approach_data.wind_heading_deg
+        landing_heading_deg = approach_data.heading_deg
         landing_wind_relative_text = build_wind_relative_text(
             landing_wind_heading_deg,
             landing_wind_speed_kts,
             landing_heading_deg
         )
 
-        debug_last_frame_fpm = round_num(last_airborne_vs_fpm)
-        debug_selected_fpm = landing_fpm
-        debug_touch_g = landing_touch_g
-        debug_peak_g = landing_peak_g
-        debug_robust_g = landing_touch_g
-        debug_expected_max_g = max_logical_g_from_fpm(landing_fpm)
-        debug_used_g = landing_g
+        debug_data.last_frame_fpm = round_num(approach_data.vs_fpm)
+        debug_data.selected_fpm = landing_fpm
+        debug_data.touch_g = landing_touch_g
+        debug_data.peak_g = landing_peak_g
+        debug_data.robust_g = landing_touch_g
+        debug_data.expected_max_g = max_logical_g_from_fpm(landing_fpm)
+        debug_data.used_g = landing_g
 
         g_capture_until = now + G_CAPTURE_SECONDS
 
-        if POPUP_MODE == "touchdown" then
-            show_until = now + DISPLAY_SECONDS
-        end
     end
 
-    -- Capture peak G shortly after touchdown.
+    -- 在触地后的短时间内采集 G 值峰值。
     if landing_active == true then
-        -- Collect sane G samples only. Raw peak is still stored for debug,
-        -- but it is no longer directly trusted for scoring/display.
+        -- 只收集合理范围内的 G 值样本。原始峰值仍会保留用于调试，
+        -- 但不会再被直接用于评分或显示。
         local clean_current_g = sanitize_g(current_g)
         if clean_current_g ~= nil then
             add_g_sample(now, clean_current_g)
@@ -855,17 +988,17 @@ function ma_landing_meter_update()
             end
         end
 
-        debug_peak_g = landing_peak_g
+        debug_data.peak_g = landing_peak_g
 
         if now >= g_capture_until then
             if USE_PEAK_G_FOR_SCORE then
-                landing_g, debug_robust_g, debug_expected_max_g = compute_landing_g(landing_fpm)
+                landing_g, debug_data.robust_g, debug_data.expected_max_g = compute_landing_g(landing_fpm)
             else
                 landing_g = landing_touch_g
-                debug_robust_g = landing_touch_g
-                debug_expected_max_g = max_logical_g_from_fpm(landing_fpm)
+                debug_data.robust_g = landing_touch_g
+                debug_data.expected_max_g = max_logical_g_from_fpm(landing_fpm)
             end
-            debug_used_g = landing_g
+            debug_data.used_g = landing_g
 
             landing_status = classify_landing(landing_fpm, landing_g, EXTERNAL_SCORE_HINT)
             landing_active = false
@@ -874,32 +1007,19 @@ function ma_landing_meter_update()
             clear_vs_samples()
             clear_g_samples()
 
-            if logMsg then
-                logMsg(string.format(
-                    "[StarLux LMM] FPM last=%d selected=%d | G touch=%.2f rawPeak=%.2f robust=%.2f cap=%.2f used=%.2f | IAS=%.0f GS=%.0f AoA=%.1f Roll=%.1f | Wind=%03d/%dkt | WindRel=%s | Mode=%s",
-                    debug_last_frame_fpm,
-                    debug_selected_fpm,
-                    landing_touch_g,
-                    landing_peak_g,
-                    debug_robust_g,
-                    debug_expected_max_g,
-                    landing_g,
-                    landing_ias_kts,
-                    landing_gs_kts,
-                    landing_aoa_deg,
-                    landing_roll_deg,
-                    round_num(normalize_deg(landing_wind_heading_deg)),
-                    round_num(landing_wind_speed_kts),
-                    landing_wind_relative_text,
-                    POPUP_MODE
-                ))
+            -- 等 G 值和最终评级全部计算完成后才显示窗口，
+            -- 避免先显示触地帧的绿色 STABLE，再快速变成黄/红色。
+            if POPUP_MODE == "touchdown" then
+                show_until = now + DISPLAY_SECONDS
             end
 
-            write_landing_log()
+            -- 触地关键帧只完成计算和显示；日志输出及 TXT 写入延后执行。
+            landing_log_pending = true
+            landing_log_write_after = now + LOG_WRITE_DELAY_SECONDS
         end
     end
 
-    -- Taxi popup mode: show when speed below 30 kt after landing.
+    -- 低速弹窗模式：落地后地速低于 30 节时显示。
     if POPUP_MODE == "taxi" and landing_complete == true and taxi_popup_done == false then
         if gs_kt <= TAXI_POPUP_SPEED_KT then
             show_until = now + DISPLAY_SECONDS
@@ -907,11 +1027,21 @@ function ma_landing_meter_update()
         end
     end
 
-    was_on_ground = ma_on_ground
+    -- 在弹窗已经稳定显示后再保存日志，避免系统命令和磁盘 I/O 与触地首帧重叠。
+    if landing_log_pending == true and now >= landing_log_write_after then
+        landing_log_pending = false
+        log_landing_summary()
+        local log_ok, log_error = pcall(write_landing_log)
+        if not log_ok and logMsg then
+            logMsg("[StarLux LMM] Landing log failed, but flight monitoring will continue: " .. tostring(log_error))
+        end
+    end
+
+    was_on_ground = on_ground
 end
 
 -- =========================
--- Drawing
+-- 数据窗绘制
 -- =========================
 
 function ma_landing_meter_draw()
@@ -924,22 +1054,30 @@ function ma_landing_meter_draw()
     local screen_w = SCREEN_WIDTH or 1920
     local screen_h = SCREEN_HIGHT or 1080
 
-    local panel_w = PANEL_W
-    local panel_h = PANEL_H
+    local panel_w = HORIZONTAL_PANEL_W
+    local panel_h = HORIZONTAL_PANEL_H
+    if POPUP_LAYOUT == "vertical" then
+        panel_w = VERTICAL_PANEL_W
+        panel_h = VERTICAL_PANEL_H
+    end
 
     local x, y = calculate_popup_position(screen_w, screen_h, panel_w, panel_h)
 
-    local r, g, b, a = status_color(landing_status)
+    local r, g, b = status_color(landing_status)
 
+    -- 恢复浅色半透明状态底板。拖影问题改由移出触地关键帧的日志写入解决，
+    -- 不再用深色不透明色块遮挡驾驶舱画面。
     XPLMSetGraphicsState(0, 0, 0, 1, 1, 0, 0)
-
-    -- Compact translucent background
-    glColor4f(r, g, b, a)
+    glColor4f(r, g, b, panel_alpha())
     glRectf(x, y, x + panel_w, y + panel_h)
-    draw_panel_border(x, y, panel_w, panel_h)
 
-    -- Text
-    glColor4f(1, 1, 1, 0.96)
+    glColor4f(r, g, b, 0.96)
+    if POPUP_LAYOUT == "vertical" then
+        glRectf(x, y + panel_h - ACCENT_THICKNESS, x + panel_w, y + panel_h)
+    else
+        glRectf(x, y, x + ACCENT_THICKNESS, y + panel_h)
+    end
+    draw_panel_border(x, y, panel_w, panel_h, r, g, b)
 
     local line1 = string.format("%+d fpm | +%.2fG", landing_fpm, landing_g)
     local line2 = string.format("IAS %.0fkt | GS %.0fkt", landing_ias_kts, landing_gs_kts)
@@ -947,17 +1085,30 @@ function ma_landing_meter_draw()
     local line4 = landing_wind_relative_text
     local line5 = status_short(landing_status)
 
-    draw_string(x + 14, y + 88, line1)
-    draw_string(x + 14, y + 66, line2)
-    draw_string(x + 14, y + 44, line3)
-    draw_string(x + 14, y + 22, line4)
-    draw_string(x + 14, y + 5, line5)
+    local text_x = x + ACCENT_THICKNESS + 10
+    -- 横向布局使用 90/70/50/30/10 的等距基线，使上下留白更加均衡。
+    local line_y1 = y + 90
+    local line_gap = 20
+    if POPUP_LAYOUT == "vertical" then
+        -- 竖向布局已经协调，不随横向布局的基线调整而改变。
+        text_x = x + 14
+        line_y1 = y + 133
+        line_gap = 27
+    end
+
+    -- 文字只绘制一次，不使用阴影，避免小字号出现重影和模糊感。
+    glColor4f(1, 1, 1, 0.98)
+    draw_string(text_x, line_y1, line1)
+    draw_string(text_x, line_y1 - line_gap, line2)
+    draw_string(text_x, line_y1 - line_gap * 2, line3)
+    draw_string(text_x, line_y1 - line_gap * 3, line4)
+    draw_string(text_x, line_y1 - line_gap * 4, line5)
 
     if DEBUG_MODE == true then
         glColor4f(1, 1, 1, 0.86)
-        local debug_line1 = string.format("DBG FPM last:%d sel:%d", debug_last_frame_fpm, debug_selected_fpm)
-        local debug_line2 = string.format("DBG G touch:%.2f rawPk:%.2f", debug_touch_g, debug_peak_g)
-        local debug_line3 = string.format("DBG G rb:%.2f cap:%.2f used:%.2f", debug_robust_g, debug_expected_max_g, debug_used_g)
+        local debug_line1 = string.format("DBG FPM last:%d sel:%d", debug_data.last_frame_fpm, debug_data.selected_fpm)
+        local debug_line2 = string.format("DBG G touch:%.2f rawPk:%.2f", debug_data.touch_g, debug_data.peak_g)
+        local debug_line3 = string.format("DBG G rb:%.2f cap:%.2f used:%.2f", debug_data.robust_g, debug_data.expected_max_g, debug_data.used_g)
         local debug_x = x + panel_w + 12
         if debug_x + 270 > screen_w then
             debug_x = math.max(0, x - 282)
@@ -970,3 +1121,10 @@ end
 
 do_every_frame("ma_landing_meter_update()")
 do_every_draw("ma_landing_meter_draw()")
+
+if logMsg then
+    logMsg(string.format(
+        "[StarLux LMM] v0.7 loaded successfully with %d direct XPLM DataRefs.",
+        #LMM_DATAREF_SPECS
+    ))
+end

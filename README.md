@@ -1,6 +1,6 @@
 # StarLux Landing Meter
 
-[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/Starlux531/StarLux-Landing-Meter/releases)
+[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](https://github.com/Starlux531/StarLux-Landing-Meter/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![X-Plane](https://img.shields.io/badge/X--Plane-12-orange.svg)](https://www.x-plane.com/)
 
@@ -15,8 +15,11 @@
 - 支持触地时显示或地速低于 30 kt 后显示
 - 支持 30、60、120 秒三档显示时长
 - 支持九宫格屏幕位置选择和 5 秒位置预览
+- 支持横向与竖向两种数据窗口布局
+- 支持 25%、50%、100% 三档背景透明度
 - 每次落地自动在 `LMM_Log` 中生成 UTF-8 中文 TXT
 - 使用短窗口稳健 G 采样与 FPM/G 一致性保护，降低起落架压缩和滚行振动造成的异常峰值
+- 将日志写入移出触地关键帧，降低落地瞬间卡顿和画面拖影
 
 ## 运行要求
 
@@ -26,7 +29,13 @@
 ## 安装
 
 1. 从 [Releases](https://github.com/Starlux531/StarLux-Landing-Meter/releases) 下载最新压缩包。
-2. 解压后，将 `StarLux_LMM_v0.6.lua` 放入：
+2. 解压后，将以下内容放入 FlyWithLua 的 `Scripts` 文件夹：
+
+   - `StarLux_LMM_v0.7.lua`
+   - `LMM_Settings.cfg`
+   - `LMM_Log` 文件夹（包含实飞测试样本，可按需保留或删除）
+
+   目标位置：
 
    ```text
    X-Plane 12/Resources/plugins/FlyWithLua/Scripts/
@@ -53,7 +62,7 @@ starlux/lmm/open_settings
 
 ## 落地记录
 
-插件加载时会在脚本目录创建 `LMM_Log`。每次有效落地完成约 0.22 秒的 G 值采样后，会立即生成一份独立记录，例如：
+插件加载时会在脚本目录创建 `LMM_Log`。每次有效落地完成约 0.22 秒的 G 值采样和最终评级后显示结果，并在约 1.5 秒后生成一份独立记录，例如：
 
 ```text
 LMM_Log/LMM_2026-07-20_21-30-45.txt
@@ -68,8 +77,9 @@ LMM_Log/LMM_2026-07-20_21-30-45.txt
 - 风向、风速和相对风
 - 原始 G 值、稳健采样值与一致性上限
 - 评分阈值及本次使用的显示设置
+- 本次使用的横向/竖向布局与透明度档位
 
-日志仅保存在本地，不会上传任何飞行数据。
+插件不会联网，也不会主动上传任何飞行数据。仓库内的 `LMM_Log` 仅为作者明确打包的实飞测试样本。
 
 ## 默认评分阈值
 
