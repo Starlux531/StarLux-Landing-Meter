@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>StarLux LMM 报告阅读器 v1.0</title>
+<style>
+:root{
+  --bg:#07121b;--panel:#102332;--panel2:#142b3c;--line:#284457;
+  --text:#eef5f7;--muted:#9fb2bd;--soft:#c8d7df;--accent:#2f8dcc;
+  --status:#596773;--compare:#91a7b3;--shadow:0 22px 60px rgba(0,0,0,.32)
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;min-height:100vh;color:var(--text);
+  background:radial-gradient(circle at 86% -8%,#174968 0,transparent 31%),
+    linear-gradient(180deg,#07121b,#0b1722 55%,#08131d);
+  font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif
+}
+button,input{font:inherit}
+button{color:inherit}
+.app{max-width:1480px;margin:auto;padding:24px 20px 58px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}
+.brand{color:#70c8f2;font-size:13px;font-weight:800;letter-spacing:.075em}
+.privacy{border:1px solid #225f44;background:#092e21;color:#bce6d0;border-radius:999px;padding:7px 13px;font-size:11px}
+.workspace{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;align-items:start}
+.sidebar{position:sticky;top:18px;border:1px solid var(--line);background:rgba(11,29,42,.96);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
+.side-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.side-title h2{font-size:16px;margin:0}
+.count{color:#8ccced;background:#15364a;border-radius:999px;padding:4px 9px;font-size:11px}
+.btn{
+  border:1px solid #3a6076;background:#17364a;border-radius:10px;padding:10px 13px;
+  cursor:pointer;font-weight:700;transition:.16s ease
+}
+.btn:hover{background:#1d435a;transform:translateY(-1px)}
+.btn.primary{background:#116b45;border-color:#1f9161}
+.btn.primary:hover{background:#168056}
+.btn.ghost{background:transparent}
+.btn.danger{border-color:#743943;color:#ffc7cd;background:#2e1720}
+.side-actions{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:14px}
+.record-list{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 215px);overflow:auto;padding-right:3px}
+.record{
+  width:100%;border:1px solid #244253;background:#0b1c28;border-radius:12px;
+  padding:11px;text-align:left;cursor:pointer;transition:.16s ease
+}
+.record:hover{border-color:#3d708c;background:#102839}
+.record.active{border-color:var(--status);box-shadow:inset 3px 0 0 var(--status);background:#142d3d}
+.record strong,.record span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.record strong{font-size:12px;margin-bottom:5px}
+.record span{font-size:10px;color:var(--muted)}
+.record-wrap{display:grid;grid-template-columns:minmax(0,1fr) 68px;gap:6px}
+.record.compare{border-style:dashed;border-color:#6f8997;background:#10232f}
+.compare-action{border:1px solid #3b5868;background:#112b3a;border-radius:10px;padding:6px;cursor:pointer;font-size:10px;color:#bdd0d9}
+.compare-action:hover{background:#193b4d}.compare-action:disabled{cursor:default;opacity:.58}
+.compare-action.selected{border-style:dashed;border-color:var(--compare);color:#eef5f7;background:#253945}
+.side-note{color:#7f949f;font-size:10px;line-height:1.65;margin-top:13px}
+.main{min-width:0}
+.drop{
+  min-height:560px;border:2px dashed #355f77;border-radius:22px;
+  background:linear-gradient(180deg,rgba(18,43,60,.78),rgba(8,25,37,.9));
+  display:flex;align-items:center;justify-content:center;padding:35px;text-align:center;
+  transition:.18s ease;box-shadow:var(--shadow)
+}
+.drop.drag{border-color:#70c8f2;background:#112f42;transform:scale(1.004)}
+.drop-inner{max-width:600px}
+.drop-mark{
+  width:88px;height:88px;margin:0 auto 22px;border:1px solid #39728f;border-radius:24px;
+  display:grid;place-items:center;background:#0d293a;color:#7dd1f8;font-size:36px;font-weight:300
+}
+.drop h1{font-size:30px;margin:0 0 12px}.drop p{color:var(--muted);line-height:1.8;margin:0 0 22px}
+.drop .formats{font-size:11px;color:#7f949f;margin-top:16px}
+.report[hidden],.drop[hidden],.context-detail[hidden],.compare-panel[hidden],.chart-legend[hidden]{display:none!important}
+.hero,.card,.section,.viz-card{
+  border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(18,43,60,.97),rgba(13,32,45,.97));
+  border-radius:16px
+}
+.hero{position:relative;overflow:hidden;padding:27px 29px;box-shadow:var(--shadow)}
+.hero:after{
+  content:"";position:absolute;right:-40px;top:-80px;width:260px;height:210px;
+  border-radius:50%;background:color-mix(in srgb,var(--status) 18%,transparent)
+}
+.hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center}
+.eyebrow{color:#71c6ef;font-size:11px;letter-spacing:.13em;margin-bottom:10px}
+h1{font-size:30px;line-height:1.2;margin:0 0 9px}
+.sub{color:#a9bec9;font-size:13px;line-height:1.7}
+.hero-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:18px}
+.status{min-width:220px;background:#071b27;border-left:9px solid var(--status);border-radius:13px;padding:17px 18px}
+.status small{display:block;color:#a5bac5;margin-bottom:6px}.status strong{font-size:18px}.status .version{font-size:11px;color:#9fb2bd;margin-top:5px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-top:15px}
+.card{padding:16px;min-height:110px}
+.card .label{font-size:11px;color:var(--muted);margin-bottom:10px}
+.card .value{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.card .hint{font-size:11px;color:#aec0c9;margin-top:7px;line-height:1.55}
+.card .compare-line{margin-top:8px;padding-top:7px;border-top:1px dashed #415867;color:#bdccd4;font-size:10px;line-height:1.5}
+.compare-panel{margin-top:15px;border:1px dashed #587181;background:linear-gradient(180deg,rgba(28,48,61,.95),rgba(16,34,45,.95));border-radius:16px;padding:17px}
+.compare-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}
+.compare-identity small{display:block;color:var(--muted);font-size:10px;margin-bottom:5px}.compare-identity strong{display:block;font-size:15px}.compare-identity span{display:block;color:#9fb2bd;font-size:10px;margin-top:4px}
+.compare-actions{display:flex;gap:7px;flex-wrap:wrap}
+.compare-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.compare-metric{border-left:2px solid #6f8997;background:rgba(255,255,255,.025);padding:9px 11px;border-radius:6px}
+.compare-metric .metric-label{display:block;color:var(--muted);font-size:9px;margin-bottom:6px}
+.compare-values{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:11px}.compare-values b{font-size:13px}.compare-values span{color:#afc0c9}
+.compare-delta{font-size:9px;color:#d0dce1;margin-top:5px}
+.chart-legend{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:0 0 8px;font-size:10px;color:#b7c8d0}
+.legend-item{display:flex;align-items:center;gap:7px;min-width:0}.legend-item span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px}
+.legend-line{display:inline-block;width:30px;border-top:3px solid var(--status)}.legend-line.compare{border-top:2px dashed var(--compare);opacity:.75}
+.layout{display:grid;grid-template-columns:1.45fr .75fr;gap:15px;margin-top:15px}
+.section{padding:19px}
+.section h2,.viz-title{font-size:17px;margin:0 0 5px}
+.lead,.viz-sub{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:16px}
+.meter-wrap{margin:16px 0 22px}.meter-head{display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px}
+.meter{height:14px;border-radius:999px;background:linear-gradient(90deg,#125b93 0 28.5%,#147a49 28.5% 71.4%,#c47c08 71.4% 85.7%,#b51e2e 85.7%);position:relative;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.meter.g{background:linear-gradient(90deg,#125b93 0 20%,#147a49 20% 50%,#c47c08 50% 80%,#b51e2e 80%)}
+.pointer{position:absolute;top:-5px;width:4px;height:24px;border-radius:4px;background:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.45)}
+.scale{display:flex;justify-content:space-between;color:#8196a2;font-size:10px;margin-top:5px}
+.insight{border-left:4px solid var(--status);background:rgba(255,255,255,.04);padding:11px 13px;border-radius:8px;margin:9px 0;font-size:12px;line-height:1.65}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:0 17px}
+.fact{padding:10px 0;border-bottom:1px solid rgba(125,159,178,.2)}
+.fact span{display:block;color:var(--muted);font-size:10px;margin-bottom:4px}.fact b{font-size:12px;font-weight:600}
+.context-toggle{width:100%;margin-top:15px}
+.context-detail{display:grid;grid-template-columns:1fr 1fr 1.15fr;gap:13px;margin-top:15px}
+.viz-card{padding:17px;min-height:278px}
+.viz-caption{text-align:center;color:#c5d6de;font-size:11px;line-height:1.6;margin-top:7px}
+.wind-board,.pose-board,.runway-board{
+  height:178px;border:1px solid #28495c;border-radius:13px;background:#0a1c28;position:relative;overflow:hidden
+}
+.wind-board{width:178px;border-radius:50%;margin:0 auto}
+.wind-board:before,.wind-board:after{content:"";position:absolute;background:#27495d}
+.wind-board:before{width:1px;top:14px;bottom:14px;left:50%}.wind-board:after{height:1px;left:14px;right:14px;top:50%}
+.plane-top{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-90deg);font-size:57px;color:#dce9ef;z-index:3;text-shadow:0 0 1px #8bb1c5}
+.nose-label{position:absolute;left:50%;top:7px;transform:translateX(-50%);font-size:10px;color:#9fb2bd;z-index:4}
+.wind-arrow{position:absolute;left:calc(50% - 2px);top:20px;width:4px;height:49px;background:#53b7df;border-radius:4px;transform-origin:2px 69px;z-index:4}
+.wind-arrow:after{content:"";position:absolute;left:-5px;bottom:-5px;border-left:7px solid transparent;border-right:7px solid transparent;border-top:11px solid #53b7df}
+.pose-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pose-mini{border:1px solid #28495c;background:#0a1c28;border-radius:12px;padding:9px;text-align:center}
+.pose-mini b{font-size:10px}
+.pose-board{height:160px;border:0;border-radius:7px;margin-top:5px}
+.horizon{position:absolute;left:9%;right:9%;top:50%;height:2px;background:#3e657a}
+.plane-front{position:absolute;left:50%;top:50%;width:72%;height:34px;transform:translate(-50%,-50%)}
+.plane-front:before{content:"";position:absolute;left:0;right:0;top:15px;height:5px;background:#dce9ef;border:1px solid #8bb1c5;border-radius:50%}
+.plane-front:after{content:"";position:absolute;left:46%;top:0;width:8%;height:34px;background:#dce9ef;border:1px solid #8bb1c5;clip-path:polygon(50% 0,100% 100%,50% 78%,0 100%)}
+.airflow{position:absolute;left:8%;right:8%;top:54%;border-top:2px dashed #53b7df}
+.airflow:before{content:"";position:absolute;left:-2px;top:-6px;border-right:8px solid #53b7df;border-top:5px solid transparent;border-bottom:5px solid transparent}
+.plane-side{position:absolute;left:13%;top:47%;width:75%;height:24px;background:#dce9ef;border:1px solid #8bb1c5;clip-path:polygon(0 55%,78% 12%,96% 28%,100% 50%,80% 72%,10% 83%)}
+.runway-board{display:flex;align-items:center;justify-content:center}
+.runway{position:relative;width:88%;height:58px;background:#26343d;border:2px solid #8a9aa3;border-radius:4px}
+.runway:before{content:"";position:absolute;left:5%;right:5%;top:27px;border-top:3px dashed #d8e0e4}
+.threshold{position:absolute;left:3%;top:6px;bottom:6px;width:11%;background:repeating-linear-gradient(90deg,#dfe7ea 0 3px,transparent 3px 7px)}
+.touch{position:absolute;top:-18px;width:4px;height:92px;background:#ffca58;box-shadow:0 0 0 3px rgba(255,202,88,.2)}
+.touch:before{content:"触地点";position:absolute;top:-20px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9px;color:#ffdb83}
+.geometry-empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);line-height:1.75;padding:18px}
+.chart-box{position:relative;height:350px;margin-top:10px}
+canvas{display:block;width:100%;height:100%}
+.tooltip{display:none;white-space:pre-line;position:absolute;pointer-events:none;background:#031019;border:1px solid #3d6b84;border-radius:9px;padding:9px 11px;font-size:10px;line-height:1.55;box-shadow:0 8px 25px rgba(0,0,0,.4);z-index:5}
+.empty{height:225px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);border:1px dashed #355268;border-radius:12px;line-height:1.8}
+.diag{width:100%;border-collapse:collapse;margin-top:8px;font-size:11px}.diag td{padding:8px;border-bottom:1px solid rgba(125,159,178,.2)}.diag td:first-child{color:var(--muted)}
+details{margin-top:15px;border:1px solid var(--line);background:#0b1c28;border-radius:14px;padding:14px}
+summary{cursor:pointer;font-weight:700;color:#b9d7e8}
+pre{white-space:pre-wrap;word-break:break-word;font-family:Consolas,"Microsoft YaHei",monospace;font-size:10px;line-height:1.65;color:#c8d7df;max-height:540px;overflow:auto;padding:12px;background:#07141e;border-radius:9px}
+.error{display:none;margin-bottom:12px;border:1px solid #7e3b48;background:#311820;color:#ffc7cd;border-radius:11px;padding:11px 13px;font-size:12px}
+footer{color:#7f949f;font-size:10px;line-height:1.7;margin-top:21px;text-align:center}
+@media(max-width:1080px){.workspace{grid-template-columns:1fr}.sidebar{position:static}.record-list{max-height:240px}.context-detail{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}.compare-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:760px){.app{padding:16px 11px 40px}.layout,.hero-grid{grid-template-columns:1fr}.status{min-width:0}.facts{grid-template-columns:1fr}.pose-grid{grid-template-columns:1fr}.drop{min-height:480px}.topbar{align-items:flex-start;flex-direction:column}.compare-head{flex-direction:column}.compare-grid{grid-template-columns:1fr}}
+@media(max-width:470px){.grid{grid-template-columns:1fr}h1,.drop h1{font-size:24px}.hero{padding:21px}.privacy{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">STARLUX LANDING METRICS MONITOR · 报告阅读器 v1.0</div>
+    <div class="privacy">完全本地读取 · 数据不会上传</div>
+  </header>
+  <div class="workspace">
+    <aside class="sidebar">
+      <div class="side-title"><h2>已载入记录</h2><span class="count" id="recordCount">0</span></div>
+      <div class="side-actions">
+        <button class="btn primary" id="addFiles" type="button">选择 TXT</button>
+        <button class="btn danger" id="clearFiles" type="button" title="只清除网页内存，不删除磁盘文件">清空</button>
+      </div>
+      <div class="record-list" id="recordList"></div>
+      <div class="side-note">点击记录主体切换主要数据；右侧“对比”按钮选择参考数据。关闭页面后自动清空，不会删除原始 TXT。</div>
+    </aside>
+    <main class="main">
+      <div class="error" id="errorBox"></div>
+      <section class="drop" id="dropZone">
+        <div class="drop-inner">
+          <div class="drop-mark">＋</div>
+          <h1>把落地日志拖到这里</h1>
+          <p>无需启动 X-Plane。选择一份或多份 <b>LMM_*.txt</b>，网页会立即在本机解析评分、载荷、风向、姿态和 100 ft 后拉平轨迹。</p>
+          <button class="btn primary" id="chooseFiles" type="button">选择落地日志</button>
+          <div class="formats">支持 StarLux LMM 早期日志及 0.7–1.0 记录 · 可多选</div>
+        </div>
+      </section>
+      <section class="report" id="report" hidden>
+        <section class="hero">
+          <div class="hero-grid">
+            <div>
+              <div class="eyebrow" id="reportTime">LANDING REPORT</div>
+              <h1 id="reportTitle">--</h1>
+              <div class="sub" id="reportExplanation">--</div>
+              <div class="hero-actions">
+                <button class="btn primary" id="downloadTxt" type="button">下载原始 TXT</button>
+                <button class="btn ghost" id="loadMore" type="button">载入更多日志</button>
+                <button class="btn ghost" id="chooseCompare" type="button">选择对比日志</button>
+              </div>
+            </div>
+            <div class="status">
+              <small>最终评价</small>
+              <strong id="statusLabel">--</strong>
+              <div class="version" id="reportVersion">--</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="compare-panel" id="comparePanel" hidden>
+          <div class="compare-head">
+            <div class="compare-identity"><small>当前对比数据</small><strong id="compareTitle">--</strong><span id="compareMeta">--</span></div>
+            <div class="compare-actions">
+              <button class="btn ghost" id="swapComparison" type="button">交换主／对比</button>
+              <button class="btn ghost" id="cancelComparison" type="button">取消对比</button>
+            </div>
+          </div>
+          <div class="compare-grid" id="compareMetrics"></div>
+        </section>
+
+        <section class="grid">
+          <article class="card"><div class="label">触地下降率</div><div class="value" id="fpmCard">--</div><div class="hint">优先读取报告最终物理速度</div><div class="compare-line" id="fpmCompareLine" hidden></div></article>
+          <article class="card"><div class="label">最终载荷</div><div class="value" id="gCard">--</div><div class="hint">沿用原报告最终显示值</div><div class="compare-line" id="gCompareLine" hidden></div></article>
+          <article class="card"><div class="label">指示空速 / 地速</div><div class="value" id="speedCard">--</div><div class="hint">IAS / GS</div><div class="compare-line" id="speedCompareLine" hidden></div></article>
+          <article class="card"><div class="label">拉平曲率</div><div class="value" id="flareCard">--</div><div class="hint" id="flareHint">该记录未提供拉平分析</div><div class="compare-line" id="flareCompareLine" hidden></div></article>
+        </section>
+
+        <div class="layout">
+          <section class="section">
+            <h2>评分构成</h2><div class="lead">按当前日志中的 FPM 与 G 解释评分，不改写原报告结论。</div>
+            <div class="meter-wrap">
+              <div class="meter-head"><span>下降率严重度</span><b id="fpmMeterValue">--</b></div>
+              <div class="meter"><i class="pointer" id="fpmPointer"></i></div>
+              <div class="scale"><span>0</span><span>100</span><span>250</span><span>300+</span></div>
+            </div>
+            <div class="meter-wrap">
+              <div class="meter-head"><span>接地载荷严重度</span><b id="gMeterValue">--</b></div>
+              <div class="meter g"><i class="pointer" id="gPointer"></i></div>
+              <div class="scale"><span>1.00</span><span>1.20</span><span>1.50</span><span>1.80+</span></div>
+            </div>
+            <div class="insight" id="dominantInsight">--</div>
+            <div class="insight" id="flareInsight">--</div>
+            <div class="insight" id="warningInsight">--</div>
+          </section>
+          <aside class="section">
+            <h2>着陆上下文</h2><div class="lead">快速还原接地环境和机体状态。</div>
+            <div class="facts" id="facts"></div>
+            <button class="btn context-toggle" id="contextToggle" type="button" aria-expanded="false">显示着陆上下文详情</button>
+          </aside>
+        </div>
+
+        <section class="context-detail" id="contextDetails" hidden>
+          <article class="viz-card">
+            <h2 class="viz-title">相对风向</h2><div class="viz-sub">飞机固定朝上；蓝色箭头表示气流从哪里吹向飞机。</div>
+            <div id="windGraphic"></div><div class="viz-caption" id="windCaption">--</div>
+          </article>
+          <article class="viz-card">
+            <h2 class="viz-title">接地姿态</h2><div class="viz-sub">用简化机体示意横滚和迎角。</div>
+            <div class="pose-grid" id="poseGraphic"></div><div class="viz-caption">快速复盘示意，不代替飞机姿态仪或飞行数据记录器。</div>
+          </article>
+          <article class="viz-card">
+            <h2 class="viz-title">跑道触地点</h2><div class="viz-sub">仅在日志具有真实跑道长度和入口距离时绘制。</div>
+            <div id="runwayGraphic"></div><div class="viz-caption" id="runwayCaption">--</div>
+          </article>
+        </section>
+
+        <div class="layout">
+          <section class="section">
+            <h2>100 ft 后拉平轨迹</h2><div class="lead">主要数据为清晰实线；对比数据以虚化虚线叠在后方，共用同一时间和 FPM 标尺。</div>
+            <div class="chart-legend" id="chartLegend" hidden>
+              <div class="legend-item"><i class="legend-line"></i><span id="primaryLegend">主要数据</span></div>
+              <div class="legend-item"><i class="legend-line compare"></i><span id="compareLegend">对比数据</span></div>
+            </div>
+            <div class="chart-box" id="chartBox"><canvas id="flareChart"></canvas><div class="tooltip" id="chartTip"></div></div>
+            <div class="empty" id="chartEmpty" hidden>该日志没有可绘制的 0.5 秒聚合轨迹。<br>早期版本仍可查看评分、触地数据和完整原文。</div>
+          </section>
+          <aside class="section">
+            <h2>载荷诊断</h2><div class="lead">详细数学日志会显示更多中间量。</div>
+            <table class="diag" id="diagnostics"></table>
+          </aside>
+        </div>
+
+        <details id="rawDetails"><summary>展开完整原始 TXT</summary><pre id="rawText"></pre></details>
+        <footer>StarLux LMM 报告阅读器 v1.0 · 文件仅由当前浏览器页面读取<br>本报告仅用于飞行模拟复盘，不替代航司、维修或适航判定。</footer>
+      </section>
+    </main>
+  </div>
+</div>
+<input id="fileInput" type="file" accept=".txt,text/plain" multiple hidden>
+
+<!-- LMM_LUA_BRIDGE -->
+
+<script>
+"use strict";
+
+const state={records:[],activeId:null,compareId:null,importMode:"main"};
+const $=id=>document.getElementById(id);
+const ui={
+  fileInput:$("fileInput"),drop:$("dropZone"),report:$("report"),error:$("errorBox"),
+  list:$("recordList"),count:$("recordCount"),context:$("contextDetails"),
+  contextToggle:$("contextToggle"),canvas:$("flareChart"),tip:$("chartTip"),
+  comparePanel:$("comparePanel"),chartLegend:$("chartLegend")
+};
+
+function showError(message){
+  ui.error.textContent=message;ui.error.style.display=message?"block":"none";
+}
+function parseNumber(value){
+  const match=String(value??"").match(/[+-]?\d+(?:\.\d+)?/);
+  return match?Number(match[0]):null;
+}
+function clamp(value,min,max){return Math.max(min,Math.min(max,value))}
+function normalizeDeg(value){return ((value%360)+360)%360}
+function relativeAngle(from,heading){
+  let value=normalizeDeg(from-heading);if(value>180)value-=360;return value
+}
+function fieldMap(content){
+  const fields={};
+  content.split(/\r?\n/).forEach(line=>{
+    const match=line.match(/^\s*(.*?)\s*[:：]\s*(.*?)\s*$/);
+    if(match&&match[1]&&!Object.hasOwn(fields,match[1]))fields[match[1]]=match[2];
+  });
+  return fields
+}
+function firstField(fields,names){
+  for(const name of names){if(fields[name]!=null&&fields[name]!=="")return fields[name]}
+  return ""
+}
+function statusCode(value){
+  const upper=String(value??"").toUpperCase();
+  if(upper.includes("UNSTABLE"))return"UNSTABLE";
+  if(upper.includes("ATTENTION"))return"ATTENTION";
+  if(upper.includes("STABLE"))return"STABLE";
+  if(upper.includes("NICE"))return"NICE";
+  return"UNKNOWN"
+}
+function statusVisual(status){
+  return{
+    UNSTABLE:["#B51E2E","UNSTABLE 不良落地"],
+    ATTENTION:["#C47C08","Attention 需注意"],
+    STABLE:["#147A49","Stable 稳定扎实落地"],
+    NICE:["#125B93","Nice 轻柔接地"],
+    UNKNOWN:["#596773","未识别评价"]
+  }[status]||["#596773","未识别评价"]
+}
+function parseRoll(value){
+  const number=parseNumber(value);if(number==null)return null;
+  if(String(value).includes("左倾"))return-Math.abs(number);
+  if(String(value).includes("右倾"))return Math.abs(number);
+  return number
+}
+function parseTrajectory(content){
+  const points=[];let inTable=false,dataStarted=false;
+  for(const line of content.split(/\r?\n/)){
+    if(line.includes("0.5秒聚合轨迹表")){inTable=true;continue}
+    if(!inTable)continue;
+    const values=[...line.matchAll(/[+-]?\d+(?:\.\d+)?/g)].map(m=>Number(m[0]));
+    if(values.length>=3){
+      points.push({t:values[0],ra:values[1],fpm:values[2],vvi:values[3]??null,ias:values[4]??null,gs:values[5]??null,pitch:values[6]??null,aoa:values[7]??null,roll:values[8]??null});
+      dataStarted=true
+    }else if(dataStarted)break
+  }
+  return points
+}
+function filenameIdentity(name){
+  const match=name.match(/^LMM_([^_]+)_([^_]+)_RWY([^_]+)_/);
+  return match?{airport:match[1],aircraft:match[2],runway:match[3]}:{airport:"",aircraft:"",runway:""}
+}
+function parseReport(fileName,content){
+  content=content.replace(/^\uFEFF/,"");
+  const fields=fieldMap(content),identity=filenameIdentity(fileName);
+  const evaluation=firstField(fields,["最终评价","落地评价"]);
+  const fpmText=firstField(fields,["触地垂直速度","触地下降率"]);
+  const gText=firstField(fields,["最终过载","最终显示和评分值"]);
+  const iasGs=firstField(fields,["IAS / GS"]);
+  let ias=parseNumber(firstField(fields,["指示空速（IAS）"]));
+  let gs=parseNumber(firstField(fields,["地速（GS）"]));
+  const speedPair=iasGs.match(/([+-]?\d+(?:\.\d+)?)\s*\/\s*([+-]?\d+(?:\.\d+)?)/);
+  if(speedPair){ias=Number(speedPair[1]);gs=Number(speedPair[2])}
+  const airportText=firstField(fields,["落地机场"]);
+  let airport=(airportText.match(/^([\w]+)/)||[])[1]||identity.airport||"UNKNOWN";
+  if(airportText.includes("未能识别"))airport="UNKNOWN";
+  const aircraft=firstField(fields,["机型（ICAO）"])||identity.aircraft||"UNKNOWN";
+  const runwayText=firstField(fields,["触地跑道方向"]);
+  const runway=(runwayText.match(/RWY([\w]+)/i)||[])[1]||runwayText.match(/(?:约\s*)?([\d]{1,2}[LRC]?)/i)?.[1]||identity.runway||"--";
+  const headingText=firstField(fields,["飞机磁航向"]);
+  const windSourceText=firstField(fields,["风向和风速"]);
+  const windMatch=windSourceText.match(/来自\s*([+-]?\d+(?:\.\d+)?)\s*deg[^\d]+([+-]?\d+(?:\.\d+)?)\s*kt/i);
+  const aoaText=firstField(fields,["迎角"]),rollText=firstField(fields,["横滚角"]);
+  const version=(content.match(/StarLux[^\r\n]*?v(\d+\.\d+(?:\.\d+)?)/)||[])[1]||"Legacy";
+  return{
+    fileName,raw:content,fields,version,legacy:version==="Legacy",
+    timestamp:firstField(fields,["落地时间（本地时间）"]),
+    evaluation:evaluation||"未提供",explanation:firstField(fields,["评价说明"]),status:statusCode(evaluation),
+    fpm:parseNumber(fpmText),fpmText:fpmText||"无数据",g:parseNumber(gText),gText:gText||"无数据",
+    airport,airportText:airportText||airport,aircraft,runway,ias,gs,
+    tasText:firstField(fields,["真空速（TAS）"]),aoaText,aoaDeg:parseNumber(aoaText),
+    rollText,rollDeg:parseRoll(rollText),headingText,headingDeg:parseNumber(headingText),
+    windText:firstField(fields,["相对风"]),windSourceText,
+    windFromDeg:windMatch?Number(windMatch[1]):null,windSpeedKts:windMatch?Number(windMatch[2]):null,
+    airportDistanceText:firstField(fields,["触地点距机场参考点"]),
+    runwayLengthM:parseNumber(firstField(fields,["跑道长度","跑道可用长度"])),
+    touchdownFromThresholdM:parseNumber(firstField(fields,["触地点距跑道入口","触地点距入口"])),
+    surfaceText:firstField(fields,["道面提示"]),surfaceSource:firstField(fields,["道面判定来源"]),
+    bounceText:firstField(fields,["弹跳检测"]),flareMetric:parseNumber(firstField(fields,["拉平曲率"])),
+    flareTrend:firstField(fields,["拉平轨迹结论","轨迹结论"]),
+    flareDuration:firstField(fields,["100 ft 至触地时间"]),
+    flareEntry:firstField(fields,["100 ft 附近下降率"]),
+    flareRecovery:firstField(fields,["下降率净改善量"]),
+    touchG:parseNumber(firstField(fields,["触地帧过载"])),
+    peakG:parseNumber(firstField(fields,["第一次压缩原始峰值","短窗口原始峰值"])),
+    curveG:parseNumber(firstField(fields,["第75百分位曲线 G","稳健采样值"])),
+    baselineG:parseNumber(firstField(fields,["接地前垂直 G 基线"])),
+    equivalentG:parseNumber(firstField(fields,["冲量等效 G","FPM/G 一致性上限"])),
+    consistencyText:firstField(fields,["冲量一致性误差"]),
+    confidenceText:firstField(fields,["数据可信度"]),
+    impactSamples:firstField(fields,["冲击阶段有效样本数"]),
+    analysisMs:firstField(fields,["落地分析耗时","最终评分耗时","冲量分析耗时"]),
+    trajectory:parseTrajectory(content)
+  }
+}
+function decodeLog(buffer){
+  const utf8=new TextDecoder("utf-8",{fatal:false}).decode(buffer);
+  const bad=(utf8.match(/\uFFFD/g)||[]).length;
+  if(bad<3)return utf8;
+  try{
+    const gb=new TextDecoder("gb18030",{fatal:false}).decode(buffer);
+    return (gb.match(/\uFFFD/g)||[]).length<bad?gb:utf8
+  }catch{return utf8}
+}
+function recordSortKey(record){
+  const normalized=String(record.report.timestamp||"")
+    .replace(/[^\d]/g,"")
+    .padEnd(14,"0")
+    .slice(0,14);
+  const parsed=Number(normalized);
+  return parsed>0?parsed:record.file.lastModified
+}
+async function importFiles(fileList,mode=state.importMode){
+  const files=[...fileList].filter(file=>file.name.toLowerCase().endsWith(".txt"));
+  if(!files.length){showError("没有找到 TXT 文件。请选择 StarLux LMM 生成的 LMM_*.txt。");return}
+  showError("");
+  const importedIds=[];
+  for(const file of files){
+    try{
+      const content=decodeLog(await file.arrayBuffer());
+      if(!content.trim())throw new Error("文件为空");
+      const report=parseReport(file.name,content);
+      const id=`${file.name}:${file.size}:${file.lastModified}`;
+      const existing=state.records.findIndex(item=>item.id===id);
+      const record={id,file,report};
+      if(existing>=0)state.records[existing]=record;else state.records.push(record);
+      importedIds.push(id)
+    }catch(error){showError(`无法读取 ${file.name}：${error.message||error}`)}
+  }
+  state.records.sort((a,b)=>recordSortKey(b)-recordSortKey(a));
+  if(importedIds.length){
+    const selected=importedIds.at(-1);
+    if(mode==="compare"&&state.activeId){
+      if(selected===state.activeId)showError("主要数据和对比数据不能是同一份记录。");
+      else state.compareId=selected
+    }else{
+      state.activeId=selected;
+      if(state.compareId===selected)state.compareId=null
+    }
+    renderCurrent()
+  }
+  state.importMode="main";ui.fileInput.multiple=true
+}
+function renderRecordList(){
+  ui.list.replaceChildren();ui.count.textContent=String(state.records.length);
+  for(const record of state.records){
+    const wrap=document.createElement("div");wrap.className="record-wrap";
+    const button=document.createElement("button");button.type="button";
+    button.className="record"+(record.id===state.activeId?" active":"")+(record.id===state.compareId?" compare":"");
+    const title=document.createElement("strong");title.textContent=record.file.name;
+    const meta=document.createElement("span");
+    meta.textContent=`${record.report.timestamp||"时间未知"} · ${record.report.airport} · RWY${record.report.runway} · ${record.report.evaluation}`;
+    button.append(title,meta);button.addEventListener("click",()=>selectRecord(record.id));
+    const compareButton=document.createElement("button");compareButton.type="button";
+    compareButton.className="compare-action"+(record.id===state.compareId?" selected":"");
+    compareButton.disabled=record.id===state.activeId;
+    compareButton.textContent=record.id===state.activeId?"主数据":record.id===state.compareId?"对比中":"对比";
+    compareButton.addEventListener("click",()=>setComparison(record.id));
+    wrap.append(button,compareButton);ui.list.append(wrap)
+  }
+}
+function renderCurrent(){
+  const primary=activeRecord();
+  renderRecordList();
+  if(!primary){ui.report.hidden=true;ui.drop.hidden=false;return}
+  ui.drop.hidden=true;ui.report.hidden=false;renderReport(primary.report,comparisonRecord()?.report||null)
+}
+function selectRecord(id){
+  const record=state.records.find(item=>item.id===id);if(!record)return;
+  if(id===state.compareId){
+    const previous=state.activeId;state.activeId=id;state.compareId=previous
+  }else state.activeId=id;
+  showError("");renderCurrent();window.scrollTo({top:0,behavior:"smooth"})
+}
+function setComparison(id){
+  if(id===state.activeId){showError("主要数据和对比数据不能是同一份记录。");return}
+  state.compareId=id;showError("");renderCurrent()
+}
+function cancelComparison(){state.compareId=null;showError("");renderCurrent()}
+function swapComparison(){
+  if(!state.compareId)return;
+  const previous=state.activeId;state.activeId=state.compareId;state.compareId=previous;showError("");renderCurrent()
+}
+function fmt(value,digits=0,suffix=""){
+  return Number.isFinite(value)?`${value.toFixed(digits)}${suffix}`:"--"
+}
+function meterPercent(value,min,max){return Number.isFinite(value)?clamp((value-min)/(max-min)*100,0,100):0}
+function severityFpm(value){
+  if(!Number.isFinite(value))return 0;value=Math.abs(value);return value<=100?1:value<=250?2:value<=300?3:4
+}
+function severityG(value){
+  if(!Number.isFinite(value))return 0;return value<=1.2?1:value<=1.5?2:value<=1.8?3:4
+}
+function dominantText(report){
+  if(report.legacy)return"旧版记录保留当时的评分结论，不使用新版阈值重新评级。";
+  const f=severityFpm(report.fpm),g=severityG(report.g);
+  if(!f||!g)return"报告字段不足，无法比较 FPM 与 G 的评分主导关系。";
+  if(f>g)return"FPM 档位更严重，本次评分主要受触地下降率影响。";
+  if(g>f)return"G 档位更严重，本次评分主要受接地载荷影响。";
+  return"FPM 与 G 处于同一评分档位，结果具有良好的一致性。"
+}
+function setText(id,value){$(id).textContent=value}
+function parseMetric(value){return parseNumber(String(value||""))}
+function signedDelta(primary,comparison,digits,unit){
+  if(!Number.isFinite(primary)||!Number.isFinite(comparison))return"差值不可用";
+  const delta=primary-comparison;
+  return `主要 ${delta>=0?"+":""}${delta.toFixed(digits)}${unit}`
+}
+function fpmDelta(primary,comparison){
+  if(!Number.isFinite(primary)||!Number.isFinite(comparison))return"差值不可用";
+  const delta=Math.abs(primary)-Math.abs(comparison);
+  if(Math.abs(delta)<.5)return"两者下降率接近";
+  return `主要数据${delta<0?"更轻":"更重"} ${Math.abs(Math.round(delta))} fpm`
+}
+function setCompareLine(id,text,visible){
+  const node=$(id);node.hidden=!visible;node.textContent=visible?text:""
+}
+function addCompareMetric(root,label,primary,comparison,delta){
+  const item=document.createElement("div");item.className="compare-metric";
+  const heading=document.createElement("span");heading.className="metric-label";heading.textContent=label;
+  const values=document.createElement("div");values.className="compare-values";
+  const main=document.createElement("b");main.textContent=`主要 ${primary}`;
+  const reference=document.createElement("span");reference.textContent=`对比 ${comparison}`;
+  const deltaNode=document.createElement("div");deltaNode.className="compare-delta";deltaNode.textContent=delta;
+  values.append(main,reference);item.append(heading,values,deltaNode);root.append(item)
+}
+function renderComparison(primary,comparison){
+  const visible=Boolean(comparison);ui.comparePanel.hidden=!visible;ui.chartLegend.hidden=!visible;
+  setCompareLine("fpmCompareLine",visible&&Number.isFinite(comparison.fpm)?`对比 ${Math.round(comparison.fpm)} fpm · ${fpmDelta(primary.fpm,comparison.fpm)}`:"",visible);
+  setCompareLine("gCompareLine",visible&&Number.isFinite(comparison.g)?`对比 ${comparison.g.toFixed(2)} G · ${signedDelta(primary.g,comparison.g,2," G")}`:"",visible);
+  setCompareLine("speedCompareLine",visible?`对比 ${Number.isFinite(comparison.ias)?Math.round(comparison.ias):"--"} / ${Number.isFinite(comparison.gs)?Math.round(comparison.gs):"--"} kt`:"",visible);
+  setCompareLine("flareCompareLine",visible?`对比 ${Number.isFinite(comparison.flareMetric)?comparison.flareMetric.toFixed(1):"--"} · ${comparison.flareTrend||"无轨迹结论"}`:"",visible);
+  if(!visible)return;
+  setText("compareTitle",`${comparison.airport} · RWY${comparison.runway} · ${comparison.aircraft}`);
+  setText("compareMeta",`${comparison.timestamp||comparison.fileName} · ${comparison.evaluation}`);
+  setText("primaryLegend",`主要：${primary.fileName}`);
+  setText("compareLegend",`对比：${comparison.fileName}`);
+  const root=$("compareMetrics");root.replaceChildren();
+  addCompareMetric(root,"触地下降率",Number.isFinite(primary.fpm)?`${Math.round(primary.fpm)} fpm`:"--",Number.isFinite(comparison.fpm)?`${Math.round(comparison.fpm)} fpm`:"--",fpmDelta(primary.fpm,comparison.fpm));
+  addCompareMetric(root,"最终载荷",fmt(primary.g,2," G"),fmt(comparison.g,2," G"),signedDelta(primary.g,comparison.g,2," G"));
+  addCompareMetric(root,"IAS",fmt(primary.ias,0," kt"),fmt(comparison.ias,0," kt"),signedDelta(primary.ias,comparison.ias,0," kt"));
+  addCompareMetric(root,"GS",fmt(primary.gs,0," kt"),fmt(comparison.gs,0," kt"),signedDelta(primary.gs,comparison.gs,0," kt"));
+  const primaryDuration=parseMetric(primary.flareDuration),compareDuration=parseMetric(comparison.flareDuration);
+  addCompareMetric(root,"100 ft 至触地",Number.isFinite(primaryDuration)?`${primaryDuration.toFixed(2)} s`:"--",Number.isFinite(compareDuration)?`${compareDuration.toFixed(2)} s`:"--",signedDelta(primaryDuration,compareDuration,2," s"));
+  addCompareMetric(root,"拉平曲率",fmt(primary.flareMetric,1,""),fmt(comparison.flareMetric,1,""),signedDelta(primary.flareMetric,comparison.flareMetric,1,""));
+}
+function renderFacts(report){
+  const facts=[
+    ["机场",report.airportText],["跑道方向",`RWY${report.runway}（报告推算）`],
+    ["机型",report.aircraft],["相对风",report.windText||"--"],["迎角",report.aoaText||"--"],
+    ["横滚",report.rollText||"--"],["距机场参考点",report.airportDistanceText||"--"],
+    ["拉平用时",report.flareDuration||"--"],["净改善量",report.flareRecovery||"--"]
+  ];
+  const root=$("facts");root.replaceChildren();
+  for(const [label,value] of facts){
+    const div=document.createElement("div");div.className="fact";
+    const span=document.createElement("span");span.textContent=label;
+    const strong=document.createElement("b");strong.textContent=value||"--";
+    div.append(span,strong);root.append(div)
+  }
+}
+function renderDiagnostics(report){
+  const rows=[
+    ["最终 G",fmt(report.g,3," G")],["触地帧 G",fmt(report.touchG,3," G")],
+    ["原始峰值",fmt(report.peakG,3," G")],["P75 / 稳健 G",fmt(report.curveG,3," G")],
+    ["接地前基线",fmt(report.baselineG,3," G")],["冲量等效 / 上限 G",fmt(report.equivalentG,3," G")],
+    ["一致性误差",report.consistencyText||"--"],["数据可信度",report.confidenceText||"--"],
+    ["有效样本",report.impactSamples||"--"],["分析耗时",report.analysisMs||"--"]
+  ];
+  const table=$("diagnostics");table.replaceChildren();
+  for(const [label,value] of rows){
+    const tr=document.createElement("tr"),a=document.createElement("td"),b=document.createElement("td");
+    a.textContent=label;b.textContent=value;tr.append(a,b);table.append(tr)
+  }
+}
+function renderWind(report){
+  const root=$("windGraphic");root.replaceChildren();
+  if(!Number.isFinite(report.windFromDeg)||!Number.isFinite(report.headingDeg)){
+    const empty=document.createElement("div");empty.className="wind-board geometry-empty";empty.textContent="日志缺少风向或飞机航向，无法绘制可靠的相对风。";
+    root.append(empty);setText("windCaption",report.windText||"无相对风数据");return
+  }
+  const angle=relativeAngle(report.windFromDeg,report.headingDeg);
+  const board=document.createElement("div");board.className="wind-board";
+  const nose=document.createElement("span");nose.className="nose-label";nose.textContent="机头方向";
+  const plane=document.createElement("span");plane.className="plane-top";plane.textContent="✈";
+  const arrow=document.createElement("i");arrow.className="wind-arrow";arrow.style.transform=`rotate(${angle}deg)`;
+  board.append(nose,plane,arrow);root.append(board);
+  setText("windCaption",`风来自 ${String(Math.round(normalizeDeg(report.windFromDeg))).padStart(3,"0")}° / ${Math.round(report.windSpeedKts||0)} kt；相对机头 ${angle>=0?"+":""}${Math.round(angle)}°`)
+}
+function renderPose(report){
+  const root=$("poseGraphic");root.replaceChildren();
+  const roll=document.createElement("div");roll.className="pose-mini";
+  const rollTitle=document.createElement("b");rollTitle.textContent="横滚（正视）";
+  const rollBoard=document.createElement("div");rollBoard.className="pose-board";
+  if(Number.isFinite(report.rollDeg)){
+    const horizon=document.createElement("i");horizon.className="horizon";
+    const plane=document.createElement("i");plane.className="plane-front";plane.style.transform=`translate(-50%,-50%) rotate(${report.rollDeg}deg)`;
+    rollBoard.append(horizon,plane)
+  }else{rollBoard.classList.add("geometry-empty");rollBoard.textContent="无横滚数据"}
+  const rollCaption=document.createElement("div");rollCaption.className="viz-caption";rollCaption.textContent=report.rollText||"--";
+  roll.append(rollTitle,rollBoard,rollCaption);
+  const aoa=document.createElement("div");aoa.className="pose-mini";
+  const aoaTitle=document.createElement("b");aoaTitle.textContent="迎角（侧视）";
+  const aoaBoard=document.createElement("div");aoaBoard.className="pose-board";
+  if(Number.isFinite(report.aoaDeg)){
+    const airflow=document.createElement("i");airflow.className="airflow";
+    const plane=document.createElement("i");plane.className="plane-side";plane.style.transform=`rotate(${-report.aoaDeg}deg)`;
+    aoaBoard.append(airflow,plane)
+  }else{aoaBoard.classList.add("geometry-empty");aoaBoard.textContent="无迎角数据"}
+  const aoaCaption=document.createElement("div");aoaCaption.className="viz-caption";aoaCaption.textContent=report.aoaText||"--";
+  aoa.append(aoaTitle,aoaBoard,aoaCaption);root.append(roll,aoa)
+}
+function renderRunway(report){
+  const root=$("runwayGraphic");root.replaceChildren();
+  const board=document.createElement("div");board.className="runway-board";
+  if(Number.isFinite(report.runwayLengthM)&&report.runwayLengthM>0&&Number.isFinite(report.touchdownFromThresholdM)){
+    const runway=document.createElement("div");runway.className="runway";
+    const threshold=document.createElement("i");threshold.className="threshold";
+    const touch=document.createElement("i");touch.className="touch";
+    const percent=clamp(report.touchdownFromThresholdM/report.runwayLengthM*100,3,97);
+    touch.style.left=`calc(${percent}% - 2px)`;runway.append(threshold,touch);board.append(runway);
+    setText("runwayCaption",`RWY${report.runway} · 跑道 ${Math.round(report.runwayLengthM)} m · 入口后约 ${Math.round(report.touchdownFromThresholdM)} m`)
+  }else{
+    const empty=document.createElement("div");empty.className="geometry-empty";
+    empty.textContent="日志没有真实跑道长度和入口距离。为避免误导，不使用机场参考点伪造触地点。";board.append(empty);
+    setText("runwayCaption",report.airportDistanceText?`距机场参考点：${report.airportDistanceText}（仅作机场识别参考）`:"未提供机场参考距离")
+  }
+  root.append(board)
+}
+function renderReport(report,comparison=null){
+  const [color,label]=statusVisual(report.status);document.documentElement.style.setProperty("--status",color);
+  setText("reportTime",`主要数据 · LANDING REPORT · ${report.timestamp||report.fileName}`);
+  setText("reportTitle",`${report.airport} · RWY${report.runway} · ${report.aircraft}`);
+  setText("reportExplanation",report.explanation||"该记录没有提供评价说明。");
+  setText("statusLabel",label);setText("reportVersion",`报告版本 ${report.version}`);
+  setText("fpmCard",Number.isFinite(report.fpm)?`${report.fpm>=0?"+":""}${Math.round(report.fpm)} fpm`:"-- fpm");
+  setText("gCard",fmt(report.g,2," G"));
+  setText("speedCard",`${Number.isFinite(report.ias)?Math.round(report.ias):"--"} kt / ${Number.isFinite(report.gs)?Math.round(report.gs):"--"} kt`);
+  setText("flareCard",Number.isFinite(report.flareMetric)?report.flareMetric.toFixed(1):"--");
+  setText("flareHint",report.flareTrend||"该记录未提供拉平分析");
+  setText("fpmMeterValue",Number.isFinite(report.fpm)?`${Math.round(report.fpm)} fpm`:"--");
+  setText("gMeterValue",fmt(report.g,2," G"));
+  $("fpmPointer").style.left=`calc(${meterPercent(Number.isFinite(report.fpm)?Math.abs(report.fpm):null,0,350).toFixed(2)}% - 2px)`;
+  $("gPointer").style.left=`calc(${meterPercent(report.g,1,2).toFixed(2)}% - 2px)`;
+  setText("dominantInsight",dominantText(report));
+  setText("flareInsight",`拉平分析：${report.flareTrend||"该记录未提供拉平轨迹结论"}`);
+  setText("warningInsight",`弹跳状态：${report.bounceText||"未提供"}；道面提示：${report.surfaceText||"无"}`);
+  renderComparison(report,comparison);
+  renderFacts(report);renderDiagnostics(report);renderWind(report);renderPose(report);renderRunway(report);
+  $("rawText").textContent=report.raw;$("rawDetails").open=false;
+  ui.context.hidden=true;ui.contextToggle.textContent="显示着陆上下文详情";ui.contextToggle.setAttribute("aria-expanded","false");
+  drawFlare(report.trajectory,color,comparison?.trajectory||[])
+}
+function findFiftyFtTime(data){
+  for(let i=1;i<data.length;i++){
+    const a=data[i-1],b=data[i];
+    if(Number.isFinite(a.ra)&&Number.isFinite(b.ra)&&a.ra>=50&&b.ra<=50){
+      const span=a.ra-b.ra,ratio=span>0?(a.ra-50)/span:0;
+      return a.t+(b.t-a.t)*clamp(ratio,0,1)
+    }
+  }
+  return null
+}
+function nearestPoint(data,targetTime){
+  if(!data.length)return null;
+  let best=data[0],distance=Math.abs(best.t-targetTime);
+  for(const point of data){const gap=Math.abs(point.t-targetTime);if(gap<distance){distance=gap;best=point}}
+  return best
+}
+function drawFlare(data,statusColor,compareData=[]){
+  const chartBox=$("chartBox"),empty=$("chartEmpty");
+  if(data.length<2){chartBox.hidden=true;empty.hidden=false;ui.canvas._plot=null;return}
+  chartBox.hidden=false;empty.hidden=true;
+  const validCompare=compareData.length>=2?compareData:[];
+  const canvas=ui.canvas,box=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+  canvas.width=Math.max(1,Math.floor(box.width*dpr));canvas.height=Math.max(1,Math.floor(box.height*dpr));
+  const c=canvas.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);
+  const W=box.width,H=box.height,p={l:58,r:20,t:18,b:42},pw=W-p.l-p.r,ph=H-p.t-p.b;
+  const combined=validCompare.length?[...data,...validCompare]:data;
+  const ts=combined.map(x=>x.t),ys=combined.map(x=>x.fpm).filter(Number.isFinite);
+  let xmin=Math.min(...ts),xmax=Math.max(...ts),ymin=Math.min(...ys),ymax=Math.max(...ys);
+  ymax=Math.max(0,ymax);const rawSpan=Math.max(60,ymax-ymin);ymax+=rawSpan*.06;ymin-=rawSpan*.10;
+  const X=x=>p.l+(x-xmin)/(xmax-xmin||1)*pw,Y=y=>p.t+(ymax-y)/(ymax-ymin||1)*ph;
+  c.clearRect(0,0,W,H);c.font="11px Microsoft YaHei";c.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y=p.t+ph*i/4,v=ymax-(ymax-ymin)*i/4;c.strokeStyle="#294657";c.beginPath();c.moveTo(p.l,y);c.lineTo(W-p.r,y);c.stroke();
+    c.fillStyle="#91a7b3";c.textAlign="right";c.fillText(`${Math.round(v)} fpm`,p.l-8,y+4)
+  }
+  for(let i=0;i<=5;i++){
+    const x=p.l+pw*i/5,v=xmin+(xmax-xmin)*i/5;c.strokeStyle="#223d4f";c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+ph);c.stroke();
+    c.fillStyle="#91a7b3";c.textAlign="center";c.fillText(`${v.toFixed(1)}s`,x,H-14)
+  }
+  const zeroY=Y(0);c.save();c.setLineDash([8,6]);c.strokeStyle="#d7f3ff";c.lineWidth=2;c.beginPath();c.moveTo(p.l,zeroY);c.lineTo(W-p.r,zeroY);c.stroke();
+  c.setLineDash([]);c.fillStyle="#d7f3ff";c.textAlign="left";c.font="700 11px Microsoft YaHei";c.fillText("0 fpm 参照线",p.l+8,Math.max(p.t+12,zeroY-7));c.restore();
+
+  const compareFifty=findFiftyFtTime(validCompare);
+  if(compareFifty!==null){
+    const x=X(compareFifty);c.save();c.globalAlpha=.58;c.setLineDash([2,6]);c.strokeStyle="#91a7b3";c.lineWidth=1.5;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+ph);c.stroke();
+    c.setLineDash([]);c.fillStyle="#b7c8d0";c.font="700 10px Microsoft YaHei";c.textAlign="left";c.fillText("RA 50 ft 对比",x+6,p.t+30);c.restore()
+  }
+  if(validCompare.length){
+    c.save();c.globalAlpha=.42;c.setLineDash([8,7]);c.strokeStyle="#a9bcc6";c.lineWidth=2;c.lineJoin="round";c.beginPath();
+    validCompare.forEach((point,index)=>{const x=X(point.t),y=Y(point.fpm);index?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();c.restore()
+  }
+
+  const grad=c.createLinearGradient(0,p.t,0,p.t+ph);grad.addColorStop(0,statusColor);grad.addColorStop(1,"#2f8dcc");
+  c.beginPath();data.forEach((point,index)=>{const x=X(point.t),y=Y(point.fpm);index?c.lineTo(x,y):c.moveTo(x,y)});
+  c.lineTo(X(data.at(-1).t),p.t+ph);c.lineTo(X(data[0].t),p.t+ph);c.closePath();
+  const fill=c.createLinearGradient(0,p.t,0,p.t+ph);fill.addColorStop(0,`${statusColor}45`);fill.addColorStop(1,`${statusColor}04`);c.fillStyle=fill;c.fill();
+  c.strokeStyle=grad;c.lineWidth=3;c.setLineDash([]);c.lineJoin="round";c.beginPath();
+  data.forEach((point,index)=>{const x=X(point.t),y=Y(point.fpm);index?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();
+  const fifty=findFiftyFtTime(data);
+  if(fifty!==null){
+    const x=X(fifty),right=x<p.l+pw*.78;c.save();c.setLineDash([5,5]);c.strokeStyle="#ffca58";c.lineWidth=2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+ph);c.stroke();
+    c.setLineDash([]);c.fillStyle="#ffdc8a";c.font="700 11px Microsoft YaHei";c.textAlign=right?"left":"right";c.fillText("RA 50 ft 主要",x+(right?7:-7),p.t+14);c.restore()
+  }
+  canvas._plot={X,Y,p,pw,xmin,xmax,data,compareData:validCompare}
+}
+function hoverChart(event){
+  const plot=ui.canvas._plot;if(!plot)return;
+  const rect=ui.canvas.getBoundingClientRect(),mx=event.clientX-rect.left;
+  const ratio=clamp((mx-plot.p.l)/(plot.pw||1),0,1),targetTime=plot.xmin+(plot.xmax-plot.xmin)*ratio;
+  const main=nearestPoint(plot.data,targetTime),reference=nearestPoint(plot.compareData,targetTime);
+  if(!main)return;
+  const lines=[
+    `T+${main.t.toFixed(2)} s`,
+    `主要  ${Math.round(main.fpm)} fpm · RA ${Number.isFinite(main.ra)?main.ra.toFixed(1):"--"} ft · IAS ${Number.isFinite(main.ias)?Math.round(main.ias):"--"} kt`
+  ];
+  if(reference)lines.push(`对比  ${Math.round(reference.fpm)} fpm · RA ${Number.isFinite(reference.ra)?reference.ra.toFixed(1):"--"} ft · IAS ${Number.isFinite(reference.ias)?Math.round(reference.ias):"--"} kt`);
+  ui.tip.style.display="block";ui.tip.style.left=`${Math.min(rect.width-250,Math.max(8,plot.X(main.t)+14))}px`;
+  ui.tip.style.top=`${Math.max(8,plot.Y(main.fpm)-58)}px`;ui.tip.textContent=lines.join("\n")
+}
+function activeRecord(){return state.records.find(item=>item.id===state.activeId)}
+function comparisonRecord(){return state.records.find(item=>item.id===state.compareId)}
+function downloadActive(){
+  const record=activeRecord();if(!record)return;
+  const blob=new Blob([record.report.raw],{type:"text/plain;charset=utf-8"});
+  const url=URL.createObjectURL(blob),anchor=document.createElement("a");anchor.href=url;anchor.download=record.file.name;
+  document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
+function clearRecords(){
+  state.records=[];state.activeId=null;state.compareId=null;state.importMode="main";
+  renderRecordList();ui.report.hidden=true;ui.drop.hidden=false;showError("")
+}
+function openPicker(mode="main"){
+  state.importMode=mode;ui.fileInput.multiple=mode!=="compare";ui.fileInput.click()
+}
+
+$("chooseFiles").addEventListener("click",()=>openPicker("main"));
+$("addFiles").addEventListener("click",()=>openPicker("main"));
+$("loadMore").addEventListener("click",()=>openPicker("main"));
+$("chooseCompare").addEventListener("click",()=>openPicker("compare"));
+$("clearFiles").addEventListener("click",clearRecords);
+$("downloadTxt").addEventListener("click",downloadActive);
+$("cancelComparison").addEventListener("click",cancelComparison);
+$("swapComparison").addEventListener("click",swapComparison);
+ui.fileInput.addEventListener("change",event=>{importFiles(event.target.files,state.importMode);event.target.value=""});
+ui.contextToggle.addEventListener("click",()=>{
+  const opening=ui.context.hidden;ui.context.hidden=!opening;ui.contextToggle.setAttribute("aria-expanded",String(opening));
+  ui.contextToggle.textContent=opening?"收起着陆上下文详情":"显示着陆上下文详情"
+});
+["dragenter","dragover"].forEach(type=>document.addEventListener(type,event=>{event.preventDefault();ui.drop.classList.add("drag")}));
+["dragleave","drop"].forEach(type=>document.addEventListener(type,event=>{event.preventDefault();ui.drop.classList.remove("drag")}));
+document.addEventListener("drop",event=>importFiles(event.dataTransfer.files,"main"));
+ui.canvas.addEventListener("mousemove",hoverChart);ui.canvas.addEventListener("mouseleave",()=>ui.tip.style.display="none");
+window.addEventListener("resize",()=>{
+  const primary=activeRecord(),comparison=comparisonRecord();
+  if(primary)drawFlare(primary.report.trajectory,statusVisual(primary.report.status)[0],comparison?.report.trajectory||[])
+});
+
+
+async function loadLuaLaunchReport(){
+  const launch=window.LMM_LAUNCH_REPORT;
+  if(!launch||typeof launch.name!=="string"||typeof launch.content!=="string")return;
+  try{
+    const file=new File(
+      [launch.content],
+      launch.name,
+      {type:"text/plain;charset=utf-8",lastModified:Number(launch.lastModified)||Date.now()}
+    );
+    await importFiles([file],"main")
+  }catch(error){
+    showError(`无法自动载入插件选择的日志：${error.message||error}`)
+  }
+}
+loadLuaLaunchReport();
+</script>
+</body>
+</html>

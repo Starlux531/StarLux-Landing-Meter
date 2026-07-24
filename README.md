@@ -1,110 +1,118 @@
 # StarLux Landing Meter
 
-[![Version](https://img.shields.io/badge/version-0.7.2-blue.svg)](https://github.com/Starlux531/StarLux-Landing-Meter/releases)
+[![Version](https://img.shields.io/badge/version-1.0-blue.svg)](https://github.com/Starlux531/StarLux-Landing-Meter/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![X-Plane](https://img.shields.io/badge/X--Plane-12-orange.svg)](https://www.x-plane.com/)
 
-一款适用于 X-Plane 12 与 FlyWithLua 的轻量落地数据记录插件。它会捕获触地阶段的关键数据、显示落地结果，并为每次有效落地生成独立的中文 TXT 记录。
+StarLux Landing Meter 是一款适用于 X-Plane 12 与 FlyWithLua NG+ 的落地分析插件。它会采集触地阶段的垂直速度、载荷、姿态、速度、风况和拉平轨迹，在游戏内给出结果，并生成可复盘、可对比的本地中文报告。
 
-## 功能
+## 1.0 正式版功能
 
-- 同时采集物理垂直速度与仪表 VVI；使用触地前 250 毫秒物理速度第 25 百分位计算触地下降率
-- 记录 IAS、TAS、GS、迎角、横滚角、磁航向与风况
-- 在游戏内窗口和 TXT 报告中显示机型、落地机场及推算跑道号
-- 根据 FPM 与 G 值给出 `Nice`、`Stable`、`Attention` 或 `UNSTABLE` 四级评价
-- 低于 1500 英尺后每 5 秒监测实际机身降水与跑道摩擦状态，轻柔接地时追加来源明确的道面提示
-- 独立设置窗口，设置会自动保存
-- 支持分析完成后立刻显示，或地速低于 30 kt 后显示
-- 支持 30、60、120 秒三档显示时长
-- 支持九宫格屏幕位置选择和 5 秒位置预览
-- 支持横向与竖向两种数据窗口布局
-- 支持 25%、50%、100% 三档背景透明度
-- 每次落地自动在 `LMM_Log` 中生成 UTF-8 中文 TXT
-- 使用垂直投影、G 冲量与物理速度变化交叉验证，区分持续冲击和单帧尖峰
-- 使用固定环形缓冲区，并把采集、两阶段分析、评分、机场查询与日志写入分散到不同帧
+- 结合物理垂直速度、仪表 VVI、垂直投影 G、G 冲量和速度变化分析第一次起落架压缩
+- 使用固定环形缓冲区和分阶段计算，避免把机场查询、日志写入和复杂分析集中在触地关键帧
+- 记录机型、落地机场、推算跑道号、IAS、TAS、GS、迎角、横滚、磁航向和风况
+- 从 100 ft 开始采集并聚合拉平轨迹，计算拉平曲率和轨迹震荡结论
+- 检测 Bounce Landing，并按既定规则降级非红色评价
+- 低高度阶段监测降水与 X-Plane 跑道摩擦状态，保留明确的提示来源
+- 提供 Nice、Stable、Attention、UNSTABLE 四级评价；UNSTABLE 对外表述为“不良落地”
+- 独立设置窗口：弹窗时机、30/60/120 秒时长、九宫格位置、横/竖布局、三档透明度和详细数学日志
+- 自动生成 UTF-8 中文 TXT，文件名包含机场、机型与跑道
+- 游戏内记录管理窗口可浏览、打开或删除最近日志
+- 统一的本地网页阅读器：插件内打开和独立打开使用同一套界面
+- 支持选择第二份日志进行对比，显示关键差值并叠加 100 ft 拉平轨迹
+- 全程本地运行，不联网、不上传飞行数据
 
 ## 运行要求
 
 - X-Plane 12
 - 支持浮动窗口与 ImGui 的 FlyWithLua NG+
+- 用于打开报告的现代浏览器
 
 ## 安装
 
-1. 从 [Releases](https://github.com/Starlux531/StarLux-Landing-Meter/releases) 下载最新压缩包。
-2. 解压后，将以下内容放入 FlyWithLua 的 `Scripts` 文件夹：
+从 [GitHub Releases](https://github.com/Starlux531/StarLux-Landing-Meter/releases) 下载 1.0 正式版压缩包，解压后将以下内容放入：
 
-   - `StarLux_LMM_v0.7.2.lua`
-   - `LMM_Settings.cfg`
-   - `LMM_Log` 文件夹（包含实飞测试样本，可按需保留或删除）
+```text
+X-Plane 12/Resources/plugins/FlyWithLua/Scripts/
+```
 
-   目标位置：
+必需文件：
 
-   ```text
-   X-Plane 12/Resources/plugins/FlyWithLua/Scripts/
-   ```
+```text
+StarLux_LMM_v1.0.lua
+LMM_Report_Reader.html
+LMM_Settings.cfg
+LMM_Log/
+```
 
-3. 如果安装过旧版本，请移走旧版 Lua 文件，避免多个版本同时运行。
-4. 启动 X-Plane，或通过 FlyWithLua 重新加载所有 Lua 脚本。
+如果安装过旧版本，请把旧版 `StarLux_LMM_*.lua` 移出 `Scripts`，避免多个版本同时运行。随后启动 X-Plane，或通过 FlyWithLua 重新加载所有 Lua 脚本。
 
-## 打开设置窗口
+## 游戏内入口
 
-在 X-Plane 菜单中依次打开：
+设置窗口：
 
 ```text
 Plugins > FlyWithLua > FlyWithLua Macros > StarLux Landing Meter | Open Settings
 ```
 
-也可以在 X-Plane 的键盘或摇杆设置中绑定：
+落地记录：
+
+```text
+Plugins > FlyWithLua > FlyWithLua Macros > StarLux Landing Meter | Landing Records
+```
+
+也可以绑定设置命令：
 
 ```text
 starlux/lmm/open_settings
 ```
 
-所有修改会立即保存到脚本目录下的 `LMM_Settings.cfg`，重新启动后仍然有效。
-
-## 落地记录
-
-插件加载时会在脚本目录创建 `LMM_Log`。每次有效落地会采集最多约 0.35 秒的第一次起落架压缩数据；采集可在垂直速度停止下降或出现反弹时提前结束。速度分析、冲量分析与最终评分分布在后续帧执行。选择“立刻”时，窗口会在最终结果就绪后显示；约 3 秒后识别机场，约 8 秒后生成独立记录并显示完成提示，例如：
-
-```text
-LMM_Log/LMM_ZSPD_17_2026-07-20_21-30-45.txt
-```
-
-记录内容包括：
-
-- 落地时间与总体评价
-- 机型、落地机场、机场名称与推算跑道号
-- 触地前三分钟内确认的实际降水、跑道摩擦状态、判断来源与道面提示
-- 物理下降率、VVI 对照值和最终过载
-- IAS、TAS、GS
-- 迎角、横滚角、磁航向
-- 风向、风速和相对风
-- 原始 G、垂直投影 G、冲量等效 G、可信度及采样质量
-- 评分阈值及本次使用的显示设置
-- 本次使用的横向/竖向布局与透明度档位
-
-跑道号根据触地磁航向推算，因此会显示为 `RWY ~17` 这类格式；当前版本不区分平行跑道的 `L/R/C`。
-
-插件不会联网，也不会主动上传任何飞行数据。仓库内的 `LMM_Log` 仅为作者明确打包的实飞测试样本。
-
-## 默认评分阈值
+## 评分标准
 
 | 评价 | 颜色 | 下降率 | 过载 |
 |---|---|---:|---:|
-| Nice 轻柔接地 | `#14803D` | ≤ 100 fpm | ≤ 1.20 G |
-| Stable 稳定扎实落地 | `#12529E` | ≤ 250 fpm | ≤ 1.50 G |
-| Attention 需注意 | `#C7850F` | ≤ 300 fpm | ≤ 1.80 G |
-| UNSTABLE 重着陆 | `#B81A1F` | > 300 fpm，或过载超限 | > 1.80 G，或下降率超限 |
+| Nice 轻柔接地 | 深蓝色 | ≤ 100 fpm | ≤ 1.20 G |
+| Stable 稳定扎实落地 | 深绿色 | ≤ 250 fpm | ≤ 1.50 G |
+| Attention 需注意 | 深橙色 | ≤ 300 fpm | ≤ 1.80 G |
+| UNSTABLE 不良落地 | 深红色 | > 300 fpm，或过载超限 | > 1.80 G，或下降率超限 |
 
-最终评价取 FPM 与 G 两项中较严重的等级，不会将两项平均或相互抵消。FPM 显示和评分采用 250 毫秒分位值；G 冲量只对应第一次压缩，因此使用紧邻接地的 80 毫秒速度，避免混用不同时间尺度。G 值会先按俯仰和横滚投影到垂直方向，再将 G 曲线产生的冲量与物理垂直速度变化交叉验证：一致性高时主要相信曲线，单帧尖峰或采样不足时降低可信度并采用保守的等效值或备用上限。公开评分阈值不因可信度算法改变。这些阈值目前是插件标准，并非航空公司运行标准。
+FPM 与 G 分别分档，最终评价取两项中较严重的等级，不做平均或抵消。UNSTABLE 表示数据超出当前插件 Attention 上限，并不等同于航司维修检查或适航结论。
+
+## 报告与数据对比
+
+每次有效落地会在 `LMM_Log` 中生成一份 TXT。游戏内记录窗口点击某条记录时，Lua 会调用同目录下的 `LMM_Report_Reader.html`，自动载入所选日志。
+
+也可以不启动 X-Plane，直接双击 `LMM_Report_Reader.html`：
+
+1. 点击“选择落地日志”，或拖入一份/多份 `LMM_*.txt`。
+2. 点击左侧记录主体切换主要数据。
+3. 点击记录右侧“对比”，或使用“选择对比日志”载入第二份数据。
+4. 主轨迹使用评价色实线；对比轨迹使用低透明度灰色虚线。
+5. “交换主／对比”可改变两份数据的角色；“取消对比”不会删除日志。
+
+对比只用于复盘，不会改变日志原有评分。只有包含 `0.5秒聚合轨迹表` 的详细日志才能绘制 100 ft 轨迹。
+
+## 文件与隐私
+
+- TXT 报告、网页桥接数据和设置文件均只写入本机。
+- `LMM_Viewer.html` 与 `LMM_Viewer_Data.js` 是插件打开报告时在 `LMM_Log` 中生成的本地临时阅读文件。
+- 正式发布包不包含作者或测试人员的个人飞行日志。
+- 刷新或关闭独立阅读器后，浏览器内已载入的数据会自动清空。
+
+## 文档
+
+- [中文使用说明](README_使用说明.txt)
+- [更新记录](CHANGELOG.md)
+- [1.0 正式版说明](RELEASE_NOTES_v1.0.md)
+- [核心算法技术说明手册](docs/StarLux_LMM_v0.8.2_核心算法技术说明手册.pdf)（技术文档暂未随 1.0 更新）
 
 ## 故障排查
 
-如果设置或日志无法保存，请检查 X-Plane 目录的写入权限，并查看 `X-Plane 12/Log.txt` 中以 `[StarLux LMM]` 开头的信息。
+如果脚本被 FlyWithLua 隔离，或设置、日志、阅读器无法生成，请检查：
 
-## 参与贡献
-
-欢迎提交 Issue 和 Pull Request。开始修改前请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- `StarLux_LMM_v1.0.lua` 与 `LMM_Report_Reader.html` 是否位于同一个 `Scripts` 目录
+- X-Plane 安装目录是否具有写入权限
+- `X-Plane 12/Log.txt` 中以 `[StarLux LMM]` 开头的信息
 
 ## 许可证
 

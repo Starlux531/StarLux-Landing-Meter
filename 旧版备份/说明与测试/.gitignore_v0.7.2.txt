@@ -1,0 +1,14 @@
+# v0.7 起，仓库有意包含初始化设置与实飞测试日志样本。
+# 插件本身仍只会在本地生成新记录，不会主动上传数据。
+
+# X-Plane / FlyWithLua logs
+*.log
+FlyWithLua_Debug.txt
+
+# Local release packages
+*.zip
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini

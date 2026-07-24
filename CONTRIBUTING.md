@@ -16,7 +16,7 @@
 
 1. Fork 本仓库并创建描述明确的分支。
 2. 保持 Lua 5.1/LuaJIT 与 FlyWithLua NG+ 兼容。
-3. 不要提交运行生成的 `LMM_Settings.cfg` 或 `LMM_Log`。
+3. 不要提交个人 `LMM_Log`、自动生成的 `LMM_Viewer*` 或本机设置改动；如需调整正式版默认设置，请在 Pull Request 中明确说明。
 4. 对设置界面、触地检测或日志格式的修改，请在 Pull Request 中说明验证方法。
 5. 更新 `CHANGELOG.md` 中对应的未发布内容。
 

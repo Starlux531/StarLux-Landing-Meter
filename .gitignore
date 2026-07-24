@@ -1,9 +1,15 @@
-# v0.7 起，仓库有意包含初始化设置与实飞测试日志样本。
-# 插件本身仍只会在本地生成新记录，不会主动上传数据。
-
-# X-Plane / FlyWithLua logs
+# X-Plane / FlyWithLua runtime logs
 *.log
 FlyWithLua_Debug.txt
+
+# User landing records and generated browser bridge
+LMM_Log/LMM_*.txt
+LMM_Log/LMM_Viewer.html
+LMM_Log/LMM_Viewer_Data.js
+LMM_Log/.lmm_index.tmp
+
+# Local archived flight-test records
+旧版备份/测试日志/
 
 # Local release packages
 *.zip
