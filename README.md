@@ -22,6 +22,31 @@ StarLux Landing Meter 是一款适用于 X-Plane 12 与 FlyWithLua NG+ 的落地
 - 支持选择第二份日志进行对比，显示关键差值并叠加 100 ft 拉平轨迹
 - 全程本地运行，不联网、不上传飞行数据
 
+## 界面展示
+
+以下图片来自实际飞行测试。截图中的历史版本号代表拍摄时的测试版本，1.0 正式版延续并统一了这套数据窗口、TXT 报告与网页可视化体系。
+
+### 浏览器可视化报告
+
+<p align="center">
+  <img src="docs/images/web-report-dashboard.png" alt="StarLux LMM 浏览器可视化报告" width="820">
+</p>
+
+### 游戏内数据窗与 TXT 详细报告
+
+<table>
+  <tr>
+    <td align="center" width="36%">
+      <img src="docs/images/in-game-landing-popup.png" alt="StarLux LMM 游戏内落地数据窗" width="263"><br>
+      <sub>游戏内落地数据窗</sub>
+    </td>
+    <td align="center" width="64%">
+      <img src="docs/images/txt-landing-report.png" alt="StarLux LMM TXT 详细落地报告" width="460"><br>
+      <sub>可复盘的 TXT 详细落地报告</sub>
+    </td>
+  </tr>
+</table>
+
 ## 运行要求
 
 - X-Plane 12
