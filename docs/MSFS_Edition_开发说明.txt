@@ -1,0 +1,1248 @@
+StarLux Landing Meter – MSFS Edition 开发说明
+
+文档版本：0.2
+编写日期：2026-08-23
+文档状态：开发研究基线，供新项目立项和实现时使用
+参考实现：StarLux_LMM_v1.1.4.lua、LMM_Report_Reader.html
+
+
+0. 文档用途
+
+本文档用于未来在独立项目中开发 StarLux Landing Meter – MSFS Edition。
+
+本文档的任务是固定以下内容：
+
+1）哪些现有功能能够迁移；
+2）微软模拟飞行可以提供哪些数据；
+3）推荐采用什么架构；
+4）触地采样、FPM、G 值、弹跳和拉平分析应如何重新实现；
+5）MSFS 2020、MSFS 2024、PC 和 Xbox 之间如何划分产品；
+6）在什么条件下才能认为 MSFS Edition 已经达到可发布质量。
+
+本文档不是最终 API 参考，也不是对微软 SDK 的替代。正式开发时必须使用当时安装的 SDK、离线文档和 SimVar Watcher 再确认变量名称、单位、结构体尺寸及平台限制。
+
+路线图关系：v1.1.4 是当前 X-Plane/FlyWithLua 稳定测试锚点；v1.2.0 先在现有产品中增加操纵输入曲线与阅读器多皮肤/色调。此后再以可移植核心和独立界面逐步替代 FlyWithLua，并推进 MSFS 版本。整段航程与 QAR 风格专业分析属于未来 Starlux Black Box 路线，免费的落地记录能力保持完整并可单独使用。
+
+
+1. 总结性结论
+
+1.1 可行性
+
+MSFS Edition 可以开发，且核心用户功能可以达到较高还原度，包括：
+
+－ 自动识别落地；
+－ 触地下降率 FPM；
+－ 触地 G 值与可信度；
+－ IAS、TAS、GS、姿态、AoA、风；
+－ 100 ft 拉平轨迹；
+－ Bounce Landing 检测；
+－ 机场和跑道识别；
+－ 跑道入口距离与中心线偏差；
+－ 本地历史记录；
+－ TXT 报告；
+－ 图表、双报告比较和复盘；
+－ 中文、英文输出；
+－ 本地运行、不上传飞行数据。
+
+1.2 不能承诺的内容
+
+以下目标不能作为开发承诺：
+
+－ 直接运行现有 Lua 文件；
+－ 与 X-Plane 得出逐数字完全相同的 FPM 或 G；
+－ 在所有平台上复制完全相同的自由浮动弹窗；
+－ 从微软获取与 X-Plane runway_friction 完全等价的连续摩擦等级；
+－ 依靠单个原生包同时完美覆盖 MSFS 2020、MSFS 2024、PC 和 Xbox；
+－ 未经数据验证便直接沿用全部 X-Plane 测量窗口和可信度阈值。
+
+1.3 建议产品路线
+
+第一产品：MSFS 2020/2024 PC 外部伴侣版。
+
+它通过 SimConnect 采集数据，使用独立透明窗口显示结果，并在本机生成日志和报告。该路线最容易还原现有体验，也是最快能够交付给玩家的版本。
+
+第二产品：MSFS 2024 原生 WASM + EFB 版。
+
+它使用独立 WASM 模块后台采样和计算，通过 CommBus 把结果发送给 EFB 应用。该路线适合原生包、EFB、Marketplace 和 Xbox 方向，但界面形态与 PC 外部版不同。
+
+产品名称应使用“MSFS Edition”，不要称为“原样移植版”。功能一致和测量可信是目标，跨模拟器数字一致不是目标。
+
+
+2. 现有实现拆分
+
+现有 X-Plane 版本大致由五部分构成：
+
+A. 平台数据适配层
+   读取 23 个 X-Plane DataRef，并调用 XPLM 机场查询接口。
+
+B. 实时状态机
+   负责待命、100 ft 拉平采集、首次触地、冲击窗口、弹跳监控、分析完成和延迟弹窗。
+
+C. 测量与评分核心
+   包含 AGL 锚定多链 FPM、固定 160 ms P75 稳健 G、冲量与物理复核、Bounce 和拉平曲率分析。
+
+D. 平台界面与文件层
+   包含 FlyWithLua ImGui、OpenGL 数据窗、设置、日志管理、文件读写和浏览器启动。
+
+E. 报告阅读器
+   使用独立 HTML、CSS、JavaScript 完成 TXT 解析、可视化、指标切换、拖放和双报告比较。
+
+MSFS Edition 必须保持 B、C 的业务语义，重写 A、D。E 在 PC 外部版中可以大量复用，在 EFB 版中可以复用解析、图表和视觉逻辑，但需要重写数据加载入口。
+
+
+3. 推荐总体架构
+
+3.1 可移植核心
+
+如果确定未来要开发 MSFS 2024 WASM 版本，推荐从一开始将核心写成无平台依赖的 C++17 库。
+
+核心库不得直接调用：
+
+－ SimConnect；
+－ Windows UI；
+－ WebView2；
+－ WASM IO；
+－ EFB API；
+－ 系统时间和系统文件函数；
+－ 任何飞机专用 LVar/HVar。
+
+平台适配层将规范化后的 FlightSample 送入核心。核心只接收数据、维护状态、输出 LandingResult。
+
+推荐模块划分：
+
+lmm-core
+  纯 C++17
+  状态机、环形缓冲区、FPM、G、Bounce、拉平、评分、报告数据模型
+
+lmm-msfs-adapter
+  SimConnect/Vars/Facilities/Flow 数据读取，单位和坐标转换
+
+lmm-pc-host
+  Windows 启动、连接管理、设置、日志、通知、自动更新（如需要）
+
+lmm-pc-ui
+  透明结果窗、设置窗、历史记录、WebView2 报告阅读器
+
+lmm-wasm
+  MSFS 2024 独立 WASM 模块、每帧更新、/work 存储、CommBus
+
+lmm-efb
+  MSFS 2024 TypeScript/TSX EFB 应用
+
+lmm-tests
+  单元测试、黄金样本、离线回放、跨版本回归
+
+3.2 如果只做 PC 快速版
+
+如果短期没有 Marketplace/Xbox 目标，可以使用 C#/.NET 实现 SimConnect、算法和 UI，以降低第一版开发成本。之后迁移到 WASM 时仍需将核心再次移植为 C++。
+
+在立项时必须明确以下选择：
+
+选择 A：快速交付优先，C# 全栈。
+选择 B：长期原生版优先，C++17 核心 + C# PC UI。
+
+默认推荐选择 B。
+
+
+4. 规范化数据模型
+
+任何平台数据进入核心之前必须转换为统一单位和统一符号。禁止算法内部直接使用 SimVar 原始名称或混合单位。
+
+推荐 FlightSample 字段：
+
+sample_sequence                 单调递增样本编号
+wall_monotonic_time_s           本程序单调时钟
+simulation_time_s               模拟时间
+simulation_rate                 模拟倍率
+sample_delta_s                  与上一个有效样本的模拟时间差
+
+vertical_speed_indicated_fps    仪表垂直速度，向上为正
+vertical_velocity_world_fps     世界坐标垂直速度，向上为正
+touchdown_normal_velocity_fps   微软触地快照的法向速度，原始符号另存
+agl_ft                          地形上方高度
+on_ground                       整机接地状态
+
+g_force                         当前 G
+semibody_loadfactor_y           Y 轴负载因子
+acceleration_body_y_fps2        机体 Y 轴加速度
+
+pitch_deg
+roll_deg
+aoa_deg
+ias_kt
+tas_kt
+ground_speed_kt
+
+heading_true_deg
+heading_magnetic_deg
+wind_direction_true_deg
+wind_speed_kt
+
+latitude_deg
+longitude_deg
+
+precipitation_state
+precipitation_rate
+surface_info_valid
+surface_condition
+surface_type
+
+sim_paused
+active_pause
+slew_active
+flow_state_flags
+data_validity_flags
+
+推荐核心派生值：
+
+descent_rate_world_fpm = max(0, -vertical_velocity_world_fps * 60)
+descent_rate_vvi_fpm   = max(0, -vertical_speed_indicated_fps * 60)
+
+所有对用户显示的下降率统一使用“正数表示下降”。内部若保留带符号速度，字段名必须明确使用 velocity_up 或 descent_rate，禁止混用。
+
+
+5. 现有 23 个 DataRef 的 MSFS 映射
+
+以下映射是开发起点，必须通过数据探针再次验证。
+
+01. sim/flightmodel/position/vh_ind_fpm
+    MSFS：VERTICAL SPEED
+    官方常用单位：feet per second
+    处理：转换为 fpm，作为仪表链。
+
+02. sim/flightmodel/position/local_vy
+    MSFS：VELOCITY WORLD Y
+    官方单位：feet per second
+    处理：作为物理轨迹链。必须实测确认正负号。
+
+03. sim/flightmodel/position/y_agl
+    MSFS 2024 优先：AIRCRAFT AGL
+    兼容变量：PLANE ALT ABOVE GROUND
+    注意：PLANE ALT ABOVE GROUND 包含建筑等障碍物；AIRCRAFT AGL 更接近地形高度。
+
+04. sim/flightmodel/failures/onground_any
+    MSFS：SIM ON GROUND
+    辅助：GEAR IS ON GROUND:index、CONTACT POINT IS ON GROUND
+
+05. sim/flightmodel/forces/g_nrml
+    MSFS：G FORCE
+    辅助：SEMIBODY LOADFACTOR Y、ACCELERATION BODY Y
+    注意：不得假设它与 X-Plane g_nrml 具有相同滤波和峰值形状。
+
+06. sim/flightmodel/position/phi
+    MSFS：PLANE BANK DEGREES
+    注意：变量名带 DEGREES，但官方文档的基础单位是弧度。请求单位和转换必须写测试。
+
+07. sim/flightmodel/position/theta
+    MSFS：PLANE PITCH DEGREES
+    注意同上。
+
+08. sim/flightmodel/position/groundspeed
+    MSFS：GROUND VELOCITY
+    推荐统一请求或转换为 knots。
+
+09. sim/time/total_running_time_sec
+    MSFS：SIMULATION TIME 环境变量
+    辅助：ABSOLUTE TIME、SIMULATION DELTA TIME、程序单调时钟
+    不使用系统日期时间进行采样间隔计算。
+
+10. sim/time/is_in_replay
+    MSFS：没有稳定的一对一公开 SimVar
+    处理：时间回退、航班重载、Flow 事件、位置跳变、Slew 和重复触地快照联合判断。
+
+11. sim/cockpit2/gauges/indicators/airspeed_kts_pilot
+    MSFS：AIRSPEED INDICATED
+
+12. sim/cockpit2/gauges/indicators/true_airspeed_kts_pilot
+    MSFS：AIRSPEED TRUE
+
+13. sim/flightmodel/position/alpha
+    MSFS：INCIDENCE ALPHA
+    处理：弧度转角度。MSFS 2024 可选择 Group ID，默认先验证 Group 0。
+
+14. sim/cockpit2/gauges/indicators/wind_speed_kts
+    MSFS：AMBIENT WIND VELOCITY
+
+15. sim/cockpit2/gauges/indicators/wind_heading_deg_mag
+    MSFS：AMBIENT WIND DIRECTION
+    注意：微软变量相对真北，不是磁北。
+
+16. sim/flightmodel/position/mag_psi
+    MSFS：PLANE HEADING DEGREES MAGNETIC
+    计算相对风时不得直接与真风向混用。推荐使用 PLANE HEADING DEGREES TRUE 与 AMBIENT WIND DIRECTION 配对。
+
+17. sim/flightmodel/position/latitude
+    MSFS：PLANE LATITUDE
+    核心统一为十进制度。
+
+18. sim/flightmodel/position/longitude
+    MSFS：PLANE LONGITUDE
+    核心统一为十进制度。
+
+19. sim/weather/aircraft/precipitation_on_aircraft_ratio
+    MSFS：AMBIENT PRECIP RATE、AMBIENT PRECIP STATE
+    注意：没有相同的 0～1 precipitation ratio，MSFS 阈值需要重新标定。
+
+20. sim/weather/region/runway_friction
+    MSFS：SURFACE CONDITION、SURFACE INFO VALID
+    离散值：Normal、Wet、Icy、Snow
+    结论：不能生成或伪装成 X-Plane 1～15 摩擦等级。
+
+21. sim/flightmodel/position/local_vx
+    MSFS：VELOCITY WORLD X
+    处理：与 Z 轴共同构成接地时的地面运动矢量，用于跑道方向与侧向几何复核。必须用数据探针验证 MSFS 世界坐标系、正负号和真北关系。
+
+22. sim/flightmodel/position/local_vz
+    MSFS：VELOCITY WORLD Z
+    处理：同上。不得直接照搬 X-Plane 局部坐标符号或把磁航向当作世界坐标轴。
+
+23. sim/flightmodel/position/elevation
+    MSFS：PLANE ALTITUDE
+    处理：统一转换为 MSL 高度。用于以机场/跑道标高校准 100 ft 轨迹，减少海岸、悬崖、高架跑道或地形采样突变造成的 AGL 缺口。
+
+
+6. MSFS 特有的增强数据
+
+MSFS Edition 应利用以下 X-Plane 版本没有直接使用的微软数据：
+
+PLANE TOUCHDOWN NORMAL VELOCITY
+  上一次触地沿地面法线方向的速度。可作为第四条 FPM 验证链，也可以作为 MSFS 平台原生触地指标。
+
+PLANE TOUCHDOWN LATITUDE / LONGITUDE
+  上一次触地快照坐标。用于避免因延迟分析而使用滑跑后的坐标。
+
+PLANE TOUCHDOWN PITCH / BANK / HEADING
+  用于触地姿态快照和实时采样交叉验证。
+
+GEAR IS ON GROUND:index
+  可辅助区分主轮、前轮和尾轮接地，但不同飞机索引必须验证。
+
+CONTACT POINT IS ON GROUND / COMPRESSION
+  MSFS 2024 模块化飞机的可选增强信号。不能作为所有第三方飞机的硬依赖。
+
+ATC DESIGNATED RUNWAY LANDING
+  仅作为候选提示。用户没有使用游戏 ATC 时可能为空或不可靠。
+
+Facilities API
+  提供机场、跑道中心、航向、长度、宽度、坡度、材质、编号、L/R/C、入口和位移入口。
+
+
+7. 采样调度
+
+7.1 PC SimConnect 版
+
+关键飞行数据使用 SIMCONNECT_PERIOD_SIM_FRAME 请求。
+
+原因：
+
+－ 它按模拟帧而不是只按渲染帧发送；
+－ 物理测量不应依赖 UI 刷新率；
+－ 所有同帧字段应尽量放入同一个数据定义和同一个返回结构，减少时间错位。
+
+低频数据单独请求：
+
+－ 飞机名称、ATC MODEL、TITLE：加载飞机时和变化时；
+－ 天气与道面：进近阶段每 2～5 秒；
+－ Facilities：确认触地后延迟查询；
+－ 历史记录和磁盘写入：分析完成后延迟执行。
+
+7.2 MSFS 2024 WASM 版
+
+使用独立 WASM 模块更新回调完成后台采样。不得让 EFB 页面承担关键采样，因为 EFB 页面离开后会休眠。
+
+7.3 时间要求
+
+每个样本必须记录实际 sample_delta_s。
+
+禁止：
+
+－ 假设固定 60 FPS；
+－ 用样本序号代替时间；
+－ 在缺帧后仍按连续样本计算 G 冲量；
+－ 把 Windows 墙上时间当成模拟物理时间；
+－ 在暂停期间继续累加模拟分析窗口。
+
+建议初始质量标记：
+
+Good：关键窗口内样本间隔稳定，最大间隔不超过校准上限。
+Degraded：仍可分析，但存在明显低帧率或少量丢帧。
+Invalid：触地关键窗口数据断裂、模拟时间回退或位置被重置。
+
+具体毫秒阈值必须由数据探针确定，不直接复制 X-Plane 的 50 ms 限制。
+
+
+8. 实时状态机
+
+推荐状态：
+
+Disconnected
+  未连接模拟器或玩家不在可飞行状态。
+
+Idle
+  已连接但尚未满足待命条件。
+
+Armed
+  飞机已离地，准备捕获有效落地。
+
+FlareCapture
+  低于 100 ft，正在采集拉平轨迹。
+
+TouchCapture
+  检测到首次接地，继续采集冲击包络。
+
+BounceMonitor
+  在首次接地后观察离地和第二次接地。
+
+Finalize
+  计算 FPM、G、评分、跑道和报告数据。
+
+DeferredOutput
+  等待弹窗条件、Facilities 结果和文件写入。
+
+Suspended
+  Replay、Slew、Back On Track、加载航班、时间跳变或数据无效。
+
+建议沿用的初始业务条件：
+
+－ Armed：不在地面、AGL > 20 ft、GS > 50 kt；
+－ FlareCapture：下降中且 AGL <= 100 ft；
+－ 触地候选：Armed、上一帧未接地、当前接地、GS > 35 kt；
+－ Bounce 观察：首次触地后 6 秒；
+－ 天气观察：低于 1500 ft AGL；
+－ 低高度样本环：低于约 120 ft。
+
+这些值属于产品逻辑起点，不代表无需 MSFS 验证。
+
+
+9. 触地事件确认
+
+触地事件不应只依赖一个变量。
+
+建议首次触地候选：
+
+1）状态机处于 Armed 或 FlareCapture；
+2）SIM ON GROUND 从 false 变为 true；
+3）GS 高于有效落地阈值；
+4）最近样本显示飞机确实在下降；
+5）模拟时间连续；
+6）位置没有发生传送；
+7）不在 Slew、Back On Track 或加载状态；
+8）PLANE TOUCHDOWN 快照发生合理变化，或与候选时间相符。
+
+可选增强：
+
+－ 客机/前三点式飞机优先确认主轮接地点；
+－ 尾轮飞机不得错误等待固定“主轮索引”；
+－ 无法识别接地点布局时回退到 SIM ON GROUND；
+－ 水上飞机、直升机和特殊起落架在第一版可以明确标为实验性支持。
+
+微软触地快照是“上一次触地”值，可能在下一次事件前保持不变。必须通过事件边沿和快照身份去重，不能只判断它是否非零。
+
+
+10. FPM 测量设计
+
+10.1 四条测量链
+
+链 A：物理世界垂直速度
+  使用触地前 VELOCITY WORLD Y 的稳健终端窗口。
+
+链 B：仪表垂直速度
+  使用 VERTICAL SPEED 的终端窗口。
+
+链 C：AGL 几何斜率
+  使用触地前 AGL 随模拟时间的稳健斜率。
+
+链 D：微软触地法向速度
+  使用 PLANE TOUCHDOWN NORMAL VELOCITY。
+
+10.2 选择规则
+
+不要预先规定 D 永远是主值。
+
+建议流程：
+
+1）首先确认四条链的正负号、单位和刷新时机；
+2）统计不同坡度、机型和帧率下的误差分布；
+3）区分“世界垂直速度”和“跑道法向速度”两个物理含义；
+4）决定用户主显示是延续现有世界垂直 FPM，还是采用微软平台原生法向 FPM；
+5）报告中始终保留各链原值和最终选取原因。
+
+推荐初期报告同时显示：
+
+Selected FPM
+World-VY FPM
+VVI FPM
+AGL-slope FPM
+MSFS touchdown-normal FPM
+FPM source
+FPM data quality
+Source disagreement
+
+10.3 坡道处理
+
+世界 Y 速度是相对地球垂直方向；触地法向速度是相对跑道/地面法线。斜坡跑道上两者天然可以不同，不能把合理差异错误标成传感器故障。
+
+
+11. G 值测量设计
+
+11.1 不能直接复制的部分
+
+v1.1.4 使用 X-Plane g_nrml，并以第一次接触后固定 160 ms 窗口的 P75 作为最终 G 主值。第一次压缩全段 P75 只在固定窗缺样时备用；按 `(G-1)g` 计算的冲量与按 `1 + Δv/(g·Δt)` 计算的物理平均载荷只用于复核，不再与主值取大或加权。MSFS 虽有 G FORCE，但输出位置、平滑和峰值宽度可能不同。
+
+因此必须重新校准：
+
+－ G 基线窗口；
+－ 峰值有效持续时间；
+－ 固定接触后窗口长度；
+－ 百分位；
+－ 采样间隔上限；
+－ 冲量阈值；
+－ 速度变化推导模型；
+－ 可信度误差阈值。
+
+11.2 建议输入
+
+主输入：G FORCE
+
+验证输入：
+
+－ SEMIBODY LOADFACTOR Y；
+－ ACCELERATION BODY Y；
+－ 触地前后垂直速度变化；
+－ CONTACT POINT COMPRESSION（可用时）；
+－ G 峰值持续时间与积分冲量。
+
+11.3 低帧率策略
+
+如果关键冲击只有几十毫秒，而用户只有 20～30 FPS，任何每帧 API 都无法恢复未采到的真实尖峰。
+
+此时应：
+
+－ 降低 G 可信度；
+－ 使用时间积分而非样本数量；
+－ 使用多信号包络；
+－ 不对单帧尖峰给出过度精确的小数；
+－ 报告最大样本间隔；
+－ 必要时显示“G estimate”而不是“measured peak G”。
+
+11.4 评分阈值
+
+Nice/Stable/Attention/UNSTABLE 的产品阈值可以作为第一版显示规则保留，但测量管线校准完成前，不得宣称 X-Plane 与 MSFS 的 G 评分可直接横向比较。
+
+
+12. Bounce Landing
+
+建议保留现有定义框架：
+
+－ 首次接地后进入观察窗口；
+－ 接地状态重新变为未接地；
+－ 离地持续时间达到阈值；
+－ 离地峰值 AGL 或向上速度达到阈值；
+－ 随后再次接地；
+－ 捕获第二次接地 FPM 和 G；
+－ 非红色评价按现有规则降级。
+
+MSFS 增强信号：
+
+－ SIM ON GROUND；
+－ GEAR IS ON GROUND；
+－ CONTACT POINT IS ON GROUND；
+－ CONTACT POINT COMPRESSION；
+－ PLANE TOUCHDOWN NORMAL VELOCITY 更新。
+
+必须测试长行程起落架、尾轮飞机和跑道接缝，避免把接地点状态抖动误判为弹跳。
+
+
+13. 100 ft 拉平轨迹
+
+建议保留：
+
+－ 100 ft 启动；
+－ 原始采样约 10 Hz；
+－ 0.5 秒聚合；
+－ FPM、VVI、物理 FPM、RA/AGL、IAS、GS、Pitch、AoA、Roll；
+－ 曲率、反转次数、效率和震荡结论；
+－ 复飞、重新爬升和超时作废。
+
+MSFS 版字段调整：
+
+－ RA 名称应明确区分无线电高度和地形 AGL；
+－ 未读取真实 RADIO HEIGHT 时不得把 AGL 标成 RA；
+－ 可增加 touchdown-normal FPM；
+－ 可增加 centerline deviation 和 runway remaining；
+－ 所有聚合必须按真实时间，不按固定帧数。
+
+
+14. 天气与跑道状态
+
+14.1 降水
+
+使用 AMBIENT PRECIP STATE 判断雨/雪类型，AMBIENT PRECIP RATE 判断强度。连续样本确认和三分钟回看逻辑可以保留，但阈值必须根据 MSFS 实测重新设置。
+
+14.2 道面
+
+使用 SURFACE INFO VALID 确认 SURFACE CONDITION 是否有意义。
+
+允许输出：
+
+－ Normal；
+－ Wet；
+－ Icy；
+－ Snow；
+－ Unknown/Invalid。
+
+禁止输出：
+
+－ 虚构的 MSFS 摩擦系数；
+－ 把 SURFACE TYPE 当作实时湿滑程度；
+－ 把降雨直接断言为跑道一定湿滑。
+
+建议报告措辞：
+
+“MSFS surface condition: Wet”
+“Persistent precipitation detected; runway condition not independently confirmed”
+“Surface information unavailable”
+
+
+15. 机场与跑道识别
+
+15.1 数据源
+
+通过 Facilities API 获取附近机场和候选机场的全部跑道：
+
+－ ICAO、名称、经纬度；
+－ 跑道中心经纬度；
+－ true heading；
+－ length、width、slope；
+－ primary/secondary number；
+－ L/R/C designator；
+－ primary/secondary threshold；
+－ surface。
+
+15.2 推荐识别算法
+
+1）优先使用 PLANE TOUCHDOWN LATITUDE/LONGITUDE，而不是滑跑后的实时位置；
+2）获取 15 km 内机场候选；
+3）对每条跑道建立以跑道中心为原点的局部东/北坐标；
+4）按跑道 true heading 旋转为 along-runway 与 cross-runway 坐标；
+5）判断触地点是否位于跑道矩形及容差范围；
+6）综合中心线偏差、纵向越界、飞机航向差和机场距离评分；
+7）根据飞机 true heading 判断使用主端还是副端；
+8）输出真实跑道号和 designator；
+9）计算距入口距离、中心线偏差和剩余跑道；
+10）无法确定时回退到航向推算，并明确标记 Estimated。
+
+15.3 坐标计算注意事项
+
+短距离内可以使用局部切平面近似：
+
+east_m  = 经度差 × cos(参考纬度) × 地球半径
+north_m = 纬度差 × 地球半径
+
+随后使用跑道 true heading 旋转。
+
+跑道数据和飞机航向必须全部使用真北参考。不能把磁航向直接用于几何投影。
+
+15.4 优于现有版本的新增输出
+
+MSFS Edition 应考虑增加：
+
+－ Confirmed runway；
+－ Touchdown distance from threshold；
+－ Centerline deviation；
+－ Runway remaining；
+－ Runway slope；
+－ Runway width/length；
+－ Runway surface type；
+－ Runway identification confidence。
+
+
+16. Replay、暂停、Slew 和流程重置
+
+16.1 已知限制
+
+MSFS 没有与 X-Plane is_in_replay 完全等价、稳定公开的单个 SimVar。JS Listener 中虽存在 Replay 相关接口，但公开说明不完整，不能作为唯一商业逻辑依赖。
+
+16.2 必须监控
+
+－ SIMULATION TIME 倒退；
+－ SIMULATION TIME 大幅跳跃；
+－ 程序单调时间与模拟时间严重不一致；
+－ SimStart/SimStop；
+－ FlightLoaded/AircraftLoaded；
+－ Flow API 的航班和 Back On Track 事件；
+－ IS SLEW ACTIVE；
+－ 瞬间经纬度或高度跳变；
+－ 暂停、Active Pause、模拟倍率；
+－ PLANE TOUCHDOWN 快照重复；
+－ SimConnect 断线和重连。
+
+16.3 默认处理
+
+发生时间回退、传送、Slew、航班加载或 Back On Track 时：
+
+－ 立即进入 Suspended；
+－ 清空待命、采样环、拉平、冲击和 Bounce 状态；
+－ 取消尚未写入的报告；
+－ 等待新的有效离地和进近后重新 Armed；
+－ 不根据旧触地快照生成报告。
+
+模拟倍率不为 1 时，第一版建议继续记录但将本次标记为 Degraded 或 Non-scored。校准证明安全之前不要假设倍速落地与正常速度等价。
+
+
+17. PC 用户界面
+
+17.1 结果窗
+
+使用独立无边框、置顶、可选鼠标穿透的透明窗口模拟现有弹窗。
+
+保留：
+
+－ immediate/taxi/stopped/off/clean；
+－ 30/60/120 秒；
+－ 九宫格位置；
+－ 横向/竖向布局；
+－ 透明度；
+－ Nice/Stable/Attention/UNSTABLE 色彩；
+－ Bounce 和道面提示；
+－ 调试详情。
+
+必须处理：
+
+－ 多显示器；
+－ Windows DPI 缩放；
+－ MSFS 窗口移动；
+－ 游戏失去焦点；
+－ VR 模式；
+－ 全屏/无边框模式；
+－ UI 不得抢夺飞行操纵焦点。
+
+17.2 设置与历史记录
+
+PC 版可以使用原生设置窗口，也可以使用 WebView2 统一实现。删除历史记录必须限制在应用自己的数据目录和命名规则内。
+
+17.3 报告阅读器
+
+现有 LMM_Report_Reader.html 的以下部分可复用：
+
+－ TXT 解析；
+－ 中文/英文标签映射；
+－ 指标选择；
+－ Canvas 图表；
+－ 双报告比较；
+－ 响应式布局。
+
+建议把当前单文件页面嵌入 WebView2，并增加由宿主直接传入 LandingReport JSON 的入口。文件拖放继续作为兼容功能，但不应是程序内部打开报告的唯一方式。
+
+
+18. MSFS 2024 原生界面
+
+18.1 后台
+
+独立 WASM 模块负责所有关键采样、状态机和最终计算。
+
+18.2 EFB
+
+EFB TypeScript/TSX 应用负责：
+
+－ 当前结果；
+－ 历史列表；
+－ 报告详情；
+－ 100 ft 图表；
+－ 双报告比较；
+－ 设置；
+－ 数据导出能力（平台允许时）。
+
+18.3 通信
+
+WASM 与 EFB 使用 CommBus 异步通信，推荐 JSON 消息。
+
+建议消息：
+
+lmm.ready
+lmm.settings.get
+lmm.settings.update
+lmm.landing.completed
+lmm.history.list
+lmm.history.open
+lmm.history.delete
+lmm.report.compare
+lmm.health.status
+
+每条消息带 schema_version、request_id、timestamp 和 payload。不得假设异步消息一定送达，UI 必须支持重新请求完整状态。
+
+18.4 EFB 休眠
+
+EFB 页面关闭或切换后会休眠。不得把采样计时器、Bounce 状态或报告写入任务只保存在页面内存中。
+
+
+19. 文件、设置和报告
+
+19.1 PC 版目录
+
+建议使用用户应用数据目录，而不是 MSFS 安装目录或 Community 包目录。
+
+示例：
+
+StarLux Landing Meter MSFS/
+  Settings/
+  Logs/
+  Reports/
+  Cache/
+  Diagnostics/
+
+19.2 WASM 版目录
+
+使用 /work 持久化目录。MSFS 2024 读取包内资源优先使用异步 IO API，避免流式包同步读取造成卡顿。
+
+19.3 报告数据模型
+
+建议建立规范化 LandingReport 结构作为唯一真源，再由序列化器生成：
+
+－ JSON 内部记录；
+－ 中文 TXT；
+－ 英文 TXT；
+－ EFB 页面数据；
+－ PC HTML 阅读器数据。
+
+不要让 HTML 的 TXT 反向解析结果成为程序内部真源。
+
+19.4 报告必须新增的审计字段
+
+simulator = MSFS2020 或 MSFS2024
+application_version
+report_schema_version
+aircraft_title
+atc_model
+sampling_period
+average_sample_gap_ms
+maximum_sample_gap_ms
+simulation_rate
+flow/reset flags
+selected_fpm_source
+world_vy_fpm
+vvi_fpm
+agl_slope_fpm
+touchdown_normal_fpm
+g_source
+g_data_quality
+surface_info_valid
+runway_identification_method
+runway_identification_confidence
+
+
+20. 性能与线程原则
+
+触地关键帧只允许：
+
+－ 读取已到达的数据；
+－ 写入固定容量环形缓冲区；
+－ 更新轻量状态；
+－ 设置待处理任务标记。
+
+禁止在触地关键帧执行：
+
+－ Facilities 全量查询；
+－ 文件写入；
+－ JSON 大对象格式化；
+－ HTML 生成；
+－ 日志目录扫描；
+－ 网络请求；
+－ UI 创建；
+－ 阻塞锁等待。
+
+建议性能目标：
+
+－ 每帧采样和状态更新通常低于 0.2 ms；
+－ 关键路径不分配大块内存；
+－ 环形缓冲区预分配；
+－ 报告和 Facilities 任务异步或延迟处理；
+－ UI 卡顿不影响采样；
+－ SimConnect 重连不崩溃、不产生假落地。
+
+
+21. 降级与兼容策略
+
+每个字段和子功能应有明确的可选性。
+
+基础必需数据：
+
+－ simulation time；
+－ on ground；
+－ world vertical velocity 或 touchdown normal velocity；
+－ AGL；
+－ ground speed；
+－ G FORCE；
+－ 经纬度。
+
+缺失基础数据时不评分，只显示诊断。
+
+可选数据：
+
+－ VVI；
+－ AoA；
+－ 单起落架接地点；
+－ contact point compression；
+－ surface condition；
+－ ATC runway；
+－ Facilities 详细跑道；
+－ precipitation rate。
+
+缺失可选数据时保留核心落地报告，并在报告中写明 unavailable。禁止用 0 冒充真实测量值。
+
+第三方飞机兼容原则：
+
+－ 标准运动学优先使用全局 SimVar；
+－ 不依赖飞机专用 LVar/HVar 才能完成基础评分；
+－ 可以提供可选 aircraft profile 修正，但不得让维护成本失控；
+－ 机型名称不可信时同时保留 TITLE、ATC MODEL、ATC TYPE；
+－ 特殊飞行模型必须通过真实日志决定是否支持。
+
+
+22. 第一版支持范围
+
+建议正式承诺：
+
+－ Windows PC；
+－ MSFS 2020 和 MSFS 2024；
+－ 固定翼轮式飞机；
+－ 正常模拟倍率 1x；
+－ 标准自由飞行；
+－ 本地报告和历史记录。
+
+建议标记为实验性：
+
+－ 尾轮飞机；
+－ 水上飞机和两栖飞机；
+－ 直升机；
+－ 航母和移动平台；
+－ Replay；
+－ 第三方回放工具；
+－ Career/活动中的 Back On Track；
+－ VR 悬浮 UI；
+－ 模拟倍率不为 1 的落地。
+
+Xbox、Marketplace 和 MSFS 2024 EFB 原生版作为第二阶段独立产品目标。
+
+
+23. 数据探针
+
+在正式移植算法前，先开发无评分、无漂亮 UI 的 MSFS Data Probe。
+
+探针每个模拟帧至少记录：
+
+－ 所有第 4 节 FlightSample 字段；
+－ PLANE TOUCHDOWN 全套快照；
+－ GEAR IS ON GROUND 的可用索引；
+－ CONTACT POINT 字段的可用情况；
+－ SimConnect 返回序号；
+－ 模拟时间和程序单调时间；
+－ 暂停、Slew、模拟倍率；
+－ Flow、航班加载和飞机加载事件；
+－ 数据接收间隔；
+－ 当前 FPS（能够可靠取得时）。
+
+每次测试必须配套：
+
+－ 机型和版本；
+－ MSFS 版本；
+－ 目标帧率；
+－ 机场和跑道；
+－ 天气和道面；
+－ 正常落地/重落地/Bounce/复飞；
+－ 视频或可对齐的时间标记；
+－ 原始 CSV/二进制日志。
+
+数据探针阶段不得用最终评分掩盖原始数据问题。
+
+
+24. 测试矩阵
+
+24.1 机型类别
+
+－ 轻型前三点式；
+－ 尾轮飞机；
+－ 窄体喷气客机；
+－ 宽体喷气客机；
+－ 长行程起落架飞机；
+－ 至少两个高保真第三方机模；
+－ MSFS 2024 模块化飞机。
+
+24.2 帧率
+
+－ 20 FPS；
+－ 30 FPS；
+－ 60 FPS；
+－ 120 FPS 或更高。
+
+24.3 落地条件
+
+－ 轻柔；
+－ 正常；
+－ 重落地；
+－ 单次明显 Bounce；
+－ 多次 Bounce；
+－ 侧风；
+－ 大坡度接地；
+－ 斜坡跑道；
+－ 湿跑道；
+－ 雪/冰；
+－ 复飞；
+－ 接地复飞；
+－ 低帧率和短时卡顿。
+
+24.4 流程异常
+
+－ 暂停和恢复；
+－ Active Pause；
+－ 改变模拟倍率；
+－ Slew；
+－ Back On Track；
+－ 传送；
+－ 更换飞机；
+－ 重载航班；
+－ SimConnect 断开和重连；
+－ Replay 或第三方回放；
+－ 程序在进近中启动；
+－ 程序在滑跑中启动；
+－ 程序在地面启动。
+
+
+25. 离线回放和自动化测试
+
+核心库必须支持把探针日志作为 FlightSample 序列离线重放。离线回放是回归测试的基础，不要依赖每次进入模拟器人工测试。
+
+建议测试层次：
+
+单元测试
+  百分位、中位数、稳健斜率、角度归一化、跑道投影、环形缓冲区。
+
+状态机测试
+  Armed、触地、Bounce、复飞、时间回退和重置。
+
+黄金样本测试
+  固定输入日志必须产生固定 LandingResult 和报告字段。
+
+跨平台一致性测试
+  同一 FlightSample 输入在 Windows 核心与 WASM 核心应得到一致结果。
+
+模糊测试
+  随机丢帧、重复帧、时间跳变、NaN、极端值和字段缺失。
+
+
+26. 发布验收标准
+
+只有满足以下条件，才能称为公开测试版：
+
+－ 不会在地面加载飞机时生成假落地；
+－ 正常 1x 飞行中首次有效落地能够稳定识别；
+－ Bounce 不因单帧状态抖动大量误报；
+－ 低帧率时会降低可信度，不伪装成高精度；
+－ 时间回退、Slew、Back On Track 和重载后不会重复写报告；
+－ 报告记录所有最终值的来源和数据质量；
+－ 无 Facilities 数据时仍能生成基础报告；
+－ 任意第三方飞机缺少可选字段时不会崩溃；
+－ 触地关键帧无磁盘、网络和重型 UI 工作；
+－ 30 次以上多机型实测无严重重复报告或漏报；
+－ 报告阅读器能够打开当前和至少一个旧 schema；
+－ 卸载程序不会删除用户目录之外的文件。
+
+正式版还应满足：
+
+－ 完整测试矩阵；
+－ 中英文说明；
+－ 诊断日志脱敏；
+－ 安装、更新、卸载和数据迁移验证；
+－ MSFS 2020/2024 分别验证；
+－ 对已知不支持场景有清楚说明；
+－ 第三方机模兼容列表基于实际测试，不基于推测。
+
+
+27. 实施阶段
+
+阶段 0：建立新项目
+
+－ 固定语言和架构选择；
+－ 建立 lmm-core 和测试框架；
+－ 固定 LandingReport schema；
+－ 保存本文档作为项目开发基线。
+
+阶段 1：Data Probe
+
+－ SimConnect 连接；
+－ 每模拟帧批量数据；
+－ Flow/加载/暂停事件；
+－ 原始日志；
+－ SimVar Watcher 对照。
+
+阶段 2：离线算法移植
+
+－ 环形缓冲区；
+－ 状态机；
+－ 四链 FPM；
+－ G 初版；
+－ Bounce；
+－ 拉平；
+－ 黄金样本测试。
+
+阶段 3：PC MVP
+
+－ 自动连接；
+－ 结果弹窗；
+－ 设置；
+－ 本地报告；
+－ 报告阅读器；
+－ 基础机场识别。
+
+阶段 4：校准和公开测试
+
+－ 多机型、多帧率数据；
+－ G 和 FPM 规则定版；
+－ Replay/流程保护；
+－ 兼容性列表；
+－ 诊断包导出。
+
+阶段 5：MSFS 2024 原生版
+
+－ C++ 核心编译到 WASM；
+－ 独立后台模块；
+－ /work 和异步 IO；
+－ CommBus；
+－ EFB 应用；
+－ Xbox/Marketplace 测试。
+
+
+28. 主要风险
+
+高风险：
+
+－ G FORCE 在不同飞机和帧率下的峰值行为；
+－ 低帧率无法捕获短冲击；
+－ Replay 状态没有稳定统一入口；
+－ 第三方飞机接地点索引与命名不统一；
+－ 原生 MSFS 2024 UI 无法复制任意自由浮动窗。
+
+中风险：
+
+－ AGL 在障碍物和跑道地形上的定义差异；
+－ 风向真北/磁北混用；
+－ Facilities 流式加载和查询延迟；
+－ ATC 跑道信息在未使用 ATC 时为空；
+－ Marketplace 加密环境中的文件访问；
+－ EFB 页面休眠和异步通信丢失。
+
+低风险：
+
+－ IAS/TAS/GS；
+－ 姿态和经纬度；
+－ TXT 报告；
+－ HTML 图表；
+－ 中文/英文；
+－ PC 本地设置和历史记录。
+
+
+29. 未决产品决策
+
+新项目开始时需要明确：
+
+1）第一版是否只做 PC 外部伴侣程序；
+2）核心是否从一开始使用 C++17；
+3）用户主 FPM 使用世界垂直速度还是微软触地法向速度；
+4）模拟倍率不为 1 时是禁用评分还是降低可信度；
+5）第一版是否正式支持尾轮飞机；
+6）PC 弹窗是否支持 VR；
+7）报告是否继续以 TXT 为用户主要格式；
+8）是否保留现有 Nice/Stable/Attention/UNSTABLE 阈值；
+9）是否计划 Marketplace/Xbox；
+10）是否保持完全离线，或加入可选云同步。
+
+在没有探针数据前，不要提前决定第 3、4、8 项的最终技术规则。
+
+
+30. 官方资料入口
+
+MSFS 2024 SDK 文档首页
+https://docs.flightsimulator.com/msfs2024/
+
+Simulation Variables
+https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/SimVars/Simulation_Variables.htm
+
+Aircraft Miscellaneous Variables
+https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/SimVars/Aircraft_SimVars/Aircraft_Misc_Variables.htm
+
+Aircraft Flight Model Variables
+https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/SimVars/Aircraft_SimVars/Aircraft_FlightModel_Variables.htm
+
+Aircraft Brake and Landing Gear Variables
+https://docs.flightsimulator.com/msfs2024/flighting/programming-apis/simvars/aircraft-simvars/aircraft-brake-and-landing-gear-variables/
+
+Miscellaneous / Weather Variables
+https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/SimVars/Miscellaneous_Variables.htm
+
+SimConnect RequestDataOnSimObject
+https://docs.flightsimulator.com/msfs2024/flighting/programming-apis/simconnect/api-reference/events-and-data/simconnect_requestdataonsimobject/
+
+SimConnect Period
+https://docs.flightsimulator.com/html/Programming_Tools/SimConnect/API_Reference/Structures_And_Enumerations/SIMCONNECT_PERIOD.htm
+
+Facilities Data Definition
+https://docs.flightsimulator.com/html/Programming_Tools/SimConnect/API_Reference/Facilities/SimConnect_AddToFacilityDefinition.htm
+
+MSFS 2024 WebAssembly
+https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/WASM/WebAssembly.htm
+
+MSFS 2024 IO API
+https://docs.flightsimulator.com/msfs2024/flighting/programming-apis/wasm/io-api/io-api/
+
+MSFS 2024 Communication API
+https://docs.flightsimulator.com/msfs2024/flighting/programming-apis/javascript/communication-api/
+
+MSFS 2024 EFB API
+https://docs.flightsimulator.com/msfs2024/flighting/programming-apis/efb/electronic-flight-bag-api/
+
+MSFS 2024 EFB Notifications
+https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/EFB/EFB_Notifications.htm
+
+MSFS 2024 Flow API
+https://docs.flightsimulator.com/msfs2024/flighting/programming-apis/javascript/flow-api/flow-api/
+
+MSFS 2024 Network API
+https://docs.flightsimulator.com/msfs2024/flighting/programming-apis/wasm/network-api/network-api/
+
+
+31. 新项目启动检查表
+
+开始编码前：
+
+[ ] 安装目标 MSFS SDK 和 SimConnect SDK
+[ ] 保存 SDK 版本号
+[ ] 确认 MSFS 2020/2024 首发范围
+[ ] 确认 C# 或 C++17 核心路线
+[ ] 创建 Data Probe，而不是先做漂亮 UI
+[ ] 用 SimVar Watcher 验证所有变量和单位
+[ ] 记录至少三种机型的原始落地数据
+[ ] 确认 VELOCITY WORLD Y 与 TOUCHDOWN NORMAL VELOCITY 正负号
+[ ] 确认 G FORCE 的帧率行为
+[ ] 确认 SIMULATION TIME 在暂停、Replay、Back On Track 中的行为
+[ ] 确认 Facilities 跑道 heading 使用的参考系
+[ ] 确认第三方飞机 TITLE/ATC MODEL 可用性
+[ ] 固定 FlightSample 和 LandingReport schema
+[ ] 建立离线回放测试
+[ ] 完成核心算法后再制作正式 UI
+
+
+32. 最终开发原则
+
+－ 测量可信度优先于显示精度。
+－ 数据不足时明确降级，不使用 0 伪装有效值。
+－ 报告必须能够解释最终数字来自哪里。
+－ 同帧数据应在同一个批次中读取。
+－ 关键帧不做文件、网络和重型 UI 工作。
+－ 跨平台共享业务核心，平台适配保持隔离。
+－ X-Plane 与 MSFS 分别校准，不追求虚假的跨模拟器数字一致。
+－ 先保存原始数据，再调整算法。
+－ 任何机型兼容声明必须来自真实测试。
+－ PC 外部版与 MSFS 2024 原生版可以共享品牌和算法，但不强求相同 UI。
+
+
+文档结束

@@ -1,6 +1,6 @@
--- StarLux 落地率插件 v1.1 正式版
+-- StarLux 落地率插件 v1.1.4 稳定测试版
 -- 适用于 X-Plane 12 + FlyWithLua
--- v1.1 新增三链 FPM 验证、VVI 安全回退、回放隔离与更完整的弹窗控制。
+-- v1.1.4 重建接地数据主链：FPM 以 AGL 几何下降率为锚点选择最接近的有效测量，G 以 1.0 G 为冲量基准。
 
 -- =========================
 -- 用户设置
@@ -10,7 +10,10 @@ local POPUP_MODE = "immediate"
 -- "immediate" = 落地分析完成后立即显示
 -- "taxi"      = 地速降低到 30 节以下时显示
 -- "stopped"   = 飞机停稳并持续 10 秒后显示
--- "off"       = 不自动显示落地数据窗
+-- "off"       = 不自动显示落地数据窗，但保留报告生成提示
+-- "clean"     = 纯净模式：关闭落地数据窗和报告生成提示
+
+-- 文档输出语言保存在 runtime_state 中，避免增加 Lua 5.1 主代码块局部变量。
 
 local DISPLAY_SECONDS = 30
 local DETAILED_MATH_LOG = false
@@ -19,9 +22,9 @@ local DETAILED_MATH_LOG = false
 -- 满足停止或反弹条件时仍会提前结束；若到达上限，报告会明确记录超时原因。
 local IMPACT_CAPTURE_MAX_SECONDS = 1.20
 local PRE_TOUCH_BUFFER_SECONDS = 0.50
--- 触地状态可能比实际接触晚一至数帧；使用触地前 250 毫秒物理速度的第 25 百分位，避开末端接近零的滞后样本。
+-- 物理候选优先取最后 100 ms 离地垂直速度中位数；250 ms P25 只在短窗缺样时备用。
 local PHYSICAL_FPM_WINDOW_SECONDS = 0.25
-local PHYSICAL_FPM_SHORT_WINDOW_SECONDS = 0.08
+local PHYSICAL_FPM_CONTACT_WINDOW_SECONDS = 0.10
 local PHYSICAL_FPM_PERCENTILE = 0.25
 local VVI_DIAGNOSTIC_WINDOW_SECONDS = 0.85
 local G_BASELINE_WINDOW_SECONDS = 0.20
@@ -29,17 +32,22 @@ local IMPACT_STOP_VY_MPS = -0.05
 local IMPACT_STOP_STABLE_FRAMES = 3
 local TAXI_POPUP_SPEED_KT = 30
 
--- v1.1 第三条 FPM 验证链：用触地前 AGL 高度随时间的稳健斜率验证 local_vy。
--- AGL 链仅负责交叉验证，不直接替代用户看到的 VVI 或物理值。
+-- AGL 几何斜率作为跨机模锚点：物理 FPM 与 VVI 谁更接近 AGL 就采用谁；两者均明显偏离时直接采用 AGL。
+-- AGL 样本不可用时，才依次回退到物理候选和 VVI。
 
 -- 拉平曲率首版只显示和记录，不参与落地评分。
--- 10 Hz 原始采样在分析阶段聚合为 0.5 秒轨迹点，降低帧率和瞬时噪声的影响。
+-- 10 Hz 原始采样在分析阶段聚合为 0.25 秒轨迹点，在保留细节的同时抑制瞬时噪声。
 local FLARE_CONFIG = {
     start_agl_ft = 100,
+    -- 先在目标高度以上保留一小段原始样本。触地后才能知道飞机参考点相对跑道面的静态高度，
+    -- 因此必须预留足够高度，再完成接地点归零并裁切出真正的 100 ft 后轨迹。
+    capture_margin_ft = 40,
+    max_touch_reference_ft = 60,
     sample_interval_seconds = 0.10,
     max_samples = 600,
-    bucket_seconds = 0.50,
-    max_buckets = 128,
+    -- 0.25 秒显示桶在保留 10 Hz 原始输入的同时提高网页轨迹分辨率；扩容后仍覆盖最长 60 秒原始缓存。
+    bucket_seconds = 0.25,
+    max_buckets = 256,
     min_samples = 12,
     min_buckets = 4,
     -- 只有持续下降才允许启动；复飞、重新爬升或异常超时会作废本轮轨迹。
@@ -112,14 +120,12 @@ local LOG_MANAGER_PAGE_SIZE = 8
 
 local VS_SAMPLE_MAX_AGL_FT = 120
 
--- 冲量一致性算法参数。
+-- G 稳健主值与物理闭合复核参数。
 local SAMPLE_BUFFER_SIZE = 256
 local MATH_AUDIT_SAMPLE_MAX = SAMPLE_BUFFER_SIZE
 local SECOND_TOUCH_AUDIT_SAMPLE_MAX = SAMPLE_BUFFER_SIZE
 local G_CURVE_PERCENTILE = 0.75
--- 中可信度使用短窗局部包络保留真实压缩段，避免长行程起落架把短暂峰值稀释掉。
--- 窗口内仍取 P75，因此单帧尖峰不会直接成为最终 G。
-local HIGH_G_DURATION_MIN_SECONDS = 0.030
+-- 固定接地窗取 P75，既保留最初承载阶段，也避免单帧尖峰直接成为最终 G。
 local CONSISTENCY_HIGH_MAX_ERROR = 0.25
 local CONSISTENCY_MEDIUM_MAX_ERROR = 0.60
 local MAX_VALID_SAMPLE_GAP_SECONDS = 0.050
@@ -163,7 +169,10 @@ local DEBUG_MODE = false
 local LMM_DATAREF_SPECS = {
     { key = "vs_fpm", path = "sim/flightmodel/position/vh_ind_fpm", kind = "float" },
     { key = "local_vy_mps", path = "sim/flightmodel/position/local_vy", kind = "float" },
+    { key = "local_vx_mps", path = "sim/flightmodel/position/local_vx", kind = "float" },
+    { key = "local_vz_mps", path = "sim/flightmodel/position/local_vz", kind = "float" },
     { key = "y_agl_m", path = "sim/flightmodel/position/y_agl", kind = "float" },
+    { key = "elevation_m", path = "sim/flightmodel/position/elevation", kind = "double" },
     { key = "on_ground", path = "sim/flightmodel/failures/onground_any", kind = "int" },
     { key = "g_normal", path = "sim/flightmodel/forces/g_nrml", kind = "float" },
     { key = "roll_deg", path = "sim/flightmodel/position/phi", kind = "float" },
@@ -309,10 +318,14 @@ local flare_trace = {
     limited = false,
     start_time = 0,
     touch_time = 0,
+    touch_reference_ft = 0,
     next_sample_time = 0,
     descent_confirm_start = 0,
     climb_confirm_start = 0,
+    height_reference = "TERRAIN_AGL",
+    reference_elevation_ft = 0,
     count = 0,
+    analysis_sample_count = 0,
     bucket_count = 0
 }
 for i = 1, FLARE_CONFIG.max_samples do
@@ -379,6 +392,7 @@ local bounce_state = {
     second_curve_g = 1,
     second_g_ready = false,
     original_status = "NICE",
+    result_status = "NICE",
     score_applied = false
 }
 
@@ -391,7 +405,7 @@ local landing_analysis = {
         agl_min_pair_gap_seconds = 0.035,
         agl_max_samples = 64,
         terminal_agl_ft = 5.0,
-        max_pair_difference_fpm = 60
+        agl_anchor_max_difference_fpm = 30
     },
     g_local_event = {
         window_seconds = 0.160,
@@ -414,6 +428,7 @@ local landing_analysis = {
     vvi_sample_count = 0,
     physical_fpm = 0,
     physical_short_fpm = 0,
+    physical_fallback_fpm = 0,
     fpm_difference = 0,
     physical_fpm_valid = false,
     physical_sample_count = 0,
@@ -427,8 +442,8 @@ local landing_analysis = {
     agl_physical_difference = 0,
     agl_vvi_difference = 0,
     fpm_max_pair_difference = 0,
-    fpm_confidence = "LOW",
-    fpm_method = "等待三链验证",
+    fpm_selection_reason = "",
+    fpm_method = "等待终端下降率测量",
     flare_fpm_source = "VVI",
     pre_vy_mps = 0,
     post_vy_mps = 0,
@@ -478,11 +493,46 @@ local landing_context = {
     aircraft_icao = "UNKNOWN",
     aircraft_file = "",
     airport_id = "识别中",
+    airport_internal_id = "",
     airport_name = "",
     airport_distance_km = 0,
     runway = "--",
+    runway_detected = false,
+    runway_status = "pending",
+    runway_confidence = "NONE",
+    runway_source = "",
+    runway_source_path = "",
+    runway_length_m = 0,
+    runway_width_m = 0,
+    runway_surface = "",
+    runway_surface_code = 0,
+    runway_shoulder_code = 0,
+    runway_centerline_lights = 0,
+    runway_edge_lights = 0,
+    opposite_runway = "",
+    displaced_threshold_m = 0,
+    opposite_displaced_threshold_m = 0,
+    blast_pad_m = 0,
+    opposite_blast_pad_m = 0,
+    marking_code = 0,
+    opposite_marking_code = 0,
+    tdz_lights = 0,
+    opposite_tdz_lights = 0,
+    reil_code = 0,
+    opposite_reil_code = 0,
+    touchdown_from_threshold_m = 0,
+    runway_remaining_m = 0,
+    centerline_offset_m = 0,
+    centerline_signed_m = 0,
+    centerline_side = "CENTER",
+    centerline_penalty_applied = false,
+    centerline_penalty_level = "none",
+    centerline_original_status = "NICE",
+    centerline_warning_text = "",
     touch_latitude = 0,
     touch_longitude = 0,
+    touch_vx_mps = 0,
+    touch_vz_mps = 0,
     file_timestamp = ""
 }
 local surface_watch = {
@@ -525,12 +575,59 @@ local runtime_state = {
     stopped_popup_since = 0,
     stopped_speed_kt = 1.0,
     stopped_hold_seconds = 10.0,
-    replay_active = false
+    replay_active = false,
+    document_language = "zh",
+    runway_detection_enabled = true
 }
 local settings_window = nil
 local log_manager_window = nil
 -- 新增文件管理函数统一放入表中，避免 Lua 5.1 主代码块超过 200 个局部变量上限。
 local log_tools = {}
+log_tools.runway_config = {
+    scan_chunk_bytes = 131072,
+    timeout_seconds = 30.0,
+    prefetch_timeout_seconds = 300.0,
+    prefetch_check_interval_seconds = 5.0,
+    prefetch_min_agl_ft = 100.0,
+    prefetch_max_agl_ft = 5000.0,
+    prefetch_max_distance_km = 40.0,
+    nearby_probe_radius_km = 5.0,
+    nearby_candidate_max_distance_km = 15.0,
+    nearby_prefetch_queue_limit = 12,
+    nearby_probe_move_km = 2.0,
+    nearby_probe_interval_seconds = 30.0,
+    cross_tolerance_m = 45.0,
+    along_tolerance_m = 150.0,
+    centerline_downgrade_m = 7.0,
+    centerline_unstable_m = 15.0,
+    earth_radius_m = 6371000.0
+}
+log_tools.runway_state = {
+    sources = {},
+    active = false,
+    file = nil,
+    source_index = 0,
+    source = nil,
+    partial = "",
+    collecting = false,
+    collecting_airport = "",
+    target_airport = "",
+    runways = {},
+    metadata = {},
+    started_at = 0,
+    mode = "idle",
+    cache = {},
+    airport_nav = {},
+    prefetch_queue = {},
+    prefetch_queued = {},
+    last_nearby_probe_lat = nil,
+    last_nearby_probe_lon = nil,
+    last_nearby_probe_at = -1000,
+    last_prefetch_check = -1000,
+    last_mode = "idle",
+    last_status = "idle",
+    last_reason = ""
+}
 local log_manager_state = {
     records = {},
     page = 1,
@@ -543,16 +640,19 @@ local landing_jobs = {
     context_pending = false,
     context_after = 0,
     log_pending = false,
-    log_after = 0
+    log_after = 0,
+    runway_deadline = 0
 }
 local landing_report_notice = {
     text = "",
+    file_name = "",
     until_time = 0
 }
 local popup_cache = {
     lines = { "", "", "", "", "", "", "" },
     warning_text = "",
-    bounce_text = ""
+    bounce_text = "",
+    centerline_text = ""
 }
 
 local POSITION_OPTIONS = {
@@ -602,22 +702,23 @@ local function trim_text(value)
     return tostring(value or ""):match("^%s*(.-)%s*$")
 end
 
+-- 落地弹窗和报告提示按照所选数据输出语言显示。
+function log_tools.ui_text(chinese, english)
+    if runtime_state.document_language == "en" then return english end
+    return chinese
+end
+
+-- FlyWithLua ImGui 设置窗口和记录管理器固定使用英文，避免中文字体缺失造成方框或空白。
+function log_tools.settings_text(chinese, english)
+    return english
+end
+
 local function sanitize_filename_token(value)
     local token = string.upper(trim_text(value)):gsub("[^%w%-]", "")
     if token == "" or token == "UNKNOWN" then
         return "UNKNOWN"
     end
     return token
-end
-
-local function estimated_runway_from_heading(heading_deg)
-    local runway_number = math.floor((normalize_deg(heading_deg) + 5) / 10)
-    if runway_number == 0 or runway_number == 36 then
-        runway_number = 36
-    elseif runway_number > 36 then
-        runway_number = runway_number - 36
-    end
-    return string.format("%02d", runway_number)
 end
 
 local function distance_km(lat1, lon1, lat2, lon2)
@@ -650,14 +751,56 @@ local function begin_landing_context()
 
     landing_context.aircraft_icao = aircraft_icao
     landing_context.aircraft_file = aircraft_file
+    -- 进近阶段已启动的 apt.dat 预扫描必须跨越触地保留，避免从文件头重新开始。
+    if log_tools.cancel_runway_resolver
+        and log_tools.runway_state.active
+        and log_tools.runway_state.mode ~= "prefetch" then
+        log_tools.cancel_runway_resolver("new landing")
+    end
     landing_context.airport_id = "识别中"
+    landing_context.airport_internal_id = ""
     landing_context.airport_name = ""
     landing_context.airport_distance_km = 0
-    landing_context.runway = estimated_runway_from_heading(landing_heading_deg)
+    landing_context.runway = "--"
+    landing_context.runway_detected = false
+    landing_context.runway_status = runtime_state.runway_detection_enabled and "pending" or "disabled"
+    landing_context.runway_confidence = "NONE"
+    landing_context.runway_source = ""
+    landing_context.runway_source_path = ""
+    landing_context.runway_length_m = 0
+    landing_context.runway_width_m = 0
+    landing_context.runway_surface = ""
+    landing_context.runway_surface_code = 0
+    landing_context.runway_shoulder_code = 0
+    landing_context.runway_centerline_lights = 0
+    landing_context.runway_edge_lights = 0
+    landing_context.opposite_runway = ""
+    landing_context.displaced_threshold_m = 0
+    landing_context.opposite_displaced_threshold_m = 0
+    landing_context.blast_pad_m = 0
+    landing_context.opposite_blast_pad_m = 0
+    landing_context.marking_code = 0
+    landing_context.opposite_marking_code = 0
+    landing_context.tdz_lights = 0
+    landing_context.opposite_tdz_lights = 0
+    landing_context.reil_code = 0
+    landing_context.opposite_reil_code = 0
+    landing_context.touchdown_from_threshold_m = 0
+    landing_context.runway_remaining_m = 0
+    landing_context.centerline_offset_m = 0
+    landing_context.centerline_signed_m = 0
+    landing_context.centerline_side = "CENTER"
+    landing_context.centerline_penalty_applied = false
+    landing_context.centerline_penalty_level = "none"
+    landing_context.centerline_original_status = "NICE"
+    landing_context.centerline_warning_text = ""
     landing_context.touch_latitude = lmm_get_double("latitude_deg")
     landing_context.touch_longitude = lmm_get_double("longitude_deg")
+    landing_context.touch_vx_mps = lmm_get_float("local_vx_mps")
+    landing_context.touch_vz_mps = lmm_get_float("local_vz_mps")
     landing_context.file_timestamp = os.date("%Y-%m-%d_%H-%M-%S")
     landing_report_notice.text = ""
+    landing_report_notice.file_name = ""
     landing_report_notice.until_time = 0
 end
 
@@ -755,24 +898,867 @@ end
 
 runway_friction_text = function(value)
     if value >= 13 then
-        return "积雪/结冰"
+        return log_tools.ui_text("积雪/结冰", "snow/ice")
     elseif value >= 10 then
-        return "结冰"
+        return log_tools.ui_text("结冰", "ice")
     elseif value >= 7 then
-        return "积雪"
+        return log_tools.ui_text("积雪", "snow")
     elseif value >= 4 then
-        return "积水"
+        return log_tools.ui_text("积水", "standing water")
     elseif value >= 1 then
-        return "湿滑"
+        return log_tools.ui_text("湿滑", "wet")
     end
-    return "干燥"
+    return log_tools.ui_text("干燥", "dry")
 end
 
-local function resolve_landing_context()
+function log_tools.normalize_xplane_path(path)
+    local normalized = trim_text(path)
+    normalized = normalized:gsub("/", PATH_SEPARATOR)
+    normalized = normalized:gsub("\\", PATH_SEPARATOR)
+    return normalized
+end
+
+function log_tools.add_apt_source(path, label)
+    local state = log_tools.runway_state
+    local normalized = log_tools.normalize_xplane_path(path)
+    for i = 1, #state.sources do
+        if state.sources[i].path == normalized then return false end
+    end
+    local probe = io.open(normalized, "rb")
+    if probe == nil then return false end
+    probe:close()
+    state.sources[#state.sources + 1] = { path = normalized, label = trim_text(label) }
+    return true
+end
+
+function log_tools.discover_apt_sources()
+    local state = log_tools.runway_state
+    state.sources = {}
+    state.cache = {}
+    state.airport_nav = {}
+    state.prefetch_queue = {}
+    state.prefetch_queued = {}
+    state.last_nearby_probe_lat = nil
+    state.last_nearby_probe_lon = nil
+    state.last_nearby_probe_at = -1000
+    local root = trim_text(SYSTEM_DIRECTORY or "")
+    if root == "" then
+        state.last_reason = "X-Plane 根目录不可用"
+        return 0
+    end
+
+    local global_path = join_path(join_path(join_path(root, "Global Scenery"), "Global Airports"), join_path("Earth nav data", "apt.dat"))
+    local packs_path = join_path(join_path(root, "Custom Scenery"), "scenery_packs.ini")
+    local packs = io.open(packs_path, "r")
+    local global_added = false
+    if packs ~= nil then
+        for line in packs:lines() do
+            if not line:match("^%s*SCENERY_PACK_DISABLED%s+") then
+                local entry = line:match("^%s*SCENERY_PACK%s+(.+)%s*$")
+                if entry ~= nil then
+                    entry = trim_text(entry):gsub('^"(.*)"$', "%1")
+                    if entry == "*GLOBAL_AIRPORTS*" then
+                        global_added = log_tools.add_apt_source(global_path, "Global Airports") or global_added
+                    else
+                        local base_path
+                        if entry:match("^%a:[/\\]") or entry:sub(1, 1) == "/" then
+                            base_path = log_tools.normalize_xplane_path(entry)
+                        else
+                            base_path = join_path(root, log_tools.normalize_xplane_path(entry))
+                        end
+                        local apt_path = join_path(join_path(base_path, "Earth nav data"), "apt.dat")
+                        log_tools.add_apt_source(apt_path, entry:gsub("[/\\]+$", ""))
+                    end
+                end
+            end
+        end
+        packs:close()
+    end
+    if not global_added then
+        log_tools.add_apt_source(global_path, "Global Airports")
+    end
+    state.last_reason = #state.sources > 0 and "" or "未找到可读取的 apt.dat"
+    return #state.sources
+end
+
+function log_tools.cancel_runway_resolver(reason)
+    local state = log_tools.runway_state
+    if state.file ~= nil then pcall(function() state.file:close() end) end
+    state.file = nil
+    state.active = false
+    state.source = nil
+    state.partial = ""
+    state.collecting = false
+    state.collecting_airport = ""
+    state.runways = {}
+    state.metadata = {}
+    state.mode = "idle"
+    if reason ~= nil then state.last_reason = tostring(reason) end
+end
+
+function log_tools.finish_runway_resolver(status, reason)
+    local state = log_tools.runway_state
+    local finished_mode = state.mode
+    if state.file ~= nil then pcall(function() state.file:close() end) end
+    state.file = nil
+    state.active = false
+    state.source = nil
+    state.partial = ""
+    state.collecting = false
+    state.collecting_airport = ""
+    state.mode = "idle"
+    state.last_mode = finished_mode
+    state.last_status = tostring(status or "unavailable")
+    state.last_reason = tostring(reason or "")
+    -- 预扫描只缓存机场跑道数据；触地前不得改写上一份落地结果或当前弹窗。
+    if finished_mode ~= "prefetch" and landing_context.runway_detected == false then
+        landing_context.runway_status = status or "unavailable"
+        landing_context.runway = "--"
+        landing_context.runway_confidence = "NONE"
+    end
+end
+
+function log_tools.runway_surface_text(code)
+    if code == 1 or (code >= 20 and code <= 38) then return "沥青" end
+    if code == 2 or (code >= 50 and code <= 57) then return "混凝土" end
+    if code == 3 then return "草地" end
+    if code == 4 then return "泥土" end
+    if code == 5 then return "碎石" end
+    if code == 12 then return "干湖床" end
+    if code == 14 then return "冰雪" end
+    if code == 15 then return "透明道面" end
+    return "未知（代码 " .. tostring(code) .. "）"
+end
+
+function log_tools.runway_marking_text(code)
+    local labels = {
+        [0] = "无跑道标线",
+        [1] = "目视跑道标线",
+        [2] = "FAA 非精密进近跑道标线",
+        [3] = "FAA 精密进近跑道标线",
+        [4] = "英国非精密进近跑道标线",
+        [5] = "英国精密进近跑道标线",
+        [6] = "EASA/ICAO 非精密进近跑道标线",
+        [7] = "EASA/ICAO 精密进近跑道标线"
+    }
+    return labels[tonumber(code) or 0] or ("未知跑道标线（代码 " .. tostring(code) .. "）")
+end
+
+function log_tools.runway_yes_no(value)
+    if tonumber(value) ~= nil and tonumber(value) ~= 0 then return log_tools.ui_text("是", "Yes") end
+    return log_tools.ui_text("否", "No")
+end
+
+function log_tools.apt_tokens(line)
+    local values = {}
+    for token in tostring(line or ""):gmatch("%S+") do
+        values[#values + 1] = token
+    end
+    return values
+end
+
+function log_tools.parse_runway_row(line)
+    local fields = log_tools.apt_tokens(line)
+    if #fields < 20 or fields[1] ~= "100" then return nil end
+    -- apt.dat fields 15 and 24 are approach-light codes. They are intentionally
+    -- not read because neither runway matching nor the report reader uses them.
+    local width = tonumber(fields[2])
+    local surface = tonumber(fields[3])
+    local lat1, lon1 = tonumber(fields[10]), tonumber(fields[11])
+    local lat2, lon2 = tonumber(fields[19]), tonumber(fields[20])
+    if width == nil or surface == nil or lat1 == nil or lon1 == nil or lat2 == nil or lon2 == nil then return nil end
+    return {
+        width_m = width,
+        surface_code = surface,
+        shoulder_code = tonumber(fields[4]) or 0,
+        centerline_lights = tonumber(fields[6]) or 0,
+        edge_lights = tonumber(fields[7]) or 0,
+        end1 = string.upper(fields[9] or ""),
+        lat1 = lat1,
+        lon1 = lon1,
+        displaced1_m = tonumber(fields[12]) or 0,
+        blast1_m = tonumber(fields[13]) or 0,
+        marking1_code = tonumber(fields[14]) or 0,
+        tdz1_lights = tonumber(fields[16]) or 0,
+        reil1_code = tonumber(fields[17]) or 0,
+        end2 = string.upper(fields[18] or ""),
+        lat2 = lat2,
+        lon2 = lon2,
+        displaced2_m = tonumber(fields[21]) or 0,
+        blast2_m = tonumber(fields[22]) or 0,
+        marking2_code = tonumber(fields[23]) or 0,
+        tdz2_lights = tonumber(fields[25]) or 0,
+        reil2_code = tonumber(fields[26]) or 0
+    }
+end
+
+function log_tools.select_touchdown_runway(runways)
+    local state = log_tools.runway_state
+    local runway_list = runways or state.runways
+    local origin_lat = landing_context.touch_latitude
+    local origin_lon = landing_context.touch_longitude
+    local radians = math.pi / 180
+    local cos_lat = math.cos(origin_lat * radians)
+    local radius = log_tools.runway_config.earth_radius_m
+    local vx = landing_context.touch_vx_mps
+    local vn = -landing_context.touch_vz_mps
+    local velocity_length = math.sqrt(vx * vx + vn * vn)
+    if velocity_length < 2 then
+        return nil, nil, "触地地速向量不可用"
+    end
+    vx = vx / velocity_length
+    vn = vn / velocity_length
+
+    local candidates = {}
+    for i = 1, #runway_list do
+        local runway = runway_list[i]
+        local ax = (runway.lon1 - origin_lon) * radians * radius * cos_lat
+        local an = (runway.lat1 - origin_lat) * radians * radius
+        local bx = (runway.lon2 - origin_lon) * radians * radius * cos_lat
+        local bn = (runway.lat2 - origin_lat) * radians * radius
+        local dx, dn = bx - ax, bn - an
+        local length = math.sqrt(dx * dx + dn * dn)
+        if length >= 100 and runway.width_m > 0 then
+            local ux, un = dx / length, dn / length
+            local px, pn = -ax, -an
+            local along = px * ux + pn * un
+            local signed_cross = ux * pn - un * px
+            local cross = math.abs(signed_cross)
+            local out_of_bounds = 0
+            if along < 0 then
+                out_of_bounds = -along
+            elseif along > length then
+                out_of_bounds = along - length
+            end
+            local alignment_dot = vx * ux + vn * un
+            local alignment = math.abs(alignment_dot)
+            if cross <= runway.width_m / 2 + log_tools.runway_config.cross_tolerance_m
+                and along >= -log_tools.runway_config.along_tolerance_m
+                and along <= length + log_tools.runway_config.along_tolerance_m
+                and alignment >= 0.35 then
+                local forward = alignment_dot >= 0
+                local threshold_distance
+                local remaining
+                local runway_id
+                local opposite_runway_id
+                local displaced_threshold_m
+                local opposite_displaced_threshold_m
+                local blast_pad_m
+                local opposite_blast_pad_m
+                local marking_code
+                local opposite_marking_code
+                local tdz_lights
+                local opposite_tdz_lights
+                local reil_code
+                local opposite_reil_code
+                local centerline_signed_m
+                if forward then
+                    runway_id = runway.end1
+                    opposite_runway_id = runway.end2
+                    displaced_threshold_m = runway.displaced1_m
+                    opposite_displaced_threshold_m = runway.displaced2_m
+                    blast_pad_m = runway.blast1_m
+                    opposite_blast_pad_m = runway.blast2_m
+                    marking_code = runway.marking1_code
+                    opposite_marking_code = runway.marking2_code
+                    tdz_lights = runway.tdz1_lights
+                    opposite_tdz_lights = runway.tdz2_lights
+                    reil_code = runway.reil1_code
+                    opposite_reil_code = runway.reil2_code
+                    threshold_distance = along - runway.displaced1_m
+                    remaining = length - along
+                    centerline_signed_m = signed_cross
+                else
+                    runway_id = runway.end2
+                    opposite_runway_id = runway.end1
+                    displaced_threshold_m = runway.displaced2_m
+                    opposite_displaced_threshold_m = runway.displaced1_m
+                    blast_pad_m = runway.blast2_m
+                    opposite_blast_pad_m = runway.blast1_m
+                    marking_code = runway.marking2_code
+                    opposite_marking_code = runway.marking1_code
+                    tdz_lights = runway.tdz2_lights
+                    opposite_tdz_lights = runway.tdz1_lights
+                    reil_code = runway.reil2_code
+                    opposite_reil_code = runway.reil1_code
+                    threshold_distance = (length - along) - runway.displaced2_m
+                    remaining = along
+                    centerline_signed_m = -signed_cross
+                end
+                candidates[#candidates + 1] = {
+                    score = cross + out_of_bounds * 4 + (1 - alignment) * 220,
+                    runway_id = runway_id,
+                    opposite_runway_id = opposite_runway_id,
+                    length_m = length,
+                    width_m = runway.width_m,
+                    surface_code = runway.surface_code,
+                    shoulder_code = runway.shoulder_code,
+                    centerline_lights = runway.centerline_lights,
+                    edge_lights = runway.edge_lights,
+                    displaced_threshold_m = displaced_threshold_m,
+                    opposite_displaced_threshold_m = opposite_displaced_threshold_m,
+                    blast_pad_m = blast_pad_m,
+                    opposite_blast_pad_m = opposite_blast_pad_m,
+                    marking_code = marking_code,
+                    opposite_marking_code = opposite_marking_code,
+                    tdz_lights = tdz_lights,
+                    opposite_tdz_lights = opposite_tdz_lights,
+                    reil_code = reil_code,
+                    opposite_reil_code = opposite_reil_code,
+                    threshold_distance_m = threshold_distance,
+                    remaining_m = remaining,
+                    centerline_offset_m = cross,
+                    centerline_signed_m = centerline_signed_m,
+                    alignment = alignment,
+                    runway_center_distance_km = math.sqrt(
+                        ((ax + bx) * 0.5) * ((ax + bx) * 0.5)
+                        + ((an + bn) * 0.5) * ((an + bn) * 0.5)
+                    ) / 1000,
+                    inside = along >= 0 and along <= length
+                }
+            end
+        end
+    end
+
+    table.sort(candidates, function(a, b) return a.score < b.score end)
+    local best = candidates[1]
+    if best == nil or best.runway_id == "" then
+        return nil, nil, "触地点未落入任何跑道几何包络"
+    end
+    local second = candidates[2]
+    if second ~= nil and second.runway_id ~= best.runway_id and second.score - best.score < 25 then
+        return nil, nil, "多条跑道候选过于接近，拒绝猜测"
+    end
+    local confidence = "MEDIUM"
+    if best.inside and best.centerline_offset_m <= best.width_m / 2 + 8 and best.alignment >= 0.75 then
+        confidence = "HIGH"
+    end
+    return best, confidence
+end
+
+function log_tools.select_cached_touchdown_runway(excluded_airport)
+    local state = log_tools.runway_state
+    local excluded = string.upper(trim_text(excluded_airport))
+    local matches = {}
+    for airport_id, cached in pairs(state.cache) do
+        if airport_id ~= excluded and cached ~= nil and #(cached.runways or {}) > 0 then
+            local best, confidence = log_tools.select_touchdown_runway(cached.runways)
+            if best ~= nil then
+                matches[#matches + 1] = {
+                    airport_id = airport_id,
+                    cached = cached,
+                    best = best,
+                    confidence = confidence
+                }
+            end
+        end
+    end
+    table.sort(matches, function(a, b) return a.best.score < b.best.score end)
+    local selected = matches[1]
+    if selected == nil then
+        return nil
+    end
+    local second = matches[2]
+    if second ~= nil and second.best.score - selected.best.score < 25 then
+        return nil
+    end
+    return selected.best, selected.confidence, selected.cached, selected.airport_id
+end
+
+function log_tools.apply_centerline_score()
+    if landing_context.runway_detected == false or landing_context.centerline_penalty_applied then return end
+    local offset = landing_context.centerline_offset_m or 0
+    local downgrade_limit = log_tools.runway_config.centerline_downgrade_m
+    local unstable_limit = log_tools.runway_config.centerline_unstable_m
+    if offset <= downgrade_limit then return end
+
+    landing_context.centerline_penalty_applied = true
+    landing_context.centerline_original_status = landing_status
+    landing_context.centerline_warning_text = string.format("偏离中心线 %.1f 米", offset)
+    if offset > unstable_limit then
+        landing_context.centerline_penalty_level = "unstable"
+        landing_status = "UNSTABLE"
+    else
+        landing_context.centerline_penalty_level = "downgrade"
+        if landing_status == "NICE" then
+            landing_status = "STABLE"
+        elseif landing_status == "STABLE" then
+            landing_status = "ATTENTION"
+        end
+        -- Attention 保持黄色，避免 7–15 米区间被中心线规则直接推入红色。
+    end
+    if POPUP_MODE == "immediate" and landing_complete then
+        local popup_now = lmm_get_float("running_time_sec")
+        if popup_now <= 0 then popup_now = os.clock() end
+        show_until = math.max(show_until, popup_now + DISPLAY_SECONDS)
+    end
+end
+
+function log_tools.finish_airport_block()
+    local state = log_tools.runway_state
+    local cache_key = string.upper(trim_text(
+        state.collecting_airport ~= "" and state.collecting_airport or state.target_airport
+    ))
+    if cache_key ~= "" then
+        state.cache[cache_key] = {
+            runways = state.runways,
+            metadata = state.metadata,
+            source = state.source
+        }
+        state.prefetch_queued[cache_key] = nil
+    end
+
+    -- 同一次顺序扫描可以顺手缓存沿途遇到的相邻机场，但不能把它当作当前主目标结束扫描。
+    if cache_key ~= string.upper(trim_text(state.target_airport)) then
+        state.collecting = false
+        state.collecting_airport = ""
+        state.runways = {}
+        state.metadata = {}
+        return false
+    end
+
+    -- 进近阶段只完成读取和缓存；触地点几何必须使用真正接地时保存的坐标与速度向量。
+    if state.mode == "prefetch" then
+        log_tools.finish_runway_resolver("prefetched", "")
+        return true
+    end
+
+    local best, confidence, reason = log_tools.select_touchdown_runway()
+    if best == nil then
+        local fallback_best, fallback_confidence, fallback_cache, fallback_airport =
+            log_tools.select_cached_touchdown_runway(cache_key)
+        if fallback_best == nil then
+            -- 候选复核保持静默；失败时继续沿用原有主机场失败原因，不增加报告/UI 提示。
+            log_tools.finish_runway_resolver("unavailable", reason)
+            return false
+        end
+        best = fallback_best
+        confidence = fallback_confidence
+        cache_key = fallback_airport
+        state.target_airport = fallback_airport
+        state.runways = fallback_cache.runways or {}
+        state.metadata = fallback_cache.metadata or {}
+        state.source = fallback_cache.source
+    end
+
+    local icao = string.upper(trim_text(
+        state.metadata.icao_code or state.metadata.icao_id or cache_key
+    ))
+    if icao ~= "" then landing_context.airport_id = icao end
+    landing_context.airport_internal_id = cache_key
+    if trim_text(state.metadata.airport_name or "") ~= "" then
+        landing_context.airport_name = trim_text(state.metadata.airport_name)
+    end
+    local nav_info = state.airport_nav[cache_key]
+    if nav_info ~= nil then
+        landing_context.airport_distance_km = distance_km(
+            landing_context.touch_latitude,
+            landing_context.touch_longitude,
+            nav_info.latitude,
+            nav_info.longitude
+        )
+        if trim_text(nav_info.name or "") ~= "" then landing_context.airport_name = nav_info.name end
+    elseif best.runway_center_distance_km ~= nil then
+        landing_context.airport_distance_km = best.runway_center_distance_km
+    end
+
+    landing_context.runway = best.runway_id
+    landing_context.runway_detected = true
+    landing_context.runway_status = "resolved"
+    landing_context.runway_confidence = confidence
+    landing_context.runway_source = state.source and state.source.label or "apt.dat"
+    landing_context.runway_source_path = state.source and state.source.path or ""
+    landing_context.runway_length_m = best.length_m
+    landing_context.runway_width_m = best.width_m
+    landing_context.runway_surface = log_tools.runway_surface_text(best.surface_code)
+    landing_context.runway_surface_code = best.surface_code
+    landing_context.runway_shoulder_code = best.shoulder_code
+    landing_context.runway_centerline_lights = best.centerline_lights
+    landing_context.runway_edge_lights = best.edge_lights
+    landing_context.opposite_runway = best.opposite_runway_id
+    landing_context.displaced_threshold_m = best.displaced_threshold_m
+    landing_context.opposite_displaced_threshold_m = best.opposite_displaced_threshold_m
+    landing_context.blast_pad_m = best.blast_pad_m
+    landing_context.opposite_blast_pad_m = best.opposite_blast_pad_m
+    landing_context.marking_code = best.marking_code
+    landing_context.opposite_marking_code = best.opposite_marking_code
+    landing_context.tdz_lights = best.tdz_lights
+    landing_context.opposite_tdz_lights = best.opposite_tdz_lights
+    landing_context.reil_code = best.reil_code
+    landing_context.opposite_reil_code = best.opposite_reil_code
+    landing_context.touchdown_from_threshold_m = best.threshold_distance_m
+    landing_context.runway_remaining_m = best.remaining_m
+    landing_context.centerline_offset_m = best.centerline_offset_m
+    landing_context.centerline_signed_m = best.centerline_signed_m
+    if best.centerline_signed_m > 0.05 then
+        landing_context.centerline_side = "LEFT"
+    elseif best.centerline_signed_m < -0.05 then
+        landing_context.centerline_side = "RIGHT"
+    else
+        landing_context.centerline_side = "CENTER"
+    end
+    log_tools.apply_centerline_score()
+    log_tools.finish_runway_resolver("resolved", "")
+    return true
+end
+
+function log_tools.process_apt_line(line)
+    local state = log_tools.runway_state
+    local code = tostring(line or ""):match("^%s*(%d+)%s")
+    if state.collecting and (code == "1" or code == "16" or code == "17") then
+        if log_tools.finish_airport_block() or not state.active then return true end
+    end
+    if not state.collecting then
+        if code == "1" then
+            local fields = log_tools.apt_tokens(line)
+            local airport_id = string.upper(trim_text(fields[5] or ""))
+            local is_prefetch_candidate = state.mode == "prefetch"
+                and state.prefetch_queued[airport_id] == true
+                and state.cache[airport_id] == nil
+            if airport_id == state.target_airport or is_prefetch_candidate then
+                state.collecting = true
+                state.collecting_airport = airport_id
+                state.runways = {}
+                state.metadata = {
+                    airport_elevation_ft = tonumber(fields[2]),
+                    airport_id = airport_id,
+                    airport_name = trim_text(table.concat(fields, " ", 6))
+                }
+            end
+        end
+        return false
+    end
+
+    if code == "100" then
+        local runway = log_tools.parse_runway_row(line)
+        if runway ~= nil then state.runways[#state.runways + 1] = runway end
+    elseif code == "1302" then
+        local key, value = tostring(line):match("^%s*1302%s+(%S+)%s+(.+)%s*$")
+        if key ~= nil then state.metadata[string.lower(key)] = trim_text(value) end
+    end
+    return false
+end
+
+-- 机场建在悬崖、高架结构或海岸边时，X-Plane y_agl 会随正下方地形突然改变。
+-- 跑道预读完成后改用“飞机 MSL 高度 - apt.dat 机场标高”作为拉平轨迹高度；
+-- 一旦轨迹启动就冻结本轮基准，避免中途切换制造新的高度跳变。
+function log_tools.flare_reference_height_ft(elevation_m, terrain_agl_ft)
+    local state = log_tools.runway_state
+    local reference_elevation_ft = nil
+    if flare_trace.active and flare_trace.height_reference == "APT_ELEVATION" then
+        reference_elevation_ft = flare_trace.reference_elevation_ft
+    elseif flare_trace.active then
+        return terrain_agl_ft
+    else
+        local metadata_is_target = state.collecting_airport == ""
+            or state.collecting_airport == state.target_airport
+        if metadata_is_target then
+            reference_elevation_ft = tonumber(state.metadata and state.metadata.airport_elevation_ft)
+        end
+        if reference_elevation_ft == nil
+            and state.target_airport ~= "" then
+            local cached = state.cache[state.target_airport]
+            reference_elevation_ft = cached and cached.metadata
+                and tonumber(cached.metadata.airport_elevation_ft) or nil
+        end
+    end
+
+    if reference_elevation_ft == nil then
+        flare_trace.height_reference = "TERRAIN_AGL"
+        flare_trace.reference_elevation_ft = 0
+        return terrain_agl_ft
+    end
+
+    local runway_relative_ft = meters_to_feet(elevation_m) - reference_elevation_ft
+    if runway_relative_ft < -50 or runway_relative_ft > 6000 then
+        flare_trace.height_reference = "TERRAIN_AGL"
+        flare_trace.reference_elevation_ft = 0
+        return terrain_agl_ft
+    end
+
+    flare_trace.height_reference = "APT_ELEVATION"
+    flare_trace.reference_elevation_ft = reference_elevation_ft
+    return math.max(0, runway_relative_ft)
+end
+
+function log_tools.open_next_apt_source()
+    local state = log_tools.runway_state
+    while state.source_index < #state.sources do
+        state.source_index = state.source_index + 1
+        state.source = state.sources[state.source_index]
+        state.file = io.open(state.source.path, "rb")
+        state.partial = ""
+        state.collecting = false
+        state.collecting_airport = ""
+        state.runways = {}
+        state.metadata = {}
+        if state.file ~= nil then return true end
+    end
+    log_tools.finish_runway_resolver("unavailable", "所有 apt.dat 均未找到该机场")
+    return false
+end
+
+function log_tools.start_runway_resolver(airport_id, now, mode)
+    local state = log_tools.runway_state
+    local target_airport = string.upper(trim_text(airport_id))
+    local requested_mode = mode == "prefetch" and "prefetch" or "landing"
+    if target_airport == "" then return false end
+
+    local cached = state.cache[target_airport]
+    if cached ~= nil then
+        if requested_mode == "prefetch" then
+            state.last_mode = "prefetch"
+            state.last_status = "prefetched"
+            state.last_reason = ""
+            return true
+        end
+        log_tools.cancel_runway_resolver("")
+        state.target_airport = target_airport
+        state.runways = cached.runways or {}
+        state.metadata = cached.metadata or {}
+        state.source = cached.source
+        state.mode = "landing"
+        state.active = true
+        landing_context.runway_status = "scanning"
+        return log_tools.finish_airport_block()
+    end
+
+    -- 如果触地后确认的机场与进近预扫描目标一致，直接从当前文件偏移继续。
+    if state.active and state.target_airport == target_airport then
+        if requested_mode == "landing" then
+            state.mode = "landing"
+            state.started_at = now or 0
+            landing_context.runway_status = "scanning"
+        end
+        return true
+    end
+
+    log_tools.cancel_runway_resolver("")
+    state.target_airport = target_airport
+    state.source_index = 0
+    state.started_at = now or 0
+    state.mode = requested_mode
+    state.active = true
+    if requested_mode == "landing" then landing_context.runway_status = "scanning" end
+    if #state.sources == 0 then
+        log_tools.finish_runway_resolver("unavailable", "没有可读取的 apt.dat 数据源")
+        return false
+    end
+    return log_tools.open_next_apt_source()
+end
+
+function log_tools.process_runway_resolver(now)
+    local state = log_tools.runway_state
+    if not state.active then return false end
+    local timeout_seconds = state.mode == "prefetch"
+        and log_tools.runway_config.prefetch_timeout_seconds
+        or log_tools.runway_config.timeout_seconds
+    if now - state.started_at >= timeout_seconds then
+        local reason = state.mode == "prefetch"
+            and "进近跑道预扫描超过时间预算"
+            or "跑道识别超过时间预算"
+        log_tools.finish_runway_resolver("timeout", reason)
+        return true
+    end
+    if state.file == nil and not log_tools.open_next_apt_source() then return true end
+    if not state.active or state.file == nil then return true end
+
+    local chunk = state.file:read(log_tools.runway_config.scan_chunk_bytes)
+    if chunk == nil then
+        if state.partial ~= "" then
+            log_tools.process_apt_line(state.partial)
+            state.partial = ""
+        end
+        if not state.active then return true end
+        if state.collecting then
+            if log_tools.finish_airport_block() or not state.active then return true end
+        end
+        state.file:close()
+        state.file = nil
+        state.source = nil
+        return false
+    end
+
+    local data = state.partial .. chunk
+    local last_break = data:match(".*()\n")
+    if last_break == nil then
+        state.partial = data
+        return false
+    end
+    local complete = data:sub(1, last_break)
+    state.partial = data:sub(last_break + 1)
+    for line in complete:gmatch("[^\r\n]+") do
+        if log_tools.process_apt_line(line) then return true end
+    end
+    return not state.active
+end
+
+function log_tools.enqueue_runway_prefetch(airport_id, prefer_front)
+    local state = log_tools.runway_state
+    local config = log_tools.runway_config
+    local normalized_id = string.upper(trim_text(airport_id))
+    if normalized_id == ""
+        or state.cache[normalized_id] ~= nil
+        or (state.active and state.target_airport == normalized_id) then
+        return false
+    end
+    if state.prefetch_queued[normalized_id] == true then
+        if prefer_front == true then
+            for i = #state.prefetch_queue, 1, -1 do
+                if state.prefetch_queue[i] == normalized_id then
+                    table.remove(state.prefetch_queue, i)
+                    break
+                end
+            end
+            table.insert(state.prefetch_queue, 1, normalized_id)
+        end
+        return false
+    end
+    if #state.prefetch_queue >= config.nearby_prefetch_queue_limit and prefer_front ~= true then
+        return false
+    end
+    if prefer_front == true then
+        table.insert(state.prefetch_queue, 1, normalized_id)
+    else
+        state.prefetch_queue[#state.prefetch_queue + 1] = normalized_id
+    end
+    state.prefetch_queued[normalized_id] = true
+    return true
+end
+
+function log_tools.probe_prefetch_airport(query_lat, query_lon, origin_lat, origin_lon, max_distance_km, prefer_front)
+    local nav_ref = XPLMFindNavAid(nil, nil, query_lat, query_lon, nil, xplm_Nav_Airport)
+    if nav_ref == nil or nav_ref == -1 then return nil end
+    local _, airport_lat, airport_lon, _, _, _, airport_id, airport_name = XPLMGetNavAidInfo(nav_ref)
+    airport_id = string.upper(trim_text(airport_id))
+    if airport_id == "" or airport_lat == nil or airport_lon == nil then return nil end
+    local airport_distance = distance_km(origin_lat, origin_lon, airport_lat, airport_lon)
+    if airport_distance > max_distance_km then return nil end
+    log_tools.runway_state.airport_nav[airport_id] = {
+        latitude = airport_lat,
+        longitude = airport_lon,
+        name = trim_text(airport_name)
+    }
+    log_tools.enqueue_runway_prefetch(airport_id, prefer_front)
+    return airport_id
+end
+
+function log_tools.prune_runway_prefetch_queue(latitude, longitude)
+    local state = log_tools.runway_state
+    local kept = {}
+    for i = 1, #state.prefetch_queue do
+        local airport_id = state.prefetch_queue[i]
+        local nav_info = state.airport_nav[airport_id]
+        local keep = state.cache[airport_id] == nil
+        if keep and nav_info ~= nil then
+            keep = distance_km(
+                latitude,
+                longitude,
+                nav_info.latitude,
+                nav_info.longitude
+            ) <= log_tools.runway_config.prefetch_max_distance_km
+        end
+        if keep then
+            kept[#kept + 1] = airport_id
+        else
+            state.prefetch_queued[airport_id] = nil
+        end
+    end
+    state.prefetch_queue = kept
+end
+
+function log_tools.discover_nearby_prefetch_airports(latitude, longitude, now)
+    local config = log_tools.runway_config
+    log_tools.prune_runway_prefetch_queue(latitude, longitude)
+    local primary_id = log_tools.probe_prefetch_airport(
+        latitude,
+        longitude,
+        latitude,
+        longitude,
+        config.prefetch_max_distance_km,
+        true
+    )
+    local state = log_tools.runway_state
+    local moved_km = math.huge
+    if state.last_nearby_probe_lat ~= nil and state.last_nearby_probe_lon ~= nil then
+        moved_km = distance_km(
+            latitude,
+            longitude,
+            state.last_nearby_probe_lat,
+            state.last_nearby_probe_lon
+        )
+    end
+    if moved_km < config.nearby_probe_move_km
+        and (now or 0) - state.last_nearby_probe_at < config.nearby_probe_interval_seconds then
+        return primary_id
+    end
+    state.last_nearby_probe_lat = latitude
+    state.last_nearby_probe_lon = longitude
+    state.last_nearby_probe_at = now or 0
+    local lat_delta = config.nearby_probe_radius_km / 111.32
+    local cos_lat = math.abs(math.cos(latitude * math.pi / 180))
+    if cos_lat < 0.10 then cos_lat = 0.10 end
+    local lon_delta = config.nearby_probe_radius_km / (111.32 * cos_lat)
+    local diagonal = 0.70710678
+    local max_distance = config.nearby_candidate_max_distance_km
+    log_tools.probe_prefetch_airport(latitude + lat_delta, longitude, latitude, longitude, max_distance, false)
+    log_tools.probe_prefetch_airport(latitude - lat_delta, longitude, latitude, longitude, max_distance, false)
+    log_tools.probe_prefetch_airport(latitude, longitude + lon_delta, latitude, longitude, max_distance, false)
+    log_tools.probe_prefetch_airport(latitude, longitude - lon_delta, latitude, longitude, max_distance, false)
+    log_tools.probe_prefetch_airport(latitude + lat_delta * diagonal, longitude + lon_delta * diagonal, latitude, longitude, max_distance, false)
+    log_tools.probe_prefetch_airport(latitude + lat_delta * diagonal, longitude - lon_delta * diagonal, latitude, longitude, max_distance, false)
+    log_tools.probe_prefetch_airport(latitude - lat_delta * diagonal, longitude + lon_delta * diagonal, latitude, longitude, max_distance, false)
+    log_tools.probe_prefetch_airport(latitude - lat_delta * diagonal, longitude - lon_delta * diagonal, latitude, longitude, max_distance, false)
+    return primary_id
+end
+
+function log_tools.start_next_runway_prefetch(now)
+    local state = log_tools.runway_state
+    while #state.prefetch_queue > 0 do
+        local airport_id = table.remove(state.prefetch_queue, 1)
+        state.prefetch_queued[airport_id] = nil
+        if state.cache[airport_id] == nil then
+            return log_tools.start_runway_resolver(airport_id, now, "prefetch")
+        end
+    end
+    return false
+end
+
+function log_tools.update_runway_prefetch(now, radio_alt_ft, on_ground, local_vy_mps, gs_kt, is_armed)
+    local state = log_tools.runway_state
+    local config = log_tools.runway_config
+    if runtime_state.runway_detection_enabled ~= true
+        or is_armed ~= true
+        or on_ground ~= 0
+        or radio_alt_ft < config.prefetch_min_agl_ft
+        or radio_alt_ft > config.prefetch_max_agl_ft
+        or local_vy_mps >= -0.10
+        or gs_kt <= 50 then
+        return false
+    end
+    if now - state.last_prefetch_check < config.prefetch_check_interval_seconds then return false end
+    state.last_prefetch_check = now
+
+    local latitude = lmm_get_double("latitude_deg")
+    local longitude = lmm_get_double("longitude_deg")
+    local airport_id = log_tools.discover_nearby_prefetch_airports(latitude, longitude, now)
+    if airport_id == nil then return false end
+    if state.active then
+        if state.mode == "landing" then return false end
+        return true
+    end
+    if log_tools.start_next_runway_prefetch(now) then return true end
+    return state.cache[airport_id] ~= nil
+end
+
+local function resolve_landing_context(now)
     landing_context.airport_id = "UNKNOWN"
+    landing_context.airport_internal_id = ""
     landing_context.airport_name = ""
     landing_context.airport_distance_km = 0
-    landing_context.runway = estimated_runway_from_heading(landing_heading_deg)
+    landing_context.runway = "--"
+    landing_context.runway_detected = false
+    landing_context.runway_confidence = "NONE"
 
     local nav_ref = XPLMFindNavAid(
         nil,
@@ -783,6 +1769,7 @@ local function resolve_landing_context()
         xplm_Nav_Airport
     )
     if nav_ref == nil or nav_ref == -1 then
+        landing_context.runway_status = "unavailable"
         return false, "未找到附近机场"
     end
 
@@ -790,6 +1777,7 @@ local function resolve_landing_context()
     airport_id = string.upper(trim_text(airport_id))
     airport_name = trim_text(airport_name)
     if airport_id == "" then
+        landing_context.runway_status = "unavailable"
         return false, "机场导航数据没有标识符"
     end
 
@@ -800,21 +1788,83 @@ local function resolve_landing_context()
         airport_lon
     )
     if airport_distance > MAX_AIRPORT_DISTANCE_KM then
+        landing_context.runway_status = "unavailable"
         return false, string.format("最近机场距离 %.1f km，超过识别范围", airport_distance)
     end
 
     landing_context.airport_id = airport_id
+    landing_context.airport_internal_id = airport_id
     landing_context.airport_name = airport_name
     landing_context.airport_distance_km = airport_distance
+    log_tools.runway_state.airport_nav[airport_id] = {
+        latitude = airport_lat,
+        longitude = airport_lon,
+        name = airport_name
+    }
+    if runtime_state.runway_detection_enabled then
+        log_tools.start_runway_resolver(airport_id, now, "landing")
+    else
+        landing_context.runway_status = "disabled"
+    end
     return true
 end
 
 local function landing_context_short_text()
-    local airport_text = landing_context.airport_id
-    if airport_text == "识别中" then
-        return string.format("%s | 机场识别中 | RWY ~%s", landing_context.aircraft_icao, landing_context.runway)
+    local aircraft = landing_context.aircraft_icao
+    local airport = landing_context.airport_id
+    if airport == "识别中" then
+        return string.format(log_tools.ui_text("%s | 机场信息计算中", "%s | Resolving airport data"), aircraft)
     end
-    return string.format("%s | %s | RWY ~%s", landing_context.aircraft_icao, airport_text, landing_context.runway)
+    if airport == "UNKNOWN" then
+        return string.format(log_tools.ui_text("%s | 机场未识别", "%s | Airport not identified"), aircraft)
+    end
+    if landing_context.runway_detected then
+        return string.format("%s | %s | RWY %s", aircraft, airport, landing_context.runway)
+    end
+    if landing_context.runway_status == "pending" or landing_context.runway_status == "scanning" then
+        return string.format(log_tools.ui_text("%s | %s | 跑道识别中", "%s | %s | Resolving runway"), aircraft, airport)
+    end
+    return string.format("%s | %s", aircraft, airport)
+end
+
+function log_tools.write_runway_reference(file)
+    if landing_context.runway_detected then
+        file:write("跑道说明: 依据 scenery_packs.ini 优先级读取 apt.dat，并用跑道端点、触地坐标和地速向量完成几何匹配；位置采用飞机参考点，数值为约值。\n")
+        file:write("跑道识别来源: X-Plane apt.dat 几何匹配\n")
+        file:write("跑道识别可信度: " .. landing_context.runway_confidence .. "\n")
+        file:write("跑道数据源: " .. landing_context.runway_source .. "\n")
+        file:write(string.format("跑道长度: %.1f m\n", landing_context.runway_length_m))
+        file:write(string.format("跑道宽度: %.1f m\n", landing_context.runway_width_m))
+        file:write("跑道路面: " .. landing_context.runway_surface .. "\n")
+        file:write("跑道路面代码: " .. tostring(landing_context.runway_surface_code) .. "\n")
+        file:write("反向跑道方向: RWY" .. landing_context.opposite_runway .. "\n")
+        file:write("跑道标线代码: " .. tostring(landing_context.marking_code) .. "\n")
+        file:write("跑道标线类型: " .. log_tools.runway_marking_text(landing_context.marking_code) .. "\n")
+        file:write("反向跑道标线代码: " .. tostring(landing_context.opposite_marking_code) .. "\n")
+        file:write("反向跑道标线类型: " .. log_tools.runway_marking_text(landing_context.opposite_marking_code) .. "\n")
+        file:write(string.format("跑道入口内移: %.1f m\n", landing_context.displaced_threshold_m))
+        file:write(string.format("反向跑道入口内移: %.1f m\n", landing_context.opposite_displaced_threshold_m))
+        file:write(string.format("跑道前端防吹坪: %.1f m\n", landing_context.blast_pad_m))
+        file:write(string.format("反向跑道防吹坪: %.1f m\n", landing_context.opposite_blast_pad_m))
+        file:write("接地区灯: " .. log_tools.runway_yes_no(landing_context.tdz_lights) .. "\n")
+        file:write("反向接地区灯: " .. log_tools.runway_yes_no(landing_context.opposite_tdz_lights) .. "\n")
+        file:write("跑道入口识别灯代码: " .. tostring(landing_context.reil_code) .. "\n")
+        file:write("反向跑道入口识别灯代码: " .. tostring(landing_context.opposite_reil_code) .. "\n")
+        file:write("跑道中线灯代码: " .. tostring(landing_context.runway_centerline_lights) .. "\n")
+        file:write("跑道边灯代码: " .. tostring(landing_context.runway_edge_lights) .. "\n")
+        file:write("跑道道肩代码: " .. tostring(landing_context.runway_shoulder_code) .. "\n")
+        file:write(string.format("触地点距跑道入口: %.1f m（飞机参考点，约）\n", landing_context.touchdown_from_threshold_m))
+        file:write(string.format("触地点距跑道末端: %.1f m（飞机参考点，约）\n", landing_context.runway_remaining_m))
+        file:write(string.format("触地点距跑道中心线: %.1f m（飞机参考点，约）\n", landing_context.centerline_offset_m))
+        file:write(string.format("触地点中心线有符号偏差: %+.1f m（左正右负）\n", landing_context.centerline_signed_m))
+        file:write("触地点中心线方向: " .. landing_context.centerline_side .. "\n")
+    else
+        local reason = log_tools.runway_state.last_reason
+        if landing_context.runway_status == "disabled" then reason = "用户已关闭精准跑道识别" end
+        file:write("跑道说明: 未输出跑道方向和触地点；插件不会使用磁航向猜测跑道。\n")
+        file:write("跑道识别来源: " .. (reason ~= "" and reason or "无可靠结果") .. "\n")
+        file:write("跑道识别可信度: NONE\n")
+    end
 end
 
 local function file_name_from_path(path)
@@ -829,42 +1879,44 @@ local function angular_diff_180(from_deg, to_deg)
     return diff
 end
 
-local function build_wind_relative_text(wind_from_deg, wind_speed_kts, aircraft_heading_deg)
-    -- X-Plane 的风向表示风吹来的方向。
-    -- 使用六种相对风类别，让落地数据显示得更准确：
-    -- 顶风 / 左前侧风 / 右前侧风 / 左后侧风 / 右后侧风 / 顺风
+function log_tools.relative_wind_side(wind_from_deg, aircraft_heading_deg, language)
     local diff = angular_diff_180(wind_from_deg, aircraft_heading_deg)
     local abs_diff = abs_value(diff)
-    local side = "顶风"
-
+    local chinese, english = "顶风", "headwind"
     if abs_diff <= 20 then
-        side = "顶风"
+        chinese, english = "顶风", "headwind"
     elseif abs_diff >= 160 then
-        side = "顺风"
+        chinese, english = "顺风", "tailwind"
     elseif diff < 0 and abs_diff <= 90 then
-        side = "左前侧风"
+        chinese, english = "左前侧风", "left-front crosswind"
     elseif diff > 0 and abs_diff <= 90 then
-        side = "右前侧风"
+        chinese, english = "右前侧风", "right-front crosswind"
     elseif diff < 0 then
-        side = "左后侧风"
+        chinese, english = "左后侧风", "left-rear crosswind"
     else
-        side = "右后侧风"
+        chinese, english = "右后侧风", "right-rear crosswind"
     end
+    return language == "en" and english or chinese
+end
 
-    return string.format("风 %03d/%dkt %s", round_num(normalize_deg(wind_from_deg)), round_num(wind_speed_kts), side)
+local function build_wind_relative_text(wind_from_deg, wind_speed_kts, aircraft_heading_deg)
+    -- 相对风在触地时按当前文档输出语言固化，保证弹窗与 TXT 报告表述一致。
+    return string.format(
+        runtime_state.document_language == "en" and "Wind %03d/%dkt %s" or "风 %03d/%dkt %s",
+        round_num(normalize_deg(wind_from_deg)),
+        round_num(wind_speed_kts),
+        log_tools.relative_wind_side(wind_from_deg, aircraft_heading_deg, runtime_state.document_language)
+    )
 end
 
 local function format_roll_text(roll_deg)
-    -- X-Plane 的 phi 通常右倾为正、左倾为负。
-    -- 很小的数值按水平处理，避免出现干扰视线的 +/-0.1° 跳动。
     local abs_roll = abs_value(roll_deg)
     if abs_roll < 0.05 then
-        return "横滚 LEVEL 0.0°"
+        return log_tools.ui_text("横滚 LEVEL 0.0°", "Roll LEVEL 0.0°")
     elseif roll_deg < 0 then
-        return string.format("横滚 L %.1f°", abs_roll)
-    else
-        return string.format("横滚 R %.1f°", abs_roll)
+        return string.format(log_tools.ui_text("横滚 L %.1f°", "Roll L %.1f°"), abs_roll)
     end
+    return string.format(log_tools.ui_text("横滚 R %.1f°", "Roll R %.1f°"), abs_roll)
 end
 
 local function classify_landing(fpm, g, external_hint)
@@ -915,52 +1967,74 @@ end
 
 local function status_short(status)
     if status == "UNSTABLE" then
-        return "UNSTABLE 不良落地"
+        return log_tools.ui_text("UNSTABLE 不良落地", "UNSTABLE Adverse landing")
     elseif status == "ATTENTION" then
-        return "Attention 需注意"
+        return log_tools.ui_text("Attention 需注意", "Attention Review advised")
     elseif status == "STABLE" then
-        return "Stable 稳定扎实落地"
+        return log_tools.ui_text("Stable 稳定扎实落地", "Stable Solid landing")
     else
-        return "Nice 轻柔接地"
+        return log_tools.ui_text("Nice 轻柔接地", "Nice Soft touchdown")
     end
 end
 
-local function confidence_text(confidence)
-    if confidence == "HIGH" then return "高" end
-    if confidence == "MEDIUM" then return "中" end
-    return "低"
+function log_tools.popup_status_text(status)
+    if status == "UNSTABLE" then return log_tools.ui_text("UNSTABLE 不良落地", "UNSTABLE Adverse landing") end
+    if status == "ATTENTION" then return log_tools.ui_text("Attention 需注意", "Attention Review advised") end
+    if status == "STABLE" then return log_tools.ui_text("Stable 稳定扎实落地", "Stable Solid landing") end
+    return log_tools.ui_text("Nice 轻柔接地", "Nice Soft touchdown")
+end
+
+function log_tools.popup_flare_trend_text(value)
+    if runtime_state.document_language ~= "en" then return value end
+    local english = {
+        ["等待100英尺采样"] = "Waiting for 100 ft sampling",
+        ["拉平轨迹样本不足"] = "Insufficient flare samples",
+        ["拉平轨迹聚合点不足"] = "Insufficient flare buckets",
+        ["下降率轨迹震荡高"] = "High vertical-speed oscillation",
+        ["下降率轨迹正常"] = "Vertical-speed trend normal"
+    }
+    return english[value] or value
+end
+
+function log_tools.popup_warning_text(value)
+    if runtime_state.document_language ~= "en" then return value end
+    if value == "道面湿滑，注意摩擦力" then return "Wet surface: reduced braking friction" end
+    if value == "持续降雨，道面可能湿滑" then return "Persistent rain: runway may be wet" end
+    return value
 end
 
 local function refresh_popup_cache()
     popup_cache.lines[1] = landing_context_short_text()
     popup_cache.lines[2] = string.format("%+d fpm | +%.2fG", landing_fpm, landing_g)
     popup_cache.lines[3] = string.format("IAS %.0fkt | GS %.0fkt", landing_ias_kts, landing_gs_kts)
-    popup_cache.lines[4] = string.format(
-        "迎角 %.1f° | %s",
-        landing_aoa_deg,
-        format_roll_text(landing_roll_deg)
-    )
+    popup_cache.lines[4] = string.format(log_tools.ui_text("迎角 %.1f° | %s", "AoA %.1f° | %s"), landing_aoa_deg, format_roll_text(landing_roll_deg))
+    local flare_trend = log_tools.popup_flare_trend_text(flare_analysis.trend_text)
     if flare_analysis.valid then
-        popup_cache.lines[5] = string.format(
-            "拉平曲率 %.1f | %s",
-            flare_analysis.metric,
-            flare_analysis.trend_text
+        popup_cache.lines[5] = string.format(log_tools.ui_text("拉平曲率 %.1f | %s", "Flare curvature %.1f | %s"), flare_analysis.metric, flare_trend)
+    else
+        popup_cache.lines[5] = log_tools.ui_text("拉平曲率 -- | ", "Flare curvature -- | ") .. flare_trend
+    end
+    popup_cache.lines[6] = string.format(
+        log_tools.ui_text("风 %03d/%dkt %s", "Wind %03d/%dkt %s"),
+        round_num(normalize_deg(landing_wind_heading_deg)),
+        round_num(landing_wind_speed_kts),
+        log_tools.relative_wind_side(landing_wind_heading_deg, landing_heading_deg, runtime_state.document_language)
+    )
+    popup_cache.lines[7] = log_tools.popup_status_text(landing_status)
+    popup_cache.warning_text = log_tools.popup_warning_text(landing_surface.warning_text)
+    if landing_context.centerline_penalty_applied then
+        popup_cache.centerline_text = string.format(
+            log_tools.ui_text("偏离中心线 %.1f 米", "Centerline deviation %.1f m"),
+            landing_context.centerline_offset_m
         )
     else
-        popup_cache.lines[5] = "拉平曲率 -- | " .. flare_analysis.trend_text
+        popup_cache.centerline_text = ""
     end
-    popup_cache.lines[6] = landing_wind_relative_text
-    popup_cache.lines[7] = status_short(landing_status)
-    popup_cache.warning_text = landing_surface.warning_text
     if bounce_state.detected then
         if bounce_state.second_g_ready then
-            popup_cache.bounce_text = string.format(
-                "发生弹跳 | 二次 %+d fpm / +%.2fG",
-                bounce_state.second_fpm,
-                bounce_state.second_curve_g
-            )
+            popup_cache.bounce_text = string.format(log_tools.ui_text("发生弹跳 | 二次 %+d fpm / +%.2fG", "Bounce detected | 2nd %+d fpm / +%.2fG"), bounce_state.second_fpm, bounce_state.second_curve_g)
         else
-            popup_cache.bounce_text = "发生弹跳 | 正在分析第二次触地"
+            popup_cache.bounce_text = log_tools.ui_text("发生弹跳 | 正在分析第二次触地", "Bounce detected | Analysing second touchdown")
         end
     else
         popup_cache.bounce_text = ""
@@ -1127,10 +2201,14 @@ local function reset_flare_trace()
     flare_trace.limited = false
     flare_trace.start_time = 0
     flare_trace.touch_time = 0
+    flare_trace.touch_reference_ft = 0
     flare_trace.next_sample_time = 0
     flare_trace.descent_confirm_start = 0
     flare_trace.climb_confirm_start = 0
+    flare_trace.height_reference = "TERRAIN_AGL"
+    flare_trace.reference_elevation_ft = 0
     flare_trace.count = 0
+    flare_trace.analysis_sample_count = 0
     flare_trace.bucket_count = 0
     flare_analysis.valid = false
     flare_analysis.metric = 0
@@ -1165,6 +2243,7 @@ local function reset_bounce_state()
     bounce_state.second_curve_g = 1
     bounce_state.second_g_ready = false
     bounce_state.original_status = "NICE"
+    bounce_state.result_status = "NICE"
     bounce_state.score_applied = false
 end
 
@@ -1176,7 +2255,9 @@ local function start_flare_trace(now)
     flare_trace.next_sample_time = now
     flare_trace.descent_confirm_start = 0
     flare_trace.climb_confirm_start = 0
+    flare_trace.touch_reference_ft = 0
     flare_trace.count = 0
+    flare_trace.analysis_sample_count = 0
     flare_trace.bucket_count = 0
 end
 
@@ -1267,7 +2348,7 @@ local function update_flare_trace(
         local descent_confirmed = flare_trace.descent_confirm_start > 0
             and now - flare_trace.descent_confirm_start >= FLARE_CONFIG.start_confirm_seconds
         if descent_confirmed
-            and radio_alt_ft <= FLARE_CONFIG.start_agl_ft
+            and radio_alt_ft <= FLARE_CONFIG.start_agl_ft + FLARE_CONFIG.capture_margin_ft
             and radio_alt_ft >= 0 then
             start_flare_trace(now)
         end
@@ -1287,10 +2368,15 @@ local function update_flare_trace(
         )
     end
 end
-local function finish_flare_trace(now)
+local function finish_flare_trace(now, touchdown_height_ft)
     flare_trace.active = false
     flare_trace.complete = true
     flare_trace.touch_time = now
+    local reference_ft = tonumber(touchdown_height_ft) or 0
+    if reference_ft < 0 or reference_ft > FLARE_CONFIG.max_touch_reference_ft then
+        reference_ft = 0
+    end
+    flare_trace.touch_reference_ft = reference_ft
 end
 
 local function analyze_flare_curve()
@@ -1298,11 +2384,9 @@ local function analyze_flare_curve()
     flare_analysis.valid = false
     flare_analysis.touchdown_fpm = landing_fpm
     local use_physical_curve = landing_analysis.flare_fpm_source == "PHYSICAL"
-    if flare_trace.start_time > 0 then
-        flare_analysis.duration_seconds = math.max(0, flare_trace.touch_time - flare_trace.start_time)
-    else
-        flare_analysis.duration_seconds = 0
-    end
+    local use_agl_curve = landing_analysis.flare_fpm_source == "AGL"
+    flare_analysis.duration_seconds = 0
+    flare_trace.analysis_sample_count = 0
 
     for i = 1, FLARE_CONFIG.max_buckets do
         local bucket = flare_trace.buckets[i]
@@ -1325,31 +2409,61 @@ local function analyze_flare_curve()
         return
     end
 
-    -- 原始 10 Hz 样本按 0.5 秒时间桶求平均，保留高度、速度和姿态参考信息。
+    -- apt.dat 高度和 X-Plane y_agl 都使用飞机参考点，不会在机轮接地时自然变成 0。
+    -- 用触地帧冻结的参考点高度统一归零，再从校准后的 100 ft 位置开始分析；
+    -- 预采样区保证归零后仍保留完整的 100 ft 后轨迹。
+    local analysis_start_time = 0
     for i = 1, flare_trace.count do
         local sample = flare_trace.slots[i]
-        local bucket_index = math.floor(
-            (sample.t - flare_trace.start_time) / FLARE_CONFIG.bucket_seconds
-        ) + 1
-        if bucket_index < 1 then bucket_index = 1 end
-        if bucket_index > FLARE_CONFIG.max_buckets then
-            bucket_index = FLARE_CONFIG.max_buckets
-            flare_trace.limited = true
+        local corrected_height_ft = math.max(0, sample.agl_ft - flare_trace.touch_reference_ft)
+        if corrected_height_ft <= FLARE_CONFIG.start_agl_ft then
+            analysis_start_time = sample.t
+            break
         end
+    end
+    if analysis_start_time <= 0 then
+        flare_analysis.trend_text = "拉平轨迹缺少接地点校准后的100英尺样本"
+        flare_analysis.calculation_ms = (os.clock() - started) * 1000
+        return
+    end
+    flare_trace.start_time = analysis_start_time
+    flare_analysis.duration_seconds = math.max(0, flare_trace.touch_time - flare_trace.start_time)
 
-        local bucket = flare_trace.buckets[bucket_index]
-        bucket.count = bucket.count + 1
-        bucket.t = bucket.t + sample.t
-        bucket.agl_ft = bucket.agl_ft + sample.agl_ft
-        bucket.physical_fpm = bucket.physical_fpm + sample.physical_fpm
-        bucket.vvi_fpm = bucket.vvi_fpm + sample.vvi_fpm
-        bucket.selected_fpm = bucket.selected_fpm
-            + (use_physical_curve and sample.physical_fpm or sample.vvi_fpm)
-        bucket.ias_kts = bucket.ias_kts + sample.ias_kts
-        bucket.gs_kts = bucket.gs_kts + sample.gs_kts
-        bucket.pitch_deg = bucket.pitch_deg + sample.pitch_deg
-        bucket.aoa_deg = bucket.aoa_deg + sample.aoa_deg
-        bucket.roll_deg = bucket.roll_deg + sample.roll_deg
+    -- 原始 10 Hz 样本按 0.25 秒时间桶求平均，保留高度、速度和姿态参考信息。
+    for i = 1, flare_trace.count do
+        local sample = flare_trace.slots[i]
+        if sample.t >= flare_trace.start_time then
+            local bucket_index = math.floor(
+                (sample.t - flare_trace.start_time) / FLARE_CONFIG.bucket_seconds
+            ) + 1
+            if bucket_index < 1 then bucket_index = 1 end
+            if bucket_index > FLARE_CONFIG.max_buckets then
+                bucket_index = FLARE_CONFIG.max_buckets
+                flare_trace.limited = true
+            end
+
+            local bucket = flare_trace.buckets[bucket_index]
+            flare_trace.analysis_sample_count = flare_trace.analysis_sample_count + 1
+            bucket.count = bucket.count + 1
+            bucket.t = bucket.t + sample.t
+            bucket.agl_ft = bucket.agl_ft
+                + math.max(0, sample.agl_ft - flare_trace.touch_reference_ft)
+            bucket.physical_fpm = bucket.physical_fpm + sample.physical_fpm
+            bucket.vvi_fpm = bucket.vvi_fpm + sample.vvi_fpm
+            bucket.selected_fpm = bucket.selected_fpm
+                + (use_physical_curve and sample.physical_fpm or sample.vvi_fpm)
+            bucket.ias_kts = bucket.ias_kts + sample.ias_kts
+            bucket.gs_kts = bucket.gs_kts + sample.gs_kts
+            bucket.pitch_deg = bucket.pitch_deg + sample.pitch_deg
+            bucket.aoa_deg = bucket.aoa_deg + sample.aoa_deg
+            bucket.roll_deg = bucket.roll_deg + sample.roll_deg
+        end
+    end
+
+    if flare_trace.analysis_sample_count < FLARE_CONFIG.min_samples then
+        flare_analysis.trend_text = "拉平轨迹校准后样本不足"
+        flare_analysis.calculation_ms = (os.clock() - started) * 1000
+        return
     end
 
     local compact_count = 0
@@ -1391,6 +2505,22 @@ local function analyze_flare_curve()
         flare_analysis.trend_text = "拉平轨迹聚合点不足"
         flare_analysis.calculation_ms = (os.clock() - started) * 1000
         return
+    end
+
+    -- 最终采用 AGL 锚点时，轨迹主线同步从已校准的跑道相对高度求中心差分；
+    -- 物理 FPM 与 VVI 仍作为独立曲线保留。
+    if use_agl_curve then
+        for i = 1, compact_count do
+            local left_index = math.max(1, i - 1)
+            local right_index = math.min(compact_count, i + 1)
+            local left_bucket = flare_trace.buckets[left_index]
+            local right_bucket = flare_trace.buckets[right_index]
+            local dt = right_bucket.t - left_bucket.t
+            if dt > 0.05 then
+                flare_trace.buckets[i].selected_fpm =
+                    (right_bucket.agl_ft - left_bucket.agl_ft) / dt * 60
+            end
+        end
     end
 
     -- 把最终评分使用的触地 FPM 作为轨迹终点；若与末桶太近，则直接替换末桶下降率。
@@ -1517,8 +2647,7 @@ local function analyze_flare_curve()
     flare_analysis.calculation_ms = (os.clock() - started) * 1000
 end
 
--- 收集 5 ft 以下终端窗口中的物理速度或 VVI，供三条独立测量链使用。
--- 三链必须使用相同高度和时间范围，避免用不同阶段的数据互相验证。
+-- 收集 5 ft 以下终端窗口中的物理速度或 VVI，供物理备用值和 VVI 参考使用。
 function log_tools.collect_terminal_fpm_values(touch_time, value_kind)
     local start_time = touch_time - landing_analysis.fpm_validation.agl_window_seconds
     local end_time = touch_time - landing_analysis.fpm_validation.agl_end_guard_seconds
@@ -1554,7 +2683,7 @@ function log_tools.collect_terminal_fpm_values(touch_time, value_kind)
     return count
 end
 
--- 第三条验证链使用 Theil-Sen 中位斜率：把 5 ft 以下 AGL 高度变化换算为下降率。
+-- AGL 锚点使用 Theil-Sen 中位斜率：把 5 ft 以下 AGL 高度变化换算为下降率。
 -- 它对少量高度跳点和跑道网格噪声不敏感，并且只在着陆分析阶段计算一次。
 function log_tools.calculate_agl_closure_fpm(touch_time)
     local start_time = touch_time - landing_analysis.fpm_validation.agl_window_seconds
@@ -1674,6 +2803,7 @@ local function begin_landing_analysis(now)
     landing_analysis.vvi_sample_count = 0
     landing_analysis.physical_fpm = 0
     landing_analysis.physical_short_fpm = 0
+    landing_analysis.physical_fallback_fpm = 0
     landing_analysis.fpm_difference = 0
     landing_analysis.physical_fpm_valid = false
     landing_analysis.physical_sample_count = 0
@@ -1685,8 +2815,8 @@ local function begin_landing_analysis(now)
     landing_analysis.agl_physical_difference = 0
     landing_analysis.agl_vvi_difference = 0
     landing_analysis.fpm_max_pair_difference = 0
-    landing_analysis.fpm_confidence = "LOW"
-    landing_analysis.fpm_method = "等待三链验证"
+    landing_analysis.fpm_selection_reason = ""
+    landing_analysis.fpm_method = "等待终端下降率测量"
     landing_analysis.flare_fpm_source = "VVI"
     landing_analysis.pre_vy_mps = 0
     landing_analysis.post_vy_mps = 0
@@ -1721,21 +2851,38 @@ local function analyze_landing_velocity()
     local touch_time = landing_analysis.touch_time
     local buffer_start_time = touch_time - PRE_TOUCH_BUFFER_SECONDS
 
-    local short_count = collect_sample_values(
-        math.max(buffer_start_time, touch_time - PHYSICAL_FPM_SHORT_WINDOW_SECONDS),
+    -- 触地率定义为第一次接触前的瞬时物理垂直速度。用最后 100 ms 离地样本中位数
+    -- 抑制单帧抖动，同时避免 250 ms 窗口把拉平前段或带响应滞后的 VVI 当成接地值。
+    local contact_count = collect_sample_values(
+        math.max(buffer_start_time, touch_time - PHYSICAL_FPM_CONTACT_WINDOW_SECONDS),
         touch_time,
         "local_vy",
         true
     )
-    local short_physical_vy = scratch_median()
-    if short_count >= 2 and short_physical_vy ~= nil then
-        landing_analysis.physical_short_fpm = short_physical_vy * 196.850394
+    local contact_physical_vy = scratch_median()
+    if contact_count >= 3 and contact_physical_vy ~= nil then
+        landing_analysis.physical_short_fpm = contact_physical_vy * 196.850394
     end
 
-    local physical_count = log_tools.collect_terminal_fpm_values(touch_time, "local_vy")
-    local physical_vy = scratch_percentile(PHYSICAL_FPM_PERCENTILE)
-    landing_analysis.physical_sample_count = physical_count
-    landing_analysis.physical_fpm_valid = physical_count >= 3 and physical_vy ~= nil
+    -- 较宽的 250 ms 物理 P25 只在接地短窗样本不足时补充为物理候选。
+    local fallback_physical_count = log_tools.collect_terminal_fpm_values(touch_time, "local_vy")
+    local fallback_physical_vy = scratch_percentile(PHYSICAL_FPM_PERCENTILE)
+    if fallback_physical_count >= 3 and fallback_physical_vy ~= nil then
+        landing_analysis.physical_fallback_fpm = fallback_physical_vy * 196.850394
+    end
+
+    local physical_candidate_window = ""
+    if contact_count >= 3 and contact_physical_vy ~= nil then
+        landing_analysis.physical_fpm = landing_analysis.physical_short_fpm
+        landing_analysis.physical_fpm_valid = true
+        landing_analysis.physical_sample_count = contact_count
+        physical_candidate_window = "SHORT"
+    elseif fallback_physical_count >= 3 and fallback_physical_vy ~= nil then
+        landing_analysis.physical_fpm = landing_analysis.physical_fallback_fpm
+        landing_analysis.physical_fpm_valid = true
+        landing_analysis.physical_sample_count = fallback_physical_count
+        physical_candidate_window = "FALLBACK"
+    end
 
     local vvi_count = log_tools.collect_terminal_fpm_values(touch_time, "vvi")
     landing_analysis.vvi_fpm = scratch_median() or approach_data.vs_fpm
@@ -1743,66 +2890,92 @@ local function analyze_landing_velocity()
     landing_analysis.vvi_fpm_valid = vvi_count >= 3
     landing_analysis.vvi_min_fpm = select_min_vvi_fpm(touch_time)
 
-    if landing_analysis.physical_fpm_valid then
-        landing_analysis.physical_fpm = physical_vy * 196.850394
-    else
-        landing_analysis.physical_fpm = 0
-    end
-
     local agl_fpm = log_tools.calculate_agl_closure_fpm(touch_time)
     landing_analysis.agl_fpm_valid = agl_fpm ~= nil
     landing_analysis.agl_fpm = agl_fpm or 0
 
-    landing_analysis.fpm_difference =
-        landing_analysis.physical_fpm - landing_analysis.vvi_fpm
+    -- AGL 是跨机模选择锚点。物理 FPM 与 VVI 中距离 AGL 更近且差值不超过阈值者胜出；
+    -- 如果没有候选值足够接近 AGL，则直接使用 AGL，避免对任一机模数据链做固定偏好。
+    local max_agl_difference = landing_analysis.fpm_validation.agl_anchor_max_difference_fpm
+    local physical_agl_distance = landing_analysis.physical_fpm_valid
+        and abs_value(landing_analysis.physical_fpm - landing_analysis.agl_fpm) or math.huge
+    local vvi_agl_distance = landing_analysis.vvi_fpm_valid
+        and abs_value(landing_analysis.vvi_fpm - landing_analysis.agl_fpm) or math.huge
 
-    if landing_analysis.physical_fpm_valid
-        and landing_analysis.vvi_fpm_valid
-        and landing_analysis.agl_fpm_valid then
-        landing_analysis.agl_physical_difference =
-            landing_analysis.physical_fpm - landing_analysis.agl_fpm
-        landing_analysis.agl_vvi_difference =
-            landing_analysis.vvi_fpm - landing_analysis.agl_fpm
-        landing_analysis.fpm_max_pair_difference = math.max(
-            abs_value(landing_analysis.fpm_difference),
-            abs_value(landing_analysis.agl_physical_difference),
-            abs_value(landing_analysis.agl_vvi_difference)
-        )
-
-        if landing_analysis.fpm_max_pair_difference
-            <= landing_analysis.fpm_validation.max_pair_difference_fpm then
-            landing_analysis.fpm_confidence = "HIGH"
-            landing_analysis.fpm_method = "三项终端测量结果一致，采用物理轨迹下降率"
+    if landing_analysis.agl_fpm_valid then
+        if landing_analysis.physical_fpm_valid
+            and physical_agl_distance <= max_agl_difference
+            and physical_agl_distance <= vvi_agl_distance then
+            landing_analysis.fpm_selection_reason = "PHYSICAL_CLOSEST"
+            if physical_candidate_window == "SHORT" then
+                landing_analysis.fpm_method = "物理 FPM 最接近 AGL，采用接地前100 ms物理值"
+            else
+                landing_analysis.fpm_method = "物理 FPM 最接近 AGL，采用250 ms物理备用值"
+            end
             landing_analysis.flare_fpm_source = "PHYSICAL"
             landing_fpm = round_num(landing_analysis.physical_fpm)
-        elseif abs_value(landing_analysis.agl_vvi_difference)
-            <= landing_analysis.fpm_validation.max_pair_difference_fpm then
-            landing_analysis.fpm_confidence = "MEDIUM"
-            landing_analysis.fpm_method = "终端测量出现差异，VVI与几何轨迹相互接近，采用VVI下降率"
+        elseif landing_analysis.vvi_fpm_valid
+            and vvi_agl_distance <= max_agl_difference then
+            landing_analysis.fpm_selection_reason = "VVI_CLOSEST"
+            landing_analysis.fpm_method = "VVI 最接近 AGL，采用 VVI 值"
             landing_analysis.flare_fpm_source = "VVI"
             landing_fpm = round_num(landing_analysis.vvi_fpm)
         else
-            landing_analysis.fpm_confidence = "LOW"
-            landing_analysis.fpm_method = "终端测量结果分散，采用VVI下降率并保留全部对照值"
-            landing_analysis.flare_fpm_source = "VVI"
-            landing_fpm = round_num(landing_analysis.vvi_fpm)
+            landing_analysis.fpm_selection_reason = "AGL_ANCHOR"
+            if landing_analysis.physical_fpm_valid and landing_analysis.vvi_fpm_valid then
+                landing_analysis.fpm_method = string.format(log_tools.ui_text(
+                    "物理 FPM 与 VVI 均偏离 AGL 超过%d fpm，采用 AGL 几何下降率",
+                    "Physical FPM and VVI both differ from AGL by more than %d fpm; AGL geometric vertical speed selected"
+                ), max_agl_difference)
+            elseif landing_analysis.physical_fpm_valid or landing_analysis.vvi_fpm_valid then
+                landing_analysis.fpm_method = string.format(log_tools.ui_text(
+                    "有效候选值偏离 AGL 超过%d fpm，采用 AGL 几何下降率",
+                    "Available candidates differ from AGL by more than %d fpm; AGL geometric vertical speed selected"
+                ), max_agl_difference)
+            else
+                landing_analysis.fpm_method = "物理与 VVI 样本不足，采用 AGL 几何下降率"
+            end
+            landing_analysis.flare_fpm_source = "AGL"
+            landing_fpm = round_num(landing_analysis.agl_fpm)
         end
+    elseif landing_analysis.physical_fpm_valid then
+        landing_analysis.fpm_selection_reason = "PHYSICAL_FALLBACK"
+        landing_analysis.fpm_method = "AGL 几何样本不足，采用物理 FPM 备用值"
+        landing_analysis.flare_fpm_source = "PHYSICAL"
+        landing_fpm = round_num(landing_analysis.physical_fpm)
+    elseif landing_analysis.vvi_fpm_valid then
+        landing_analysis.fpm_selection_reason = "VVI_FALLBACK"
+        landing_analysis.fpm_method = "AGL 与物理样本不足，采用 VVI 备用值"
+        landing_analysis.flare_fpm_source = "VVI"
+        landing_fpm = round_num(landing_analysis.vvi_fpm)
     else
-        landing_analysis.agl_physical_difference = 0
-        landing_analysis.agl_vvi_difference = 0
-        landing_analysis.fpm_max_pair_difference = 0
-        landing_analysis.fpm_confidence = "LOW"
-        landing_analysis.fpm_method = "终端测量样本不足，采用VVI下降率并保留全部对照值"
+        landing_analysis.fpm_selection_reason = "VVI_LAST_RESORT"
+        landing_analysis.fpm_method = "三条下降率样本均不足，采用瞬时 VVI 最终备用值"
         landing_analysis.flare_fpm_source = "VVI"
         landing_fpm = round_num(landing_analysis.vvi_fpm)
     end
 
-    -- 显示和评分只在 5 ft 以下三链全部通过时采用 250 ms 物理分位值；其余情况临时采用同窗 VVI。
-    -- 冲量仍对应第一次压缩，必须使用紧邻接地的短窗物理速度。
-    if short_count >= 2 and short_physical_vy ~= nil then
-        landing_analysis.pre_vy_mps = short_physical_vy
-    elseif landing_analysis.physical_fpm_valid then
-        landing_analysis.pre_vy_mps = physical_vy
+    landing_analysis.fpm_difference = landing_analysis.physical_fpm_valid
+        and landing_analysis.physical_fpm - landing_analysis.vvi_fpm or 0
+    landing_analysis.agl_physical_difference = landing_analysis.physical_fpm_valid
+        and landing_analysis.agl_fpm_valid
+        and landing_analysis.physical_fpm - landing_analysis.agl_fpm or 0
+    landing_analysis.agl_vvi_difference = landing_analysis.agl_fpm_valid
+        and landing_analysis.vvi_fpm - landing_analysis.agl_fpm or 0
+    landing_analysis.fpm_max_pair_difference = math.max(
+        abs_value(landing_analysis.fpm_difference),
+        abs_value(landing_analysis.agl_physical_difference),
+        abs_value(landing_analysis.agl_vvi_difference)
+    )
+    -- G 冲量复核与 FPM 使用同一条最终采用的接地前速度，避免两条主链口径分叉。
+    if landing_analysis.flare_fpm_source == "AGL" then
+        landing_analysis.pre_vy_mps = landing_analysis.agl_fpm * 0.00508
+    elseif landing_analysis.flare_fpm_source == "VVI" then
+        landing_analysis.pre_vy_mps = landing_analysis.vvi_fpm * 0.00508
+    elseif contact_count >= 3 and contact_physical_vy ~= nil then
+        landing_analysis.pre_vy_mps = contact_physical_vy
+    elseif fallback_physical_count >= 3 and fallback_physical_vy ~= nil then
+        landing_analysis.pre_vy_mps = fallback_physical_vy
     else
         landing_analysis.pre_vy_mps = landing_analysis.vvi_fpm * 0.00508
     end
@@ -1835,79 +3008,35 @@ local function analyze_landing_velocity()
     landing_analysis.analysis_ms = landing_analysis.analysis_ms + (os.clock() - started) * 1000
 end
 
--- 在完整压缩区间内寻找最强的 160 ms 局部 P75 包络。
--- 这样既保留持续数帧的真实冲击，也不会让单帧原始峰值直接接管结果。
+-- 只计算第一次接触后的固定 160 ms 稳健载荷，不再在完整压缩区间内滑动寻找最大窗口。
+-- 固定窗口避免“搜索越久越容易挑到更大值”的系统性上偏。
 function log_tools.calculate_local_event_g(start_time, end_time)
-    local best_g = nil
-    local best_start = 0
-    local best_end = 0
-    local best_span = 0
-    local best_count = 0
-    local best_index = 0
-
+    local window_end = math.min(end_time, start_time + landing_analysis.g_local_event.window_seconds)
+    local count = collect_sample_values(start_time, window_end, "projected_g", false)
+    local event_g = count >= landing_analysis.g_local_event.min_samples
+        and scratch_percentile(landing_analysis.g_local_event.percentile) or nil
+    local first_valid_time = nil
+    local last_valid_time = nil
     for i = 1, sample_buffer.count do
-        local first_sample = sample_at(i)
-        if first_sample.t >= start_time and first_sample.t <= end_time then
-            local window_start = first_sample.t
-            local window_end = math.min(
-                end_time,
-                window_start + landing_analysis.g_local_event.window_seconds
-            )
-            local count = 0
-            local first_valid_time = nil
-            local last_valid_time = nil
-            local old_count = sort_scratch_count
-
-            for j = i, sample_buffer.count do
-                local sample = sample_at(j)
-                if sample.t > window_end then break end
-                if sample.t >= window_start then
-                    local value = projected_vertical_g(sample)
-                    if value ~= nil then
-                        count = count + 1
-                        sort_scratch[count] = value
-                        if first_valid_time == nil then first_valid_time = sample.t end
-                        last_valid_time = sample.t
-                    end
-                end
-            end
-
-            for j = count + 1, old_count do
-                sort_scratch[j] = nil
-            end
-            sort_scratch_count = count
-            if count > 1 then table.sort(sort_scratch) end
-
-            local span = first_valid_time ~= nil and last_valid_time - first_valid_time or 0
-            if count >= landing_analysis.g_local_event.min_samples
-                and span >= landing_analysis.g_local_event.min_span_seconds then
-                local event_g = scratch_percentile(landing_analysis.g_local_event.percentile)
-                if event_g ~= nil and (best_g == nil or event_g > best_g) then
-                    best_g = event_g
-                    best_start = first_valid_time
-                    best_end = last_valid_time
-                    best_span = span
-                    best_count = count
-                    best_index = math.max(
-                        1,
-                        math.ceil(count * landing_analysis.g_local_event.percentile)
-                    )
-                end
-            end
+        local sample = sample_at(i)
+        if sample.t >= start_time and sample.t <= window_end
+            and projected_vertical_g(sample) ~= nil then
+            if first_valid_time == nil then first_valid_time = sample.t end
+            last_valid_time = sample.t
         end
     end
+    local span = first_valid_time ~= nil and last_valid_time - first_valid_time or 0
+    if span < landing_analysis.g_local_event.min_span_seconds then event_g = nil end
 
-    landing_analysis.local_event_g_valid = best_g ~= nil
-    landing_analysis.local_event_g = best_g or landing_analysis.curve_g
-    landing_analysis.local_event_window_start_time = best_start
-    landing_analysis.local_event_window_end_time = best_end
-    landing_analysis.local_event_window_span_seconds = best_span
-    landing_analysis.local_event_sample_count = best_count
-    landing_analysis.local_event_percentile_index = best_index
-    landing_analysis.robust_event_g = math.max(
-        landing_analysis.curve_g,
-        landing_analysis.local_event_g
-    )
+    landing_analysis.local_event_g_valid = event_g ~= nil
+    landing_analysis.local_event_g = event_g or landing_analysis.curve_g
+    landing_analysis.local_event_window_start_time = first_valid_time or start_time
+    landing_analysis.local_event_window_end_time = last_valid_time or window_end
+    landing_analysis.local_event_window_span_seconds = span
+    landing_analysis.local_event_sample_count = count
+    landing_analysis.local_event_percentile_index = event_g ~= nil
+        and math.max(1, math.ceil(count * landing_analysis.g_local_event.percentile)) or 0
+    landing_analysis.robust_event_g = landing_analysis.local_event_g
 end
 
 local function analyze_landing_impulse()
@@ -1924,10 +3053,10 @@ local function analyze_landing_impulse()
         if sort_scratch[i] > peak_g then peak_g = sort_scratch[i] end
     end
     landing_peak_g = peak_g
-    log_tools.calculate_local_event_g(touch_time, end_time)
+    -- 主 G 窗口严格从首个接地帧开始；impact_start_time 仅为冲量积分保留上一离地帧。
+    log_tools.calculate_local_event_g(landing_analysis.touch_time, end_time)
 
-    local high_threshold = landing_analysis.baseline_g
-        + math.max(0, peak_g - landing_analysis.baseline_g) * 0.80
+    local high_threshold = 1.0 + math.max(0, peak_g - 1.0) * 0.80
     local impulse_delta = 0
     local high_duration = 0
     local max_gap = 0
@@ -1947,8 +3076,10 @@ local function analyze_landing_impulse()
                     if dt > 0 and dt <= 0.10 then
                         gap_sum = gap_sum + dt
                         gap_count = gap_count + 1
-                        local previous_excess = math.max(0, previous_g - landing_analysis.baseline_g)
-                        local current_excess = math.max(0, current_g - landing_analysis.baseline_g)
+                        -- g_nrml 是总载荷倍数；垂直速度变化对应净加速度 (G - 1.0)g。
+                        -- 接地前基线只描述当时的升力状态，不能代替物理零点 1.0 G。
+                        local previous_excess = previous_g - 1.0
+                        local current_excess = current_g - 1.0
                         impulse_delta = impulse_delta
                             + (previous_excess + current_excess) * 0.5 * 9.80665 * dt
                         if previous_g >= high_threshold and current_g >= high_threshold then
@@ -1970,51 +3101,35 @@ local function analyze_landing_impulse()
         impulse_delta - landing_analysis.velocity_delta_mps
     ) / math.max(landing_analysis.velocity_delta_mps, 0.20)
 
-    local equivalent_g = landing_analysis.baseline_g
+    local equivalent_g = 1.0
         + landing_analysis.velocity_delta_mps
             / (9.80665 * landing_analysis.stop_duration_seconds)
     landing_analysis.equivalent_g = math.max(1.0, math.min(5.0, equivalent_g))
 
-    local samples_valid = landing_analysis.physical_fpm_valid
-        and impact_count >= 3
+    local samples_valid = impact_count >= 3
         and max_gap <= MAX_VALID_SAMPLE_GAP_SECONDS
 
     if not samples_valid then
         landing_analysis.confidence = "LOW"
         landing_analysis.used_fallback = true
-        landing_analysis.method = "物理样本不足，使用备用一致性上限"
+        landing_analysis.method = "G样本不足，采用最终FPM上限保护后的全段P75备用值"
         landing_g = math.min(landing_analysis.curve_g, fallback_g_cap(landing_fpm))
-    elseif landing_analysis.consistency_error <= CONSISTENCY_HIGH_MAX_ERROR
-        and high_duration >= HIGH_G_DURATION_MIN_SECONDS then
-        landing_analysis.confidence = "HIGH"
-        landing_analysis.used_fallback = false
-        landing_analysis.method = "高可信冲量，采用第75百分位曲线G"
-        landing_g = landing_analysis.curve_g
-    -- 中可信度也要求至少两帧连续处于高 G 区域；单帧尖峰的持续时间为零，只能进入低可信度分支。
-    elseif landing_analysis.consistency_error <= CONSISTENCY_MEDIUM_MAX_ERROR
-        and high_duration > 0 then
-        landing_analysis.confidence = "MEDIUM"
-        landing_analysis.used_fallback = false
-        landing_analysis.method = landing_analysis.local_event_g_valid
-            and "中可信冲量，采用全局P75与160ms局部冲击包络的较大值"
-            or "中可信冲量，局部包络样本不足，采用全局第75百分位曲线G"
-        landing_g = landing_analysis.robust_event_g
     else
-        landing_analysis.confidence = "LOW"
-        landing_analysis.used_fallback = false
-        landing_analysis.method = "低可信峰值，主要采用冲量等效G"
-        landing_g = landing_analysis.curve_g * 0.25 + landing_analysis.equivalent_g * 0.75
-    end
-
-    -- 达到安全上限表示长行程起落架仍未完全稳定，不能宣称高可信；
-    -- 超时只说明起落架尚未完全稳定，不应让后续低载荷样本稀释真实压缩段。
-    if landing_analysis.capture_end_reason == "达到1.20秒安全采集上限" then
-        landing_analysis.confidence = "MEDIUM"
+        if landing_analysis.consistency_error <= CONSISTENCY_HIGH_MAX_ERROR then
+            landing_analysis.confidence = "HIGH"
+        elseif landing_analysis.consistency_error <= CONSISTENCY_MEDIUM_MAX_ERROR then
+            landing_analysis.confidence = "MEDIUM"
+        else
+            landing_analysis.confidence = "LOW"
+        end
         landing_analysis.used_fallback = false
         landing_analysis.method = landing_analysis.local_event_g_valid
-            and "长行程压缩达到采集上限，采用全局P75与160ms局部冲击包络的较大值"
-            or "长行程压缩达到采集上限，局部包络样本不足，采用全局第75百分位曲线G"
+            and "采用第一次接触后固定160 ms稳健P75 G；冲量仅用于物理闭合复核"
+            or "固定160 ms样本不足，采用第一次压缩全段P75 G"
         landing_g = landing_analysis.robust_event_g
+        if landing_analysis.consistency_error > CONSISTENCY_MEDIUM_MAX_ERROR then
+            landing_analysis.method = landing_analysis.method .. "；冲量闭合偏差较大，报告保留复核提示"
+        end
     end
 
     landing_g = math.max(1.0, math.min(5.0, landing_g))
@@ -2051,10 +3166,9 @@ local function is_valid_position(position_id)
 end
 
 local function position_label(position_id)
+    -- 此标签仅用于 ImGui 设置窗口，因此始终使用英文。
     for i = 1, #POSITION_OPTIONS do
-        if POSITION_OPTIONS[i].id == position_id then
-            return POSITION_OPTIONS[i].label
-        end
+        if POSITION_OPTIONS[i].id == position_id then return POSITION_OPTIONS[i].label end
     end
     return "Middle left"
 end
@@ -2097,12 +3211,15 @@ local function save_settings()
     end
 
     file:write("# StarLux Landing Meter settings\n")
+    file:write("# document_language: zh or en; controls TXT text and _CN / _EN filename suffix\n")
     file:write("popup_mode=" .. POPUP_MODE .. "\n")
+    file:write("document_language=" .. runtime_state.document_language .. "\n")
     file:write("display_seconds=" .. tostring(DISPLAY_SECONDS) .. "\n")
     file:write("popup_position=" .. POPUP_POSITION .. "\n")
     file:write("popup_layout=" .. POPUP_LAYOUT .. "\n")
     file:write("panel_opacity=" .. tostring(PANEL_OPACITY_LEVEL) .. "\n")
     file:write("detailed_math_log=" .. tostring(DETAILED_MATH_LOG) .. "\n")
+    file:write("runway_detection_enabled=" .. tostring(runtime_state.runway_detection_enabled) .. "\n")
     file:write("debug_mode=" .. tostring(DEBUG_MODE) .. "\n")
     file:close()
     settings_save_ok = true
@@ -2118,6 +3235,7 @@ local function load_settings()
 
     local migrated = false
     local detailed_math_key_found = false
+    local runway_detection_key_found = false
     for line in file:lines() do
         local key, value = line:match("^%s*([%w_]+)%s*=%s*(.-)%s*$")
         if key == "popup_mode" then
@@ -2125,9 +3243,15 @@ local function load_settings()
                 POPUP_MODE = "immediate"
                 migrated = true
             elseif value == "immediate" or value == "taxi"
-                or value == "stopped" or value == "off" then
+                or value == "stopped" or value == "off" or value == "clean" then
                 POPUP_MODE = value
             end
+        elseif key == "document_language" and (value == "zh" or value == "en") then
+            runtime_state.document_language = value
+        elseif key == "interface_language" and (value == "zh" or value == "en") then
+            -- 兼容 v1.1.1 早期测试版：读取旧键后立即迁移为 document_language。
+            runtime_state.document_language = value
+            migrated = true
         elseif key == "display_seconds" then
             local seconds = tonumber(value)
             if seconds == 30 or seconds == 60 or seconds == 120 then
@@ -2145,12 +3269,16 @@ local function load_settings()
         elseif key == "detailed_math_log" then
             DETAILED_MATH_LOG = value == "true"
             detailed_math_key_found = true
+        elseif key == "runway_detection_enabled" then
+            runtime_state.runway_detection_enabled = value == "true"
+            runway_detection_key_found = true
         elseif key == "debug_mode" then
             DEBUG_MODE = value == "true"
         end
     end
     file:close()
     if not detailed_math_key_found then migrated = true end
+    if not runway_detection_key_found then migrated = true end
     if migrated then save_settings() end
 end
 
@@ -2300,7 +3428,7 @@ function log_tools.refresh_log_index()
     if log_manager_state.page < 1 then log_manager_state.page = 1 end
 
     if not indexed then
-        log_manager_state.scan_error = "Unable to scan LMM_Log. Check FlyWithLua file permissions."
+        log_manager_state.scan_error = log_tools.settings_text("无法扫描 LMM_Log，请检查 FlyWithLua 文件权限。", "Unable to scan LMM_Log. Check FlyWithLua file permissions.")
         if logMsg then
             logMsg("[StarLux LMM] Unable to build landing log index.")
         end
@@ -2373,7 +3501,9 @@ function log_tools.parse_flare_trajectory(content)
     local data_started = false
 
     for line in content:gmatch("[^\r\n]+") do
-        if line:find("0.5秒聚合轨迹表", 1, true) then
+        local lower_line = string.lower(line)
+        if line:find("聚合轨迹表", 1, true)
+            or lower_line:find("aggregated trajectory table", 1, true) then
             in_table = true
         elseif in_table then
             local values = {}
@@ -2409,8 +3539,9 @@ end
 function log_tools.parse_roll_degrees(value)
     local degrees = log_tools.parse_number(value)
     if degrees == nil then return nil end
-    if tostring(value):find("左倾", 1, true) then return -abs_value(degrees) end
-    if tostring(value):find("右倾", 1, true) then return abs_value(degrees) end
+    local lower_value = string.lower(tostring(value))
+    if tostring(value):find("左倾", 1, true) or lower_value:find("left bank", 1, true) then return -abs_value(degrees) end
+    if tostring(value):find("右倾", 1, true) or lower_value:find("right bank", 1, true) then return abs_value(degrees) end
     return degrees
 end
 
@@ -2419,12 +3550,12 @@ function log_tools.parse_landing_report(file_name, content)
     local fields = log_tools.parse_report_fields(content)
     local file_airport, file_aircraft, file_runway = log_tools.report_filename_identity(file_name)
 
-    local evaluation = log_tools.first_report_field(fields, { "最终评价", "落地评价" })
-    local fpm_text = log_tools.first_report_field(fields, { "触地垂直速度", "触地下降率" })
-    local g_text = log_tools.first_report_field(fields, { "最终过载", "最终显示和评分值" })
+    local evaluation = log_tools.first_report_field(fields, { "最终评价", "落地评价", "Final rating", "Landing rating" })
+    local fpm_text = log_tools.first_report_field(fields, { "触地垂直速度", "触地下降率", "Touchdown vertical speed" })
+    local g_text = log_tools.first_report_field(fields, { "最终过载", "最终显示和评分值", "Final load", "Final displayed and rated G" })
     local ias_gs_text = log_tools.first_report_field(fields, { "IAS / GS" })
-    local ias = log_tools.parse_number(log_tools.first_report_field(fields, { "指示空速（IAS）" }))
-    local gs = log_tools.parse_number(log_tools.first_report_field(fields, { "地速（GS）" }))
+    local ias = log_tools.parse_number(log_tools.first_report_field(fields, { "指示空速（IAS）", "Indicated airspeed (IAS)" }))
+    local gs = log_tools.parse_number(log_tools.first_report_field(fields, { "地速（GS）", "Ground speed (GS)" }))
     if ias_gs_text ~= "" then
         local first, second = ias_gs_text:match(
             "([%+%-]?%d+%.?%d*)%s*/%s*([%+%-]?%d+%.?%d*)"
@@ -2433,31 +3564,39 @@ function log_tools.parse_landing_report(file_name, content)
         gs = tonumber(second) or gs
     end
 
-    local airport_text = log_tools.first_report_field(fields, { "落地机场" })
+    local airport_text = log_tools.first_report_field(fields, { "落地机场", "Landing airport" })
     local airport = airport_text:match("^([%w]+)") or file_airport
-    if airport == "" or airport_text:find("未能识别", 1, true) then airport = "UNKNOWN" end
-    local aircraft = log_tools.first_report_field(fields, { "机型（ICAO）" })
+    local lower_airport_text = string.lower(airport_text)
+    if airport == "" or airport_text:find("未能识别", 1, true)
+        or lower_airport_text:find("unable to identify", 1, true)
+        or lower_airport_text:find("unknown", 1, true) then airport = "UNKNOWN" end
+    local aircraft = log_tools.first_report_field(fields, { "机型（ICAO）", "Aircraft (ICAO)" })
     if aircraft == "" then aircraft = file_aircraft end
     if aircraft == "" then aircraft = "UNKNOWN" end
-    local runway_text = log_tools.first_report_field(fields, { "触地跑道方向" })
+    local runway_text = log_tools.first_report_field(fields, { "触地跑道方向", "Touchdown runway", "Estimated runway", "Touchdown runway direction" })
     local runway = runway_text:match("RWY([%w]+)") or file_runway
     if runway == "" then runway = "--" end
-    local heading_text = log_tools.first_report_field(fields, { "飞机磁航向" })
-    local wind_source_text = log_tools.first_report_field(fields, { "风向和风速" })
-    local aoa_text = log_tools.first_report_field(fields, { "迎角" })
-    local roll_text = log_tools.first_report_field(fields, { "横滚角" })
-    local airport_distance_text = log_tools.first_report_field(fields, { "触地点距机场参考点" })
+    local heading_text = log_tools.first_report_field(fields, { "飞机磁航向", "Aircraft magnetic heading" })
+    local wind_source_text = log_tools.first_report_field(fields, { "风向和风速", "Wind direction and speed" })
+    local aoa_text = log_tools.first_report_field(fields, { "迎角", "Angle of attack" })
+    local roll_text = log_tools.first_report_field(fields, { "横滚角", "Roll angle" })
+    local airport_distance_text = log_tools.first_report_field(fields, { "触地点距机场参考点", "Touchdown distance from airport reference" })
     local runway_length_text = log_tools.first_report_field(
         fields,
-        { "跑道长度", "跑道可用长度" }
+        { "跑道长度", "跑道可用长度", "Runway length", "Runway available length" }
     )
     local touchdown_from_threshold_text = log_tools.first_report_field(
         fields,
-        { "触地点距跑道入口", "触地点距入口" }
+        { "触地点距跑道入口", "触地点距入口", "Touchdown distance from runway threshold", "Touchdown distance from threshold" }
     )
     local wind_from_deg, wind_speed_kts = wind_source_text:match(
         "来自%s*([%+%-]?%d+%.?%d*)%s*deg[^%d]+([%+%-]?%d+%.?%d*)%s*kt"
     )
+    if wind_from_deg == nil then
+        wind_from_deg, wind_speed_kts = wind_source_text:match(
+            "from%s*([%+%-]?%d+%.?%d*)%s*deg[^%d]+([%+%-]?%d+%.?%d*)%s*kt"
+        )
+    end
 
     local version = content:match("StarLux.-v(%d+%.%d+%.?%d*)")
     local legacy = version == nil
@@ -2469,9 +3608,9 @@ function log_tools.parse_landing_report(file_name, content)
         fields = fields,
         version = version,
         legacy = legacy,
-        timestamp = log_tools.first_report_field(fields, { "落地时间（本地时间）" }),
+        timestamp = log_tools.first_report_field(fields, { "落地时间（本地时间）", "Landing time (local)" }),
         evaluation = evaluation ~= "" and evaluation or "未提供",
-        explanation = log_tools.first_report_field(fields, { "评价说明" }),
+        explanation = log_tools.first_report_field(fields, { "评价说明", "Rating explanation" }),
         status = log_tools.report_status_code(evaluation),
         fpm = log_tools.parse_number(fpm_text),
         fpm_text = fpm_text ~= "" and fpm_text or "无数据",
@@ -2483,14 +3622,14 @@ function log_tools.parse_landing_report(file_name, content)
         runway = runway,
         ias = ias,
         gs = gs,
-        tas_text = log_tools.first_report_field(fields, { "真空速（TAS）" }),
+        tas_text = log_tools.first_report_field(fields, { "真空速（TAS）", "True airspeed (TAS)" }),
         aoa_text = aoa_text,
         aoa_deg = log_tools.parse_number(aoa_text),
         roll_text = roll_text,
         roll_deg = log_tools.parse_roll_degrees(roll_text),
         heading_text = heading_text,
         heading_deg = log_tools.parse_number(heading_text),
-        wind_text = log_tools.first_report_field(fields, { "相对风" }),
+        wind_text = log_tools.first_report_field(fields, { "相对风", "Relative wind" }),
         wind_source_text = wind_source_text,
         wind_from_deg = tonumber(wind_from_deg),
         wind_speed_kts = tonumber(wind_speed_kts),
@@ -2500,28 +3639,28 @@ function log_tools.parse_landing_report(file_name, content)
         runway_length_m = log_tools.parse_number(runway_length_text),
         touchdown_from_threshold_text = touchdown_from_threshold_text,
         touchdown_from_threshold_m = log_tools.parse_number(touchdown_from_threshold_text),
-        surface_text = log_tools.first_report_field(fields, { "道面提示" }),
-        surface_source = log_tools.first_report_field(fields, { "道面判定来源" }),
-        bounce_text = log_tools.first_report_field(fields, { "弹跳检测" }),
-        flare_metric_text = log_tools.first_report_field(fields, { "拉平曲率" }),
+        surface_text = log_tools.first_report_field(fields, { "道面提示", "Surface advisory" }),
+        surface_source = log_tools.first_report_field(fields, { "道面判定来源", "Surface determination source" }),
+        bounce_text = log_tools.first_report_field(fields, { "弹跳检测", "Bounce detection" }),
+        flare_metric_text = log_tools.first_report_field(fields, { "拉平曲率", "Flare curvature" }),
         flare_metric = log_tools.parse_number(log_tools.first_report_field(fields, { "拉平曲率" })),
-        flare_trend = log_tools.first_report_field(fields, { "拉平轨迹结论", "轨迹结论" }),
-        flare_duration = log_tools.first_report_field(fields, { "100 ft 至触地时间" }),
-        flare_entry = log_tools.first_report_field(fields, { "100 ft 附近下降率" }),
-        flare_recovery = log_tools.first_report_field(fields, { "下降率净改善量" }),
-        reversal_count = log_tools.first_report_field(fields, { "明显方向反转次数" }),
-        worsening_ratio = log_tools.first_report_field(fields, { "下降率恶化区间比例" }),
-        monotonic_efficiency = log_tools.first_report_field(fields, { "单调改善效率" }),
-        touch_g = log_tools.parse_number(log_tools.first_report_field(fields, { "触地帧过载" })),
-        peak_g = log_tools.parse_number(log_tools.first_report_field(fields, { "第一次压缩原始峰值", "短窗口原始峰值" })),
-        curve_g = log_tools.parse_number(log_tools.first_report_field(fields, { "第75百分位曲线 G", "稳健采样值" })),
-        baseline_g = log_tools.parse_number(log_tools.first_report_field(fields, { "接地前垂直 G 基线" })),
-        equivalent_g = log_tools.parse_number(log_tools.first_report_field(fields, { "冲量等效 G", "FPM/G 一致性上限" })),
-        consistency_text = log_tools.first_report_field(fields, { "冲量一致性误差" }),
-        confidence_text = log_tools.first_report_field(fields, { "数据可信度" }),
-        g_method = log_tools.first_report_field(fields, { "最终 G 采用方式" }),
-        impact_samples = log_tools.first_report_field(fields, { "冲击阶段有效样本数" }),
-        analysis_ms = log_tools.first_report_field(fields, { "落地分析耗时" }),
+        flare_trend = log_tools.first_report_field(fields, { "拉平轨迹结论", "轨迹结论", "Flare trajectory conclusion", "Trajectory conclusion" }),
+        flare_duration = log_tools.first_report_field(fields, { "100 ft 至触地时间", "100 ft to touchdown time" }),
+        flare_entry = log_tools.first_report_field(fields, { "100 ft 附近下降率", "Vertical speed near 100 ft" }),
+        flare_recovery = log_tools.first_report_field(fields, { "下降率净改善量", "Net vertical-speed improvement" }),
+        reversal_count = log_tools.first_report_field(fields, { "明显方向反转次数", "Significant direction reversals" }),
+        worsening_ratio = log_tools.first_report_field(fields, { "下降率恶化区间比例", "Worsening-interval ratio" }),
+        monotonic_efficiency = log_tools.first_report_field(fields, { "单调改善效率", "Monotonic improvement efficiency" }),
+        touch_g = log_tools.parse_number(log_tools.first_report_field(fields, { "触地帧过载", "Touchdown-frame load" })),
+        peak_g = log_tools.parse_number(log_tools.first_report_field(fields, { "第一次压缩原始峰值", "短窗口原始峰值", "First-compression raw peak", "Short-window raw peak" })),
+        curve_g = log_tools.parse_number(log_tools.first_report_field(fields, { "接地后固定 160 ms 稳健 G", "第75百分位曲线 G", "稳健采样值", "Fixed 160 ms robust G after touchdown", "Global P75 curve G", "Robust sampled G" })),
+        baseline_g = log_tools.parse_number(log_tools.first_report_field(fields, { "接地前垂直 G 基线", "Pre-touchdown vertical-G baseline" })),
+        equivalent_g = log_tools.parse_number(log_tools.first_report_field(fields, { "物理平均 G", "冲量等效 G", "FPM/G 一致性上限", "Physics-average G", "Impulse-equivalent G", "FPM/G consistency cap" })),
+        consistency_text = log_tools.first_report_field(fields, { "G 冲量闭合误差", "冲量一致性误差", "G impulse-closure error", "Impulse consistency error" }),
+        confidence_text = log_tools.first_report_field(fields, { "数据可信度", "Data confidence" }),
+        g_method = log_tools.first_report_field(fields, { "最终 G 采用方式", "Final G method" }),
+        impact_samples = log_tools.first_report_field(fields, { "G 有效样本数", "冲击阶段有效样本数", "Valid G samples", "Valid impact samples" }),
+        analysis_ms = log_tools.first_report_field(fields, { "落地分析耗时", "Landing analysis time" }),
         trajectory = log_tools.parse_flare_trajectory(content)
     }
     return report
@@ -2618,6 +3757,7 @@ function log_tools.write_viewer_html(report)
 
     local data_file, data_error = io.open(LOG_VIEWER_DATA_FILE_PATH, "wb")
     if data_file == nil then return false, tostring(data_error) end
+    data_file:write("window.LMM_DEFAULT_LANGUAGE = " .. log_tools.js_string(runtime_state.document_language) .. ";\n")
     data_file:write("window.LMM_LAUNCH_REPORT = {\n")
     data_file:write("  name: " .. log_tools.js_string(report.file_name) .. ",\n")
     data_file:write("  content: " .. log_tools.js_string(report.raw) .. ",\n")
@@ -2703,15 +3843,35 @@ function log_tools.delete_indexed_log(file_name)
 end
 
 local function status_explanation(status)
-    if bounce_state.score_applied and bounce_state.original_status ~= status then
-        if status == "UNSTABLE" then
-            return "发生弹跳，且至少一次稳健过载超过 1.80 G"
+    local explanations = {}
+    if landing_context.centerline_penalty_applied then
+        if landing_context.centerline_penalty_level == "unstable" then
+            explanations[#explanations + 1] = string.format(
+                "偏离中心线 %.1f 米，超过 15 米，直接判定为 %s",
+                landing_context.centerline_offset_m,
+                status_short(status)
+            )
+        elseif landing_context.centerline_original_status ~= status then
+            explanations[#explanations + 1] = string.format("偏离中心线 %.1f 米，超过 7 米，评价由 ", landing_context.centerline_offset_m)
+                .. status_short(landing_context.centerline_original_status)
+                .. " 降级为 "
+                .. status_short(status)
+        else
+            explanations[#explanations + 1] = string.format("偏离中心线 %.1f 米，超过 7 米，保持 ", landing_context.centerline_offset_m)
+                .. status_short(status)
         end
-        return "发生弹跳：评级由 "
-            .. status_short(bounce_state.original_status)
-            .. " 降级为 "
-            .. status_short(status)
     end
+    if bounce_state.score_applied and bounce_state.original_status ~= bounce_state.result_status then
+        if bounce_state.result_status == "UNSTABLE" then
+            explanations[#explanations + 1] = "发生弹跳，且至少一次稳健过载超过 1.80 G"
+        else
+            explanations[#explanations + 1] = "发生弹跳：评级由 "
+                .. status_short(bounce_state.original_status)
+                .. " 降级为 "
+                .. status_short(bounce_state.result_status)
+        end
+    end
+    if #explanations > 0 then return table.concat(explanations, " / ") end
     if status == "UNSTABLE" then
         return "不良落地：下降率超过 300 fpm，或过载超过 1.80 G"
     elseif status == "ATTENTION" then
@@ -2725,40 +3885,571 @@ end
 local function roll_log_text(roll_deg)
     local abs_roll = abs_value(roll_deg)
     if abs_roll < 0.05 then
-        return "水平（0.0 deg）"
+        return log_tools.ui_text("水平（0.0 deg）", "Level (0.0 deg)")
     elseif roll_deg < 0 then
-        return string.format("左倾 %.1f deg", abs_roll)
+        return string.format(log_tools.ui_text("左倾 %.1f deg", "Left bank %.1f deg"), abs_roll)
     end
-    return string.format("右倾 %.1f deg", abs_roll)
+    return string.format(log_tools.ui_text("右倾 %.1f deg", "Right bank %.1f deg"), abs_roll)
 end
 
 local function vertical_speed_log_text(fpm)
     if fpm <= 0 then
-        return string.format("%d fpm（向下 %d fpm）", fpm, abs_value(fpm))
+        return string.format(log_tools.ui_text("%d fpm（向下 %d fpm）", "%d fpm (down %d fpm)"), fpm, abs_value(fpm))
     end
-    return string.format("+%d fpm（向上）", fpm)
+    return string.format(log_tools.ui_text("+%d fpm（向上）", "+%d fpm (up)"), fpm)
+end
+
+local function fpm_source_log_text()
+    if landing_analysis.flare_fpm_source == "PHYSICAL" then
+        if landing_analysis.fpm_selection_reason == "PHYSICAL_CLOSEST" then
+            return log_tools.ui_text(
+                "物理 FPM（最接近 AGL）",
+                "Physical FPM (closest to AGL)"
+            )
+        end
+        return log_tools.ui_text("物理 FPM（AGL 缺样备用）", "Physical FPM (AGL-sample fallback)")
+    elseif landing_analysis.flare_fpm_source == "AGL" then
+        return log_tools.ui_text(
+            "AGL 几何锚点下降率",
+            "AGL geometric anchor vertical speed"
+        )
+    elseif landing_analysis.fpm_selection_reason == "VVI_CLOSEST" then
+        return log_tools.ui_text("VVI（最接近 AGL）", "VVI (closest to AGL)")
+    end
+    return log_tools.ui_text("VVI（AGL 与物理样本缺失备用）", "VVI (AGL and physical samples unavailable)")
 end
 
 local function position_log_label(position_id)
-    local labels = {
-        top_left = "左上",
-        top_center = "上方居中",
-        top_right = "右上",
-        middle_left = "左侧居中",
-        center = "屏幕中央",
-        middle_right = "右侧居中",
-        bottom_left = "左下",
-        bottom_center = "下方居中",
-        bottom_right = "右下"
+    local labels_zh = {
+        top_left = "左上", top_center = "上方居中", top_right = "右上",
+        middle_left = "左侧居中", center = "屏幕中央", middle_right = "右侧居中",
+        bottom_left = "左下", bottom_center = "下方居中", bottom_right = "右下"
     }
-    return labels[position_id] or "左侧居中"
+    local labels_en = {
+        top_left = "Top left", top_center = "Top center", top_right = "Top right",
+        middle_left = "Middle left", center = "Center", middle_right = "Middle right",
+        bottom_left = "Bottom left", bottom_center = "Bottom center", bottom_right = "Bottom right"
+    }
+    local labels = runtime_state.document_language == "en" and labels_en or labels_zh
+    return labels[position_id] or labels.middle_left
 end
 
 function log_tools.popup_mode_log_text()
-    if POPUP_MODE == "immediate" then return "分析完成后立即显示" end
-    if POPUP_MODE == "taxi" then return "地速低于 30 kt 时显示" end
-    if POPUP_MODE == "stopped" then return "飞机停稳并持续 10 秒后显示" end
-    return "不自动显示"
+    if POPUP_MODE == "immediate" then return log_tools.ui_text("分析完成后立即显示", "Show immediately after analysis") end
+    if POPUP_MODE == "taxi" then return log_tools.ui_text("地速低于 30 kt 时显示", "Show after slowing below 30 kt") end
+    if POPUP_MODE == "stopped" then return log_tools.ui_text("飞机停稳并持续 10 秒后显示", "Show after stopped for 10 seconds") end
+    if POPUP_MODE == "clean" then return log_tools.ui_text("纯净模式（关闭全部自动提示）", "Clean mode (disable all automatic notices)") end
+    return log_tools.ui_text("不自动显示", "Do not show automatically")
+end
+
+-- TXT 报告在落盘时统一翻译；数值精度、排序与公式不因语言改变。
+log_tools.report_translations = {
+    { "采用第一次接触后固定160 ms稳健P75 G；冲量仅用于物理闭合复核；冲量闭合偏差较大，报告保留复核提示", "Fixed 160 ms robust P75 G after first contact selected; impulse is used only for physical closure review; closure deviation is large and retained for review" },
+    { "采用第一次接触后固定160 ms稳健P75 G；冲量仅用于物理闭合复核", "Fixed 160 ms robust P75 G after first contact selected; impulse is used only for physical closure review" },
+    { "接地短窗样本不足，采用5 ft以下250 ms物理速度P25备用值；AGL几何复核差异较大，已保留复核值", "Touchdown-window samples are insufficient; the 250 ms physical-velocity P25 below 5 ft is used as fallback; the AGL geometric cross-check differs substantially and is retained" },
+    { "采用接地前100 ms离地物理垂直速度中位数；AGL几何复核差异较大，已保留复核值", "Median airborne physical vertical speed in the 100 ms before touchdown selected; the AGL geometric cross-check differs substantially and is retained" },
+    { "采用接地前100 ms离地物理垂直速度中位数", "Median airborne physical vertical speed in the 100 ms before touchdown selected" },
+    { "接地短窗样本不足，采用5 ft以下250 ms物理速度P25备用值", "Touchdown-window samples are insufficient; the 250 ms physical-velocity P25 below 5 ft is used as fallback" },
+    { "物理短窗出现向上符号，但AGL与VVI均确认仍在下降，采用AGL几何下降率", "The physical touchdown window indicates an upward direction while both AGL and VVI confirm descent; AGL geometric vertical speed selected" },
+    { "物理短窗比AGL与VVI均偏轻至少100 fpm，采用AGL几何下降率", "The physical touchdown window is at least 100 fpm lighter than both AGL and VVI; AGL geometric vertical speed selected" },
+    { "物理速度样本不足，采用5 ft以下AGL几何下降率备用值", "Physical-velocity samples are insufficient; AGL geometric vertical speed below 5 ft is used as fallback" },
+    { "物理与几何样本均不足，采用VVI最终备用值", "Physical and geometric samples are insufficient; VVI is used as the final fallback" },
+    { "物理 FPM 最接近 AGL，采用接地前100 ms物理值", "Physical FPM is closest to AGL; the 100 ms pre-touchdown physical value is selected" },
+    { "物理 FPM 最接近 AGL，采用250 ms物理备用值", "Physical FPM is closest to AGL; the 250 ms physical fallback is selected" },
+    { "VVI 最接近 AGL，采用 VVI 值", "VVI is closest to AGL; VVI selected" },
+    { "物理 FPM 与 VVI 均偏离 AGL 超过100 fpm，采用 AGL 几何下降率", "Physical FPM and VVI both differ from AGL by more than 100 fpm; AGL geometric vertical speed selected" },
+    { "有效候选值偏离 AGL 超过100 fpm，采用 AGL 几何下降率", "Available candidates differ from AGL by more than 100 fpm; AGL geometric vertical speed selected" },
+    { "物理 FPM 与 VVI 均偏离 AGL 超过30 fpm，采用 AGL 几何下降率", "Physical FPM and VVI both differ from AGL by more than 30 fpm; AGL geometric vertical speed selected" },
+    { "有效候选值偏离 AGL 超过30 fpm，采用 AGL 几何下降率", "Available candidates differ from AGL by more than 30 fpm; AGL geometric vertical speed selected" },
+    { "物理与 VVI 样本不足，采用 AGL 几何下降率", "Physical and VVI samples are insufficient; AGL geometric vertical speed selected" },
+    { "AGL 几何样本不足，采用物理 FPM 备用值", "AGL geometric samples are insufficient; physical FPM selected as fallback" },
+    { "AGL 与物理样本不足，采用 VVI 备用值", "AGL and physical samples are insufficient; VVI selected as fallback" },
+    { "三条下降率样本均不足，采用瞬时 VVI 最终备用值", "All three vertical-speed sources have insufficient samples; instantaneous VVI selected as final fallback" },
+    { "G样本不足，采用最终FPM上限保护后的全段P75备用值", "G samples are insufficient; full-event P75 limited by the final-FPM cap is used as fallback" },
+    { "固定160 ms样本不足，采用第一次压缩全段P75 G", "Fixed 160 ms samples are insufficient; full first-compression P75 G is used" },
+    { "固定窗样本不足，采用全段P75", "fixed-window samples insufficient; full-event P75 selected" },
+    { "接地前物理垂直速度", "Pre-touchdown physical vertical speed" },
+    { "物理 FPM（最接近 AGL）", "Physical FPM (closest to AGL)" },
+    { "物理 FPM（AGL 缺样备用）", "Physical FPM (AGL-sample fallback)" },
+    { "VVI（最接近 AGL）", "VVI (closest to AGL)" },
+    { "VVI（AGL 与物理样本缺失备用）", "VVI (AGL and physical samples unavailable)" },
+    { "AGL 几何锚点下降率", "AGL geometric anchor vertical speed" },
+    { "AGL 几何下降率（末段物理低估保护）", "AGL geometric vertical speed (terminal physical-underread guard)" },
+    { "AGL 几何下降率（物理方向冲突保护）", "AGL geometric vertical speed (physical-direction conflict guard)" },
+    { "AGL 几何下降率（物理样本缺失备用）", "AGL geometric vertical speed (physical-sample fallback)" },
+    { "VVI（物理与几何样本缺失备用）", "VVI (physical and geometric samples unavailable)" },
+    { "四、着陆数据复核", "4. Landing data review" },
+    { "FPM 采用源", "FPM source" },
+    { "接地前物理下降率", "Pre-touchdown physical vertical speed" },
+    { "AGL 几何复核下降率", "AGL geometric cross-check vertical speed" },
+    { "VVI 参考下降率", "VVI reference vertical speed" },
+    { "FPM 物理/VVI有效样本", "FPM physical/VVI valid samples" },
+    { "最终显示/评分 G", "Final displayed/rated G" },
+    { "接地后固定 160 ms 稳健 G", "Fixed 160 ms robust G after touchdown" },
+    { "物理平均 G", "Physics-average G" },
+    { "G 冲量闭合误差", "G impulse-closure error" },
+    { "G 复核结论", "G review result" },
+    { "G 有效样本数", "Valid G samples" },
+    { "采样不足，已使用备用值", "Insufficient samples; fallback used" },
+    { "偏差较大，请结合原始轨迹复核", "Large deviation; review the raw trace" },
+    { "通过", "Pass" },
+    { "界面显示 = ", "interface display = " },
+    { "窗口标记: F5=5ft以下250ms物理FPM/VVI，F80=80ms短窗，V850=850ms最差VVI，AGL=5ft以下几何高度斜率窗口，BASE=接地前G基线，IMPACT=第一次压缩，POST=压缩末端速度。", "Window flags: F5=250 ms physical FPM/VVI below 5 ft; F80=80 ms short window; V850=worst VVI over 850 ms; AGL=geometric-altitude slope window below 5 ft; BASE=pre-touchdown G baseline; IMPACT=first compression; POST=end-of-compression velocity." },
+    { "规则: Nice 降为 Stable，Stable 降为 Attention；任一次稳健 G 超过 1.80 时为 UNSTABLE。", "Rule: Nice is downgraded to Stable and Stable to Attention; any robust G above 1.80 is UNSTABLE." },
+    { "说明: 本节保存核心计算输入、窗口、排序、索引和公式；所有时间均以第一次触地 T=0 为基准。", "Note: this section preserves core calculation inputs, windows, sorting, indices and formulas; all times use first touchdown T=0." },
+    { "UNSTABLE: FPM 或 G 超过任意 Attention 上限。", "UNSTABLE: FPM or G exceeds an Attention limit." },
+    { "稳定扎实落地：下降率不超过 250 fpm，且过载不超过 1.50 G", "Solid landing: vertical speed did not exceed 250 fpm and load did not exceed 1.50 G" },
+    { "长行程压缩达到采集上限，采用全局P75与160ms局部冲击包络的较大值", "Long-travel compression reached the capture limit; larger of global P75 and 160 ms local envelope selected" },
+    { "FPM 与 G 分别分档，最终评价取较严重等级；拉平曲率暂不参与评分。", "FPM and G are rated independently; the more severe band is final. Flare curvature does not affect the rating." },
+    { "长行程压缩达到采集上限，局部包络样本不足，采用全局第75百分位曲线G", "Long-travel compression reached the capture limit; local envelope insufficient, global P75 G selected" },
+    { "轻柔接地：下降率不超过 100 fpm，且过载不超过 1.20 G", "Soft touchdown: vertical speed did not exceed 100 fpm and load did not exceed 1.20 G" },
+    { "评分说明: v1.1.4 的拉平曲率仅用于复盘展示，暂不参与评分。", "Rating note: flare curvature in v1.1.4 is for review only and does not affect the rating." },
+    { "需注意：下降率不超过 300 fpm，且过载不超过 1.80 G", "Review advised: vertical speed did not exceed 300 fpm and load did not exceed 1.80 G" },
+    { "不良落地：下降率超过 300 fpm，或过载超过 1.80 G", "Adverse landing: vertical speed exceeded 300 fpm or load exceeded 1.80 G" },
+    { " 才为高可信；任一组超过阈值立即降低可信度并由 VVI 接管。", " for high confidence; exceeding the threshold on any pair lowers confidence and hands control to VVI." },
+    { "终端测量出现差异，VVI与几何轨迹相互接近，采用VVI下降率", "Terminal measurements disagree; VVI agrees with the geometric trajectory and is selected" },
+    { "高下降率短窗与VVI差异超过100 fpm，采用VVI并保留全部对照值", "High-sink-rate 80 ms window and VVI differ by more than 100 fpm; VVI selected and all comparison values retained" },
+    { "高下降率事件的80 ms物理样本不足，采用VVI并保留全部对照值", "High-sink-rate event has insufficient 80 ms physical samples; VVI selected and all comparison values retained" },
+    { "高下降率事件采用触地前80 ms离地物理速度中位数", "High-sink-rate event uses the median airborne physical velocity in the 80 ms before touchdown" },
+    { "物理轨迹（高下降率80 ms短窗复核）", "Physical trajectory (80 ms high-sink-rate review)" },
+    { "显示值可能按界面位数四舍五入，复算请使用本节保留的高精度值。", "Displayed values may be rounded to interface precision; use the high-precision values retained here for recalculation." },
+    { "StarLux 落地率插件 v1.1.4 - 单次落地记录", "StarLux Landing Meter v1.1.4 - Landing Report" },
+    { "中可信冲量，采用全局P75与160ms局部冲击包络的较大值", "Medium-confidence impulse; larger of global P75 and 160 ms local impact envelope selected" },
+    { "中可信冲量，局部包络样本不足，采用全局第75百分位曲线G", "Medium-confidence impulse; local envelope insufficient, global P75 G selected" },
+    { "跑道说明: 依据 scenery_packs.ini 优先级读取 apt.dat，并用跑道端点、触地坐标和地速向量完成几何匹配；位置采用飞机参考点，数值为约值。", "Runway note: apt.dat is read in scenery_packs.ini priority order and matched using runway endpoints, touchdown coordinates and the ground-velocity vector; positions use the aircraft reference point and are approximate." },
+    { "跑道说明: 未输出跑道方向和触地点；插件不会使用磁航向猜测跑道。", "Runway note: no runway direction or touchdown point is output; the plugin does not guess a runway from magnetic heading." },
+    { "触地跑道方向: 未识别（未使用磁航向猜测）", "Touchdown runway: Not identified (no magnetic-heading guess used)" },
+    { "（apt.dat 实测匹配）", " (apt.dat geometry match)" },
+    { "（飞机参考点，约）", " (aircraft reference point, approx.)" },
+    { "跑道识别来源", "Runway identification source" },
+    { "跑道识别可信度", "Runway identification confidence" },
+    { "跑道数据源", "Runway data source" },
+    { "跑道长度", "Runway length" },
+    { "跑道宽度", "Runway width" },
+    { "跑道路面", "Runway surface" },
+    { "触地点距跑道入口", "Touchdown distance from runway threshold" },
+    { "触地点距跑道末端", "Touchdown distance from runway end" },
+    { "触地点距跑道中心线", "Touchdown distance from runway centerline" },
+    { "触地点中心线有符号偏差", "Signed touchdown centerline deviation" },
+    { "触地点中心线方向", "Touchdown centerline side" },
+    { "中心线评价", "Centerline assessment" },
+    { "反向跑道方向", "Opposite runway direction" },
+    { "跑道路面代码", "Runway surface code" },
+    { "反向跑道标线代码", "Opposite runway marking code" },
+    { "反向跑道标线类型", "Opposite runway marking type" },
+    { "跑道标线代码", "Runway marking code" },
+    { "跑道标线类型", "Runway marking type" },
+    { "反向跑道入口内移", "Opposite displaced threshold" },
+    { "跑道入口内移", "Displaced threshold" },
+    { "跑道前端防吹坪", "Approach-end blast pad" },
+    { "反向跑道防吹坪", "Opposite blast pad" },
+    { "反向接地区灯", "Opposite touchdown-zone lights" },
+    { "接地区灯", "Touchdown-zone lights" },
+    { "反向跑道入口识别灯代码", "Opposite REIL code" },
+    { "跑道入口识别灯代码", "REIL code" },
+    { "跑道中线灯代码", "Runway centerline-light code" },
+    { "跑道边灯代码", "Runway edge-light code" },
+    { "跑道道肩代码", "Runway shoulder code" },
+    { "无跑道标线", "No runway markings" },
+    { "目视跑道标线", "Visual runway markings" },
+    { "FAA 非精密进近跑道标线", "FAA non-precision runway markings" },
+    { "FAA 精密进近跑道标线", "FAA precision runway markings" },
+    { "英国非精密进近跑道标线", "UK non-precision runway markings" },
+    { "英国精密进近跑道标线", "UK precision runway markings" },
+    { "EASA/ICAO 非精密进近跑道标线", "EASA/ICAO non-precision runway markings" },
+    { "EASA/ICAO 精密进近跑道标线", "EASA/ICAO precision runway markings" },
+    { "未知跑道标线（代码 ", "Unknown runway markings (code " },
+    { "（左正右负）", " (left positive, right negative)" },
+    { "偏离中心线 ", "Centerline deviation " },
+    { " 米，超过 15 米，直接判定为 ", " m; above 15 m, rated directly as " },
+    { " 米，超过 7 米，评价由 ", " m; above 7 m, rating changed from " },
+    { " 米，超过 7 米，保持 ", " m; above 7 m, remains " },
+    { "中心线偏差未超过 7 米，不影响评分", "Centerline deviation did not exceed 7 m and does not affect the rating" },
+    { "未参与评分（跑道未可靠识别）", "Not rated (runway not reliably identified)" },
+    { "中心线评分修正已应用", "Centerline rating correction applied" },
+    { "中心线评分修正未触发", "Centerline rating correction not triggered" },
+    { "中心线评分修正未应用", "Centerline rating correction not applied" },
+    { "跑道未可靠识别", "Runway not reliably identified" },
+    { "；修正前 ", "; before correction " },
+    { "；当前 ", "; current " },
+    { " 米", " m" },
+    { "精准跑道识别", "Exact runway identification" },
+    { "X-Plane apt.dat 几何匹配", "X-Plane apt.dat geometry match" },
+    { "用户已关闭精准跑道识别", "Exact runway identification disabled by user" },
+    { "无可靠结果", "No reliable result" },
+    { "沥青", "Asphalt" },
+    { "混凝土", "Concrete" },
+    { "草地", "Grass" },
+    { "泥土", "Dirt" },
+    { "碎石", "Gravel" },
+    { "干湖床", "Dry lakebed" },
+    { "冰雪", "Snow/ice" },
+    { "透明道面", "Transparent surface" },
+    { "没有满足最少样本与跨度要求的局部窗口，回退全局P75。", "No local window met the minimum sample and span requirements; falling back to global P75." },
+    { "垂直速度 VVI（三项终端测量存在差异，已自动采用）", "VVI (selected because terminal measurements disagree)" },
+    { "终端测量结果分散，采用VVI下降率并保留全部对照值", "Terminal measurements are dispersed; VVI selected and all comparison values retained" },
+    { "终端测量样本不足，采用VVI下降率并保留全部对照值", "Insufficient terminal samples; VVI selected and all comparison values retained" },
+    { "FPM与G分别分档，最终取较严重等级；基础复算结果", "FPM and G are rated separately and the more severe band is selected; base recalculated result" },
+    { "|二阶变化|第75百分位，越接近0表示轨迹越平顺", "P75 of absolute second-order change; values closer to 0 indicate a smoother trajectory" },
+    { "发生弹跳，且至少一次稳健过载超过 1.80 G", "Bounce detected, with at least one robust load exceeding 1.80 G" },
+    { "明显反转门槛: 相邻聚合FPM变化绝对值超过 ", "Significant-reversal threshold: absolute change between adjacent aggregated FPM values exceeds " },
+    { "三链阈值: 5 ft以下三组两两差值均 ≤ ", "Three-chain threshold: below 5 ft, all three pairwise differences must be <= " },
+    { "三项终端测量结果一致，采用物理轨迹下降率", "Terminal measurements agree; physical-trajectory vertical speed selected" },
+    { "0.5秒聚合轨迹表（高精度复算输入）", "0.5 s Aggregated Trajectory Table (High-Precision Recalculation Input)" },
+    { "高可信冲量，采用第75百分位曲线G", "High-confidence impulse; global P75 G selected" },
+    { "最近三分钟未确认持续降雨或湿滑道面", "No persistent rain or wet runway confirmed in the last three minutes" },
+    { "250 ms 物理速度第25百分位", "250 ms physical-velocity P25" },
+    { "局部包络窗口样本/跨度/P75索引", "Local-envelope window samples/span/P75 index" },
+    { "第二次触地前250ms离地物理速度", "Airborne physical velocity in 250 ms before second touchdown" },
+    { "物理样本不足，使用备用一致性上限", "Insufficient physical samples; consistency safety cap used" },
+    { "飞机实际降水连续达到阈值，峰值 ", "Aircraft precipitation remained above the threshold; peak " },
+    { "5ft以下250ms物理垂直速度", "250 ms physical vertical velocity below 5 ft" },
+    { "低可信峰值，主要采用冲量等效G", "Low-confidence peak; impulse-equivalent G is weighted most heavily" },
+    { "高震荡规则: 反转次数 >= ", "High-oscillation rule: reversals >= " },
+    { "X-Plane 跑道摩擦等级 ", "X-Plane runway-friction level " },
+    { "第三链 AGL 高度变化下降率", "Third-chain AGL-derived vertical speed" },
+    { "160 ms 局部冲击包络 G", "160 ms local-impact envelope G" },
+    { "物理轨迹（三项终端测量一致）", "Physical trajectory (three terminal measurements agree)" },
+    { "物理主值与同窗 VVI 差值", "Physical vs windowed VVI difference" },
+    { "FPM物理/VVI窗口样本数", "FPM physical/VVI window samples" },
+    { "AGL验证样本/斜率对/跨度", "AGL validation samples/slope pairs/span" },
+    { "5ft以下250ms VVI", "250 ms VVI below 5 ft" },
+    { "压缩末端50ms物理垂直速度", "Physical Vertical Velocity in Final 50 ms of Compression" },
+    { "弹跳修正规则已应用；最终结果", "Bounce adjustment applied; final result" },
+    { "任一组超过阈值立即回退VVI", "any difference over the threshold immediately falls back to VVI" },
+    { "附录A、第二次触地数学复算", "Appendix A. Second-Touchdown Mathematical Recalculation" },
+    { "80 ms 物理速度中位数", "80 ms physical-velocity median" },
+    { "0.85 s 最差 VVI", "Worst VVI over 0.85 s" },
+    { "垂直速度连续三帧进入稳定区", "Vertical speed remained stable for three consecutive frames" },
+    { "达到1.20秒安全采集上限", "Reached the 1.20 s safety capture limit" },
+    { "5ft以下三链交叉验证复算", "Three-Chain Cross-Validation Recalculation Below 5 ft" },
+    { "160ms局部冲击包络复算", "160 ms Local-Impact Envelope Recalculation" },
+    { " 为高可信并采用物理FPM", " means high confidence and selects physical FPM" },
+    { "二、100英尺后拉平轨迹", "II. Flare Trajectory Below 100 ft" },
+    { "三、飞行、位置与环境参考", "III. Flight, Position and Environment" },
+    { "100 ft 至触地时间", "100 ft to touchdown time" },
+    { "100 ft 附近下降率", "Vertical speed near 100 ft" },
+    { " 且（单调改善效率 < ", " and (monotonic improvement efficiency < " },
+    { " 或恶化区间比例 >= ", " or worsening-interval ratio >= " },
+    { "触地前三分钟实际降水峰值", "Peak precipitation in 3 minutes before touchdown" },
+    { "连续达到降水阈值的采样数", "Consecutive precipitation-threshold samples" },
+    { "三链终端窗口: 触地前 ", "Three-chain terminal window: " },
+    { "物理FPM与AGL链差值", "Physical FPM vs AGL-chain difference" },
+    { "样本不足，使用全局P75", "Insufficient samples; global P75 used" },
+    { "第二次触地压缩垂直投影G", "Projected vertical G during second-touchdown compression" },
+    { "850ms VVI诊断值", "850 ms VVI diagnostic value" },
+    { "接地前垂直投影G基线样本", "Pre-Touchdown Projected-Vertical-G Baseline Samples" },
+    { "对窗口内每一对样本计算 ", "For every sample pair in the window, compute " },
+    { "四、FPM与G算法诊断", "IV. FPM and G Diagnostics" },
+    { "五、评分阈值与显示设置", "V. Rating Thresholds and Display Settings" },
+    { "拉平曲率: 无有效结果", "Flare curvature: no valid result" },
+    { "弹跳期间峰值无线电高度", "Peak radio altitude during bounce" },
+    { "持续降雨，道面可能湿滑", "Persistent rain: runway may be wet" },
+    { "最终显示/评分 FPM", "Final displayed/rated FPM" },
+    { "第二次触地审计是否截断", "Second-touchdown audit truncated" },
+    { "选中局部窗口垂直投影G", "Selected Local-Window Projected Vertical G" },
+    { "可信度与最终G分支复算", "Confidence and Final-G Branch Recalculation" },
+    { "最终取各窗P75最大值", "select the maximum P75 across windows" },
+    { " 个样本且跨度不少于 ", " samples spanning at least " },
+    { "落地时间（本地时间）", "Landing time (local)" },
+    { "落地机场: 未能识别", "Landing airport: Unable to identify" },
+    { "弹跳期间最大向上速度", "Maximum upward speed during bounce" },
+    { "，或反转次数 >= ", ", or reversals >= " },
+    { "风向和风速: 来自 ", "Wind direction and speed: from " },
+    { "X-Plane 等级", "X-Plane level" },
+    { "道面湿滑，注意摩擦力", "Wet surface: reduced friction" },
+    { "同窗 VVI 中位数", "Windowed VVI median" },
+    { "VVI与AGL链差值", "VVI vs AGL-chain difference" },
+    { "第75百分位曲线 G", "Global P75 curve G" },
+    { "中可信度稳健冲击 G", "Medium-confidence robust-impact G" },
+    { "接地前垂直 G 基线", "Pre-touchdown vertical-G baseline" },
+    { "G 冲量推算速度变化", "G-impulse estimated velocity change" },
+    { "第二次触地审计样本数", "Second-touchdown audit sample count" },
+    { "80ms物理垂直速度", "80 ms physical vertical velocity" },
+    { "第一次压缩垂直投影G", "Projected Vertical G During First Compression" },
+    { "冲量梯形积分逐段复算", "Segment-by-Segment Trapezoidal Impulse Recalculation" },
+    { "备用一致性G上限公式", "Fallback consistency-G cap formula" },
+    { "未发生弹跳；最终结果", "No bounce; final result" },
+    { "发生弹跳：评级由 ", "Bounce detected: rating downgraded from " },
+    { "下降率恶化区间比例", "Worsening-interval ratio" },
+    { "0.25秒聚合轨迹表", "0.25 s Aggregated Trajectory Table" },
+    { "0.5秒聚合轨迹表", "0.5 s Aggregated Trajectory Table" },
+    { "有符号平均曲率复算", "recalculated signed mean curvature" },
+    { "触地点距机场参考点", "Touchdown distance from airport reference" },
+    { "第一次压缩原始峰值", "First-compression raw peak" },
+    { "第一次压缩结束原因", "First-compression end reason" },
+    { "第一次压缩持续时间", "First-compression duration" },
+    { "最终 G 采用方式", "Final G method" },
+    { "冲击阶段有效样本数", "Valid impact samples" },
+    { "等待100英尺采样", "Waiting for 100 ft sampling" },
+    { "拉平轨迹聚合点不足", "Insufficient flare buckets" },
+    { "检测到垂直速度反向", "Vertical-speed reversal detected" },
+    { "第75百分位曲线G", "P75 curve G" },
+    { "物理FPM样本有效", "Physical FPM samples valid" },
+    { "中可信或长压缩超时", "medium confidence or long-compression timeout" },
+    { "一、核心落地结果", "I. Core Landing Results" },
+    { "机型（ICAO）", "Aircraft (ICAO)" },
+    { "0.25秒聚合点数", "0.25 s aggregated points" },
+    { "0.5秒聚合点数", "0.5 s aggregated points" },
+    { "预采样原始样本数", "Raw pre-capture sample count" },
+    { "轨迹接地基准校准", "Trajectory touchdown-reference calibration" },
+    { "拉平轨迹缺少接地点校准后的100英尺样本", "Flare trace lacks a touchdown-calibrated 100 ft sample" },
+    { "拉平轨迹校准后样本不足", "Insufficient flare samples after touchdown calibration" },
+    { "（飞机参考点接地高度，已从整段轨迹扣除）", " (aircraft-reference touchdown height, subtracted from the full trajectory)" },
+    { "是否达到容量上限", "Capacity limit reached" },
+    { "明显方向反转次数", "Significant direction reversals" },
+    { "拉平曲率逐段复算", "Segment-by-Segment Flare-Curvature Recalculation" },
+    { "真空速（TAS）", "True airspeed (TAS)" },
+    { "、AGL不高于 ", " before touchdown; AGL no higher than " },
+    { "三链最大两两差值", "Maximum pairwise three-chain difference" },
+    { "高 G 持续时间", "High-G duration" },
+    { "实际垂直速度变化", "Actual vertical-velocity change" },
+    { "是否启用备用算法", "Fallback algorithm used" },
+    { "完整数学复算附录", "Full mathematical audit appendix" },
+    { "拉平轨迹样本不足", "Insufficient flare samples" },
+    { "下降率轨迹震荡高", "High vertical-speed oscillation" },
+    { "触地绝对模拟时间", "Absolute touchdown simulation time" },
+    { "审计快照是否截断", "Audit snapshot truncated" },
+    { "压缩前短窗中位数", "Pre-compression short-window median" },
+    { "高G持续时间复算", "Recalculated high-G duration" },
+    { "平均样本间隔复算", "Recalculated average sample interval" },
+    { "最大样本间隔复算", "recalculated maximum sample interval" },
+    { "算法保存最大间隔", "stored maximum interval" },
+    { "备用一致性G上限", "fallback consistency-G cap" },
+    { "所有分支最终执行", "All branches finally apply" },
+    { "规则: 滑窗长度", "Rule: sliding-window length" },
+    { "六、数学复算区", "VI. Mathematical Recalculation" },
+    { "下降率取值说明", "Vertical-speed source rationale" },
+    { "弹跳与两次触地", "Bounce and Two Touchdowns" },
+    { "轨迹下降率取值", "Trajectory vertical-speed source" },
+    { "下降率净改善量", "Net vertical-speed improvement" },
+    { "有符号平均曲率", "Signed mean curvature" },
+    { "冲量一致性误差", "Impulse consistency error" },
+    { "背景透明度档位", "Background opacity level" },
+    { "下降率轨迹正常", "Vertical-speed trend normal" },
+    { "垂直投影G公式", "Projected-vertical-G formula" },
+    { "第一次压缩起点", "First-compression start" },
+    { "第一次压缩终点", "First-compression end" },
+    { "第一次压缩时长", "First-compression duration" },
+    { "审计快照样本数", "Audit snapshot sample count" },
+    { "投影G样本峰值", "Projected-G sample peak" },
+    { "算法保存曲线G", "stored curve G" },
+    { "最终G高精度值", "final high-precision G" },
+    { "excess前", "excess-before" },
+    { "excess后", "excess-after" },
+    { "仅使用离地且 ", "use airborne samples with " },
+    { "触地垂直速度", "Touchdown vertical speed" },
+    { "拉平轨迹结论", "Flare trajectory conclusion" },
+    { "未检测到弹跳", "No bounce detected" },
+    { "触地跑道方向", "Touchdown runway" },
+    { "两次触地间隔", "Touchdown interval" },
+    { "确认离地时间", "Confirmed airborne time" },
+    { "原始采样频率", "Raw sampling rate" },
+    { "单调改善效率", "Monotonic improvement efficiency" },
+    { "末段改善占比", "Late-recovery ratio" },
+    { "曲率分析耗时", "Curvature analysis time" },
+    { "拉平曲率复算", "recalculated flare curvature" },
+    { "跑道摩擦状态", "Runway friction state" },
+    { "道面判定来源", "Surface determination source" },
+    { "冲量等效 G", "Impulse-equivalent G" },
+    { "平均采样间隔", "Average sample interval" },
+    { "最大采样间隔", "Maximum sample interval" },
+    { "落地分析耗时", "Landing analysis time" },
+    { "最终评分耗时", "Final rating time" },
+    { "逐样本审计表", "Per-Sample Audit Table" },
+    { "弹跳评分比较", "Bounce rating comparison" },
+    { "第一次稳健G", "first robust G" },
+    { "第二次稳健G", "second robust G" },
+    { "VVI中位数", "VVI median" },
+    { "压缩后中位数", "post-compression median" },
+    { "实际速度变化", "Actual velocity change" },
+    { "触地帧原始G", "raw touchdown-frame G" },
+    { "样本总体有效", "Samples valid overall" },
+    { "最终采用方式", "Final method" },
+    { "当前等级余量", "current-band margin" },
+    { "外部评分提示", "External rating hint" },
+    { "（升序，n=", " (ascending, n=" },
+    { "显示四舍五入", "rounded display" },
+    { "最小实际跨度", "minimum actual span" },
+    { "三组差值全部", "all three differences " },
+    { "最大样本间隔", "Maximum sample interval" },
+    { " 降级为 ", " to " },
+    { "下降率取值", "Vertical-speed source" },
+    { "第一次触地", "First touchdown" },
+    { "第二次触地", "Second touchdown" },
+    { "弹跳前评价", "Rating before bounce adjustment" },
+    { "弹跳后评价", "Rating after bounce adjustment" },
+    { "原始样本数", "Raw sample count" },
+    { "触地下降率", "Touchdown vertical speed" },
+    { "轨迹FPM", "TrajectoryFPM" },
+    { "物理FPM", "PhysicalFPM" },
+    { "曲率绝对值", "Absolute curvature" },
+    { "飞机磁航向", "Aircraft magnetic heading" },
+    { "触地帧过载", "Touchdown-frame load" },
+    { "数据可信度", "Data confidence" },
+    { "短窗中位数", "Short-window median" },
+    { "最差VVI", "Worst VVI" },
+    { "基线中位数", "Baseline median" },
+    { "稳健冲击G", "Robust impact G" },
+    { "一致性误差", "Consistency error" },
+    { "冲量等效G", "Impulse-equivalent G" },
+    { "高可信条件", "High-confidence condition" },
+    { "中可信条件", "Medium-confidence condition" },
+    { "无有效样本", "No valid samples" },
+    { "P25索引", "P25 index" },
+    { "P75索引", "P75 index" },
+    { "算法保存值", "stored algorithm value" },
+    { "升序第1项", "ascending item 1" },
+    { "最终FPM", "final FPM" },
+    { "且高G持续", "and high-G duration" },
+    { "显示 = ", "display = " },
+    { "算法保存G", "stored G" },
+    { "触地前快照", "pre-touchdown snapshot" },
+    { "全局P75", "global P75" },
+    { "冲击样本数", "Impact sample count" },
+    { "最终评价", "Final rating" },
+    { "评价说明", "Rating explanation" },
+    { "最终过载", "Final load" },
+    { "拉平曲率", "Flare curvature" },
+    { "弹跳检测", "Bounce detection" },
+    { "发生弹跳", "Bounce detected" },
+    { "落地机场", "Landing airport" },
+    { "（推算）", " (estimated)" },
+    { "道面提示", "Surface advisory" },
+    { "轨迹结论", "Trajectory conclusion" },
+    { "终点序号", "EndIndex" },
+    { "飞机文件", "Aircraft file" },
+    { "弹窗时机", "Popup timing" },
+    { "显示时长", "Display duration" },
+    { "屏幕位置", "Screen position" },
+    { "窗口布局", "Window layout" },
+    { "红色阈值", "red threshold" },
+    { "算法峰值", "Algorithm peak" },
+    { "高G阈值", "High-G threshold" },
+    { "冲量公式", "Impulse formula" },
+    { "本次余量", "This margin" },
+    { "样本无效", "Invalid samples" },
+    { "备用上限", "fallback cap" },
+    { "界面显示", "interface display" },
+    { "评分复算", "Rating Recalculation" },
+    { "窗口标记", "WindowFlags" },
+    { "选中窗口", "Selected window" },
+    { "样本不足", "Insufficient samples" },
+    { "两两差值", "Pairwise differences" },
+    { "最大差值", "maximum difference" },
+    { "最终来源", "final source" },
+    { "局部包络", "local envelope" },
+    { "左前侧风", "left-front crosswind" },
+    { "右前侧风", "right-front crosswind" },
+    { "左后侧风", "left-rear crosswind" },
+    { "右后侧风", "right-rear crosswind" },
+    { " 的样本", " samples" },
+    { "仅保留 ", "retain only " },
+    { "滑窗长度", "sliding-window length" },
+    { "每窗取P", "take P" },
+    { "算法保存", "stored" },
+    { "压缩时长", "compression duration" },
+    { "触地帧 ", "touchdown frame " },
+    { "原始峰值", "raw peak" },
+    { "无法确认", "unable to confirm" },
+    { "最少样本", "minimum samples" },
+    { "相对风", "Relative wind" },
+    { "T+秒", "T+s" },
+    { "轨迹高度基准", "Trajectory height reference" },
+    { "apt.dat 机场标高", "apt.dat airport elevation" },
+    { "飞机 MSL 高度减机场标高", "aircraft MSL altitude minus airport elevation" },
+    { "X-Plane 地形 AGL（无可用机场标高）", "X-Plane terrain AGL (airport elevation unavailable)" },
+    { "俯仰角", "Pitch angle" },
+    { "横滚角", "Roll angle" },
+    { "T相对", "T-relative" },
+    { "复算G", "recalculated G" },
+    { "斜率对", "slope pairs" },
+    { "可信度", "confidence" },
+    { "高G段", "High-G" },
+    { "高可信", "high confidence" },
+    { "低可信", "low confidence" },
+    { " 至 ", " to " },
+    { "公式", "Formula" },
+    { "迎角", "Angle of attack" },
+    { "编号", "Index" },
+    { "地面", "Ground" },
+    { "选中", "selected" },
+    { "样本", "samples" },
+    { "跨度", "span" },
+    { "索引", "index" },
+    { "复算", "recalculated" },
+    { "换算", "conversion" },
+    { "窗口", "window" },
+    { "最少", "at least" },
+    { "几何", "geometric" },
+    { "物理", "physical" },
+    { "判定", "Decision" },
+    { "规则", "Rule" },
+    { "段号", "Segment" },
+    { "G前", "G-before" },
+    { "G后", "G-after" },
+    { "本段", "segment" },
+    { "累计", "cumulative" },
+    { "误差", "error" },
+    { "上限", "limit" },
+    { "终点", "end" },
+    { "起点", "start" },
+    { "风 ", "Wind " },
+    { "顶风", "headwind" },
+    { "顺风", "tailwind" },
+    { " 秒", " s" },
+    { "（", " (" },
+    { "）", ")" },
+    { "，", ", " },
+    { "；", "; " },
+    { "。", "." },
+    { "×", " x " },
+    { "≤", "<=" },
+    { "≥", ">=" },
+    { "π", "pi" },
+
+}
+
+function log_tools.replace_report_plain(source, old_text, new_text)
+    local start_index = 1
+    while true do
+        local found_start, found_end = string.find(source, old_text, start_index, true)
+        if found_start == nil then break end
+        source = string.sub(source, 1, found_start - 1)
+            .. new_text
+            .. string.sub(source, found_end + 1)
+        start_index = found_start + string.len(new_text)
+    end
+    return source
+end
+
+function log_tools.english_report_text(value)
+    if type(value) ~= "string" or value == "" then return value end
+    -- 纯 ASCII 的数值表格行无需遍历术语表，完整数学日志开启时可明显减少写入开销。
+    if string.find(value, "[\128-\255]") == nil then return value end
+    local output = value
+    for i = 1, #log_tools.report_translations do
+        local pair = log_tools.report_translations[i]
+        output = log_tools.replace_report_plain(output, pair[1], pair[2])
+    end
+    return output
+end
+
+function log_tools.make_report_writer(raw_file)
+    if runtime_state.document_language ~= "en" then return raw_file end
+    local writer = { raw_file = raw_file }
+    function writer:write(...)
+        for i = 1, select("#", ...) do
+            local value = select(i, ...)
+            local ok, write_error = self.raw_file:write(log_tools.english_report_text(value))
+            if ok == nil then return nil, write_error end
+        end
+        return self
+    end
+    function writer:close()
+        return self.raw_file:close()
+    end
+    return writer
 end
 
 local function next_log_file_path()
@@ -2777,6 +4468,8 @@ local function next_log_file_path()
         .. runway_token
         .. "_"
         .. file_timestamp
+        .. "_"
+        .. (runtime_state.document_language == "en" and "EN" or "CN")
     local suffix = 0
 
     while suffix < 1000 do
@@ -2802,42 +4495,23 @@ end
 local function log_landing_summary()
     if logMsg then
         logMsg(string.format(
-            "[StarLux LMM] Aircraft=%s | Airport=%s | RWY~%s | Surface=%s | FlareCurve=%.1f trend=%s samples=%d | Bounce=%s second=%dfpm/%.2fG | FPM vviMedian=%d physicalP25=%d aglSlope=%d maxPairDiff=%d selected=%d fpmConfidence=%s source=%s | G touch=%.2f peak=%.2f curve=%.2f local=%.2f robust=%.2f equiv=%.2f used=%.2f | impulseErr=%.0f%% confidence=%s method=%s | IAS=%.0f GS=%.0f AoA=%.1f Roll=%.1f | Wind=%03d/%dkt | Mode=%s | Layout=%s",
+            "[StarLux LMM] %s | %s RWY%s | FPM=%d source=%s physical=%d AGL=%d VVI=%d | G=%.2f fixed160=%.2f physicsAvg=%.2f closure=%.0f%% | Bounce=%s | Surface=%s | IAS/GS=%.0f/%.0f",
             landing_context.aircraft_icao,
             landing_context.airport_id,
             landing_context.runway,
-            landing_surface.warning_type,
-            flare_analysis.metric,
-            flare_analysis.trend_text,
-            flare_trace.count,
-            bounce_state.detected and "YES" or "NO",
-            bounce_state.second_fpm,
-            bounce_state.second_curve_g,
-            round_num(landing_analysis.vvi_fpm),
+            landing_fpm,
+            landing_analysis.flare_fpm_source,
             round_num(landing_analysis.physical_fpm),
             round_num(landing_analysis.agl_fpm),
-            round_num(landing_analysis.fpm_max_pair_difference),
-            debug_data.selected_fpm,
-            landing_analysis.fpm_confidence,
-            landing_analysis.flare_fpm_source,
-            landing_touch_g,
-            landing_peak_g,
-            debug_data.robust_g,
-            landing_analysis.local_event_g,
-            landing_analysis.robust_event_g,
-            debug_data.expected_max_g,
+            round_num(landing_analysis.vvi_fpm),
             landing_g,
+            landing_analysis.local_event_g,
+            landing_analysis.equivalent_g,
             landing_analysis.consistency_error * 100,
-            landing_analysis.confidence,
-            landing_analysis.method,
+            bounce_state.detected and "YES" or "NO",
+            landing_surface.warning_type,
             landing_ias_kts,
-            landing_gs_kts,
-            landing_aoa_deg,
-            landing_roll_deg,
-            round_num(normalize_deg(landing_wind_heading_deg)),
-            round_num(landing_wind_speed_kts),
-            POPUP_MODE,
-            POPUP_LAYOUT
+            landing_gs_kts
         ))
     end
 end
@@ -2894,7 +4568,7 @@ local function write_sorted_scratch(file, label, decimals)
 end
 
 local function math_boolean_text(value)
-    return value and "是" or "否"
+    return value and log_tools.ui_text("是", "Yes") or log_tools.ui_text("否", "No")
 end
 
 local function audit_flag(enabled, text)
@@ -2984,7 +4658,7 @@ end
 local function write_primary_math_audit(file)
     local touch_time = landing_analysis.touch_time
     local physical_start = touch_time - PHYSICAL_FPM_WINDOW_SECONDS
-    local short_start = touch_time - PHYSICAL_FPM_SHORT_WINDOW_SECONDS
+    local contact_start = touch_time - PHYSICAL_FPM_CONTACT_WINDOW_SECONDS
     local diagnostic_start = touch_time - VVI_DIAGNOSTIC_WINDOW_SECONDS
     local agl_start = touch_time - landing_analysis.fpm_validation.agl_window_seconds
     local agl_end = touch_time - landing_analysis.fpm_validation.agl_end_guard_seconds
@@ -3020,7 +4694,7 @@ local function write_primary_math_audit(file)
             and sample.t <= agl_end
             and sample.agl_m >= 0
             and sample.agl_m <= terminal_max_agl_m
-        local in_short = airborne and sample.t >= short_start and sample.t <= touch_time
+        local in_contact = airborne and sample.t >= contact_start and sample.t <= touch_time
         local in_diagnostic = airborne and sample.t >= diagnostic_start and sample.t <= touch_time
         local in_agl = airborne
             and sample.t >= agl_start
@@ -3032,7 +4706,7 @@ local function write_primary_math_audit(file)
         local in_post = sample.t >= post_start and sample.t <= landing_analysis.end_time
         local flags = table.concat({
             audit_flag(in_physical, "F5"),
-            audit_flag(in_short, "F80"),
+            audit_flag(in_contact, "F100"),
             audit_flag(in_diagnostic, "V850"),
             audit_flag(in_agl, "AGL"),
             audit_flag(in_baseline, "BASE"),
@@ -3055,7 +4729,7 @@ local function write_primary_math_audit(file)
             flags
         ))
     end
-    file:write("\n窗口标记: F5=5ft以下250ms物理FPM/VVI，F80=80ms短窗，V850=850ms最差VVI，AGL=5ft以下几何高度斜率窗口，BASE=接地前G基线，IMPACT=第一次压缩，POST=压缩末端速度。\n\n")
+    file:write("\n窗口标记: F5=5ft以下250ms物理备用/VVI参考，F100=接地前100ms物理候选窗，V850=850ms最差VVI诊断，AGL=5ft以下几何锚点，BASE=接地前G参考，IMPACT=第一次压缩，POST=压缩末端速度。\n\n")
 
     local physical_count = collect_audit_values(
         math_audit.samples,
@@ -3071,29 +4745,31 @@ local function write_primary_math_audit(file)
     local physical_value = physical_index > 0 and sort_scratch[physical_index] or 0
     write_sorted_scratch(file, "5ft以下250ms物理垂直速度(m/s)", 9)
     file:write(string.format(
-        "P25索引 = ceil(%d × %.2f) = %d；选中 %.9f m/s × 196.850394 = %.9f fpm；显示四舍五入 = %d fpm\n\n",
+        "备用P25索引 = ceil(%d × %.2f) = %d；%.9f m/s × 196.850394 = %.9f fpm；算法备用值 = %.9f fpm\n\n",
         physical_count,
         PHYSICAL_FPM_PERCENTILE,
         physical_index,
         physical_value,
         physical_value * 196.850394,
-        round_num(physical_value * 196.850394)
+        landing_analysis.physical_fallback_fpm
     ))
 
-    local short_count = collect_audit_values(
+    local contact_count = collect_audit_values(
         math_audit.samples,
         math_audit.count,
-        short_start,
+        contact_start,
         touch_time,
         "local_vy",
         true
     )
-    local short_value = scratch_median() or 0
-    write_sorted_scratch(file, "80ms物理垂直速度(m/s)", 9)
+    local contact_value = scratch_median() or 0
+    write_sorted_scratch(file, "接地前100ms物理垂直速度(m/s)", 9)
     file:write(string.format(
-        "短窗中位数 = %.9f m/s；换算 = %.9f fpm\n\n",
-        short_value,
-        short_value * 196.850394
+        "接地主窗中位数(n=%d) = %.9f m/s；换算 = %.9f fpm；最终物理候选值 = %.9f fpm\n\n",
+        contact_count,
+        contact_value,
+        contact_value * 196.850394,
+        landing_analysis.physical_fpm
     ))
 
     local vvi_count = collect_audit_values(
@@ -3109,7 +4785,7 @@ local function write_primary_math_audit(file)
     write_sorted_scratch(file, "5ft以下250ms VVI(fpm)", 6)
     file:write(string.format("VVI中位数(n=%d) = %.9f fpm\n\n", vvi_count, vvi_value))
 
-    file:write("5ft以下三链交叉验证复算\n")
+    file:write("接地 FPM 的 AGL 锚点选择\n")
     file:write(string.format(
         "窗口: T-%.3f s 至 T-%.3f s；仅使用离地且 AGL≤%.1f ft 的样本；最少 %d 个样本且跨度不少于 %.3f s。\n",
         landing_analysis.fpm_validation.agl_window_seconds,
@@ -3123,7 +4799,7 @@ local function write_primary_math_audit(file)
         landing_analysis.fpm_validation.agl_min_pair_gap_seconds
     ))
     file:write(string.format(
-        "物理样本=%d；VVI样本=%d；几何样本=%d；斜率对=%d；跨度=%.9f s；物理=%.9f；VVI=%.9f；几何=%.9f fpm。\n",
+        "接地主窗物理样本=%d；VVI参考样本=%d；几何样本=%d；斜率对=%d；跨度=%.9f s；物理候选=%.9f；VVI候选=%.9f；AGL锚点=%.9f fpm。\n",
         landing_analysis.physical_sample_count,
         landing_analysis.vvi_sample_count,
         landing_analysis.agl_sample_count,
@@ -3140,12 +4816,29 @@ local function write_primary_math_audit(file)
         abs_value(landing_analysis.agl_vvi_difference),
         landing_analysis.fpm_max_pair_difference
     ))
-    file:write(string.format(
-        "判定: 三组差值全部<=%d 为高可信并采用物理FPM；任一组超过阈值立即回退VVI。最终来源=%s；可信度=%s；最终FPM=%d。\n\n",
-        landing_analysis.fpm_validation.max_pair_difference_fpm,
-        landing_analysis.flare_fpm_source,
-        landing_analysis.fpm_confidence,
-        landing_fpm
+    file:write(log_tools.ui_text(
+        string.format(
+            "选择规则: AGL 几何下降率作为锚点；物理 FPM 与 VVI 中距离 AGL 最近且差值不超过%d fpm者胜出，两者均超限时直接采用 AGL。AGL 缺样时依次回退到物理候选与 VVI。\n",
+            landing_analysis.fpm_validation.agl_anchor_max_difference_fpm
+        ),
+        string.format(
+            "Selection rule: use AGL geometric vertical speed as the anchor; select whichever of physical FPM and VVI is closest to AGL within %d fpm, otherwise use AGL directly. If AGL samples are unavailable, fall back to physical FPM and then VVI.\n",
+            landing_analysis.fpm_validation.agl_anchor_max_difference_fpm
+        )
+    ))
+    file:write(log_tools.ui_text(
+        string.format(
+            "最终来源=%s；取值说明=%s；最终FPM=%d。\n\n",
+            landing_analysis.flare_fpm_source,
+            landing_analysis.fpm_method,
+            landing_fpm
+        ),
+        string.format(
+            "Final source=%s; rationale=%s; final FPM=%d.\n\n",
+            landing_analysis.flare_fpm_source,
+            log_tools.english_report_text(landing_analysis.fpm_method),
+            landing_fpm
+        )
     ))
 
     local diagnostic_count = collect_audit_values(
@@ -3238,9 +4931,9 @@ local function write_primary_math_audit(file)
         landing_analysis.curve_g
     ))
 
-    file:write("160ms局部冲击包络复算\n")
+    file:write("接地后固定160ms稳健G复算\n")
     file:write(string.format(
-        "规则: 滑窗长度=%.3f s，最少样本=%d，最小实际跨度=%.3f s；每窗取P%.0f，最终取各窗P75最大值。\n",
+        "规则: 从第一次接触起固定窗口长度=%.3f s，最少样本=%d，最小实际跨度=%.3f s；固定窗口取P%.0f，不滑动搜索最大值。\n",
         landing_analysis.g_local_event.window_seconds,
         landing_analysis.g_local_event.min_samples,
         landing_analysis.g_local_event.min_span_seconds,
@@ -3261,9 +4954,9 @@ local function write_primary_math_audit(file)
                 math.ceil(local_event_count * landing_analysis.g_local_event.percentile)
             ) or 0
         local local_event_value = local_event_index > 0 and sort_scratch[local_event_index] or 0
-        write_sorted_scratch(file, "选中局部窗口垂直投影G", 9)
+        write_sorted_scratch(file, "固定接地窗口垂直投影G", 9)
         file:write(string.format(
-            "选中窗口: T%+.9f 至 T%+.9f s；样本=%d；跨度=%.9f s；P75索引=%d；复算=%.9f G；算法保存=%.9f G。\n",
+            "固定窗口: T%+.9f 至 T%+.9f s；样本=%d；跨度=%.9f s；P75索引=%d；复算=%.9f G；算法保存=%.9f G。\n",
             landing_analysis.local_event_window_start_time - touch_time,
             landing_analysis.local_event_window_end_time - touch_time,
             local_event_count,
@@ -3273,17 +4966,16 @@ local function write_primary_math_audit(file)
             landing_analysis.local_event_g
         ))
     else
-        file:write("没有满足最少样本与跨度要求的局部窗口，回退全局P75。\n")
+        file:write("固定160ms窗口不满足最少样本与跨度要求，回退第一次压缩全段P75。\n")
     end
     file:write(string.format(
-        "稳健冲击G=max(全局P75 %.9f, 局部包络 %.9f)=%.9f G。\n\n",
-        landing_analysis.curve_g,
+        "最终稳健G=固定160ms P75 %.9f（全段P75参考 %.9f）=%.9f G。\n\n",
         landing_analysis.local_event_g,
+        landing_analysis.curve_g,
         landing_analysis.robust_event_g
     ))
 
-    local high_threshold = landing_analysis.baseline_g
-        + math.max(0, landing_peak_g - landing_analysis.baseline_g) * 0.80
+    local high_threshold = 1.0 + math.max(0, landing_peak_g - 1.0) * 0.80
     local replay_impulse = 0
     local replay_high_duration = 0
     local replay_gap_sum = 0
@@ -3293,7 +4985,7 @@ local function write_primary_math_audit(file)
     local previous_g = nil
     file:write("冲量梯形积分逐段复算\n")
     file:write(string.format(
-        "高G阈值 = baseline + (peak-baseline)×0.80 = %.9f G\n",
+        "高G诊断阈值 = 1.0 + (peak-1.0)×0.80 = %.9f G\n",
         high_threshold
     ))
     file:write("段号  dt(s)       G前         G后         excess前    excess后    本段Δv(m/s)  累计Δv(m/s)  高G段\n")
@@ -3305,8 +4997,8 @@ local function write_primary_math_audit(file)
             if previous_t ~= nil then
                 segment_index = segment_index + 1
                 local dt = sample.t - previous_t
-                local previous_excess = math.max(0, previous_g - landing_analysis.baseline_g)
-                local current_excess = math.max(0, sample.projected_g - landing_analysis.baseline_g)
+                local previous_excess = previous_g - 1.0
+                local current_excess = sample.projected_g - 1.0
                 local contribution = 0
                 local high_segment = false
                 if dt > replay_max_gap then replay_max_gap = dt end
@@ -3363,18 +5055,15 @@ local function write_primary_math_audit(file)
         landing_analysis.consistency_error * 100
     ))
     file:write(string.format(
-        "冲量等效G = clamp(1,5, baseline + Δv/(9.80665×压缩时长)) = clamp(1,5, %.9f + %.9f/(9.80665×%.9f)) = %.9f G\n\n",
-        landing_analysis.baseline_g,
+        "物理平均G = clamp(1,5, 1.0 + Δv/(9.80665×压缩时长)) = clamp(1,5, 1.0 + %.9f/(9.80665×%.9f)) = %.9f G\n\n",
         landing_analysis.velocity_delta_mps,
         landing_analysis.stop_duration_seconds,
         landing_analysis.equivalent_g
     ))
 
-    local samples_valid = landing_analysis.physical_fpm_valid
-        and impact_count >= 3
+    local samples_valid = impact_count >= 3
         and landing_analysis.max_sample_gap_seconds <= MAX_VALID_SAMPLE_GAP_SECONDS
-    file:write("可信度与最终G分支复算\n")
-    file:write("物理FPM样本有效: " .. math_boolean_text(landing_analysis.physical_fpm_valid) .. "\n")
+    file:write("G采样与最终分支复算\n")
     file:write(string.format("冲击样本数 >= 3: %s（%d）\n", math_boolean_text(impact_count >= 3), impact_count))
     file:write(string.format(
         "最大样本间隔 <= %.3f s: %s（%.9f s）\n",
@@ -3383,25 +5072,7 @@ local function write_primary_math_audit(file)
         landing_analysis.max_sample_gap_seconds
     ))
     file:write("样本总体有效: " .. math_boolean_text(samples_valid) .. "\n")
-    file:write(string.format(
-        "高可信条件: 误差 <= %.2f 且高G持续 >= %.3f s -> %s\n",
-        CONSISTENCY_HIGH_MAX_ERROR,
-        HIGH_G_DURATION_MIN_SECONDS,
-        math_boolean_text(
-            samples_valid
-            and landing_analysis.consistency_error <= CONSISTENCY_HIGH_MAX_ERROR
-            and landing_analysis.high_g_duration_seconds >= HIGH_G_DURATION_MIN_SECONDS
-        )
-    ))
-    file:write(string.format(
-        "中可信条件: 误差 <= %.2f 且高G持续 > 0 -> %s\n",
-        CONSISTENCY_MEDIUM_MAX_ERROR,
-        math_boolean_text(
-            samples_valid
-            and landing_analysis.consistency_error <= CONSISTENCY_MEDIUM_MAX_ERROR
-            and landing_analysis.high_g_duration_seconds > 0
-        )
-    ))
+    file:write(string.format("冲量闭合复核: <= %.0f%% 为通过，<= %.0f%% 为可复核，超过则提示偏差；复核结果不覆盖有效的实测稳健G。\n", CONSISTENCY_HIGH_MAX_ERROR * 100, CONSISTENCY_MEDIUM_MAX_ERROR * 100))
     file:write("最终采用方式: " .. landing_analysis.method .. "\n")
     local fallback_margin = G_FALLBACK_MARGIN_NICE
     local absolute_landing_fpm = abs_value(landing_fpm)
@@ -3421,7 +5092,7 @@ local function write_primary_math_audit(file)
         fallback_g_cap(landing_fpm)
     ))
     file:write(string.format(
-        "样本无效: finalG=min(curveG,备用上限)；高可信: finalG=curveG；中可信或长压缩超时: finalG=max(curveG,localEventG)；低可信: finalG=0.25×curveG+0.75×equivalentG。\n"
+        "样本有效: finalG=固定160ms P75（固定窗不足时回退全段P75）；样本无效: finalG=min(全段P75, FPM备用上限)。物理平均G和冲量闭合误差只用于复核。\n"
     ))
     file:write(string.format(
         "所有分支最终执行 clamp(1,5,finalG)；最终G高精度值 = %.9f G；界面显示 = %.2f G\n\n",
@@ -3443,7 +5114,16 @@ local function write_primary_math_audit(file)
     ))
     file:write("FPM与G分别分档，最终取较严重等级；基础复算结果: "
         .. status_short(classify_landing(landing_fpm, landing_g, EXTERNAL_SCORE_HINT)) .. "\n")
-    file:write("外部评分提示: " .. (EXTERNAL_SCORE_HINT or "无") .. "\n")
+    file:write("外部评分提示: " .. (EXTERNAL_SCORE_HINT or log_tools.ui_text("无", "None")) .. "\n")
+    if landing_context.centerline_penalty_applied then
+        file:write("中心线评分修正已应用: " .. landing_context.centerline_warning_text
+            .. "；修正前 " .. status_short(landing_context.centerline_original_status)
+            .. "；当前 " .. status_short(landing_status) .. "\n")
+    elseif landing_context.runway_detected then
+        file:write("中心线评分修正未触发: 中心线偏差未超过 7 米，不影响评分\n")
+    else
+        file:write("中心线评分修正未应用: 跑道未可靠识别\n")
+    end
     if bounce_state.detected then
         file:write("弹跳修正规则已应用；最终结果: " .. status_short(landing_status) .. "\n")
     else
@@ -3457,16 +5137,17 @@ end
 local function write_landing_log()
     -- 日志目录已在脚本加载阶段创建；落地时不再调用 os.execute，避免瞬时卡顿。
     local log_path = next_log_file_path()
-    local file, err = io.open(log_path, "w")
-    if file == nil then
+    local raw_file, err = io.open(log_path, "w")
+    if raw_file == nil then
         if logMsg then
             logMsg("[StarLux LMM] Unable to write landing log: " .. tostring(err))
         end
         return false, tostring(err)
     end
+    local file = log_tools.make_report_writer(raw_file)
 
     file:write("\239\187\191")
-    file:write("StarLux 落地率插件 v1.1 - 单次落地记录\n")
+    file:write("StarLux 落地率插件 v1.1.4 - 单次落地记录\n")
     file:write("======================================================================\n\n")
 
     file:write("一、核心落地结果\n")
@@ -3475,8 +5156,7 @@ local function write_landing_log()
     file:write("最终评价: " .. status_short(landing_status) .. "\n")
     file:write("评价说明: " .. status_explanation(landing_status) .. "\n")
     file:write("触地垂直速度: " .. vertical_speed_log_text(landing_fpm) .. "\n")
-    file:write("下降率取值: " .. (landing_analysis.flare_fpm_source == "PHYSICAL" and "物理轨迹（三项终端测量一致）" or "垂直速度 VVI（三项终端测量存在差异，已自动采用）") .. "\n")
-    file:write("FPM数据可信度: " .. confidence_text(landing_analysis.fpm_confidence) .. "\n")
+    file:write("下降率取值: " .. fpm_source_log_text() .. "\n")
     file:write(string.format("最终过载: %.2f G\n", landing_g))
     if flare_analysis.valid then
         file:write(string.format(
@@ -3498,10 +5178,21 @@ local function write_landing_log()
         end
         file:write("落地机场: " .. landing_context.airport_id .. airport_name_suffix .. "\n")
     end
-    file:write("触地跑道方向: RWY" .. landing_context.runway .. "（推算）\n")
+    if landing_context.runway_detected then
+        file:write("触地跑道方向: RWY" .. landing_context.runway .. "（apt.dat 实测匹配）\n")
+    else
+        file:write("触地跑道方向: 未识别（未使用磁航向猜测）\n")
+    end
     file:write(string.format("IAS / GS: %.0f / %.0f kt\n", landing_ias_kts, landing_gs_kts))
     file:write("相对风: " .. landing_wind_relative_text .. "\n")
-    file:write("道面提示: " .. (landing_surface.warning_text ~= "" and landing_surface.warning_text or "无") .. "\n\n")
+    if landing_context.centerline_penalty_applied then
+        file:write("中心线评价: " .. landing_context.centerline_warning_text .. "\n")
+    elseif landing_context.runway_detected then
+        file:write("中心线评价: 中心线偏差未超过 7 米，不影响评分\n")
+    else
+        file:write("中心线评价: 未参与评分（跑道未可靠识别）\n")
+    end
+    file:write("道面提示: " .. (landing_surface.warning_text ~= "" and landing_surface.warning_text or log_tools.ui_text("无", "None")) .. "\n\n")
 
     if bounce_state.detected then
         file:write("弹跳与两次触地\n")
@@ -3542,11 +5233,24 @@ local function write_landing_log()
     file:write("二、100英尺后拉平轨迹\n")
     file:write("----------------------------------------------------------------------\n")
     file:write(string.format("原始采样频率: %.1f Hz\n", 1 / FLARE_CONFIG.sample_interval_seconds))
-    file:write("原始样本数: " .. tostring(flare_trace.count) .. "\n")
-    file:write("0.5秒聚合点数: " .. tostring(flare_trace.bucket_count) .. "\n")
-    file:write("是否达到容量上限: " .. (flare_trace.limited and "是" or "否") .. "\n")
+    file:write("原始样本数: " .. tostring(flare_trace.analysis_sample_count) .. "\n")
+    file:write("预采样原始样本数: " .. tostring(flare_trace.count) .. "\n")
+    file:write("0.25秒聚合点数: " .. tostring(flare_trace.bucket_count) .. "\n")
+    file:write("是否达到容量上限: " .. (flare_trace.limited and log_tools.ui_text("是", "Yes") or log_tools.ui_text("否", "No")) .. "\n")
+    if flare_trace.height_reference == "APT_ELEVATION" then
+        file:write(string.format(
+            "轨迹高度基准: apt.dat 机场标高 %.1f ft（飞机 MSL 高度减机场标高）\n",
+            flare_trace.reference_elevation_ft
+        ))
+    else
+        file:write("轨迹高度基准: X-Plane 地形 AGL（无可用机场标高）\n")
+    end
+    file:write(string.format(
+        "轨迹接地基准校准: %.2f ft（飞机参考点接地高度，已从整段轨迹扣除）\n",
+        flare_trace.touch_reference_ft
+    ))
     file:write(string.format("100 ft 至触地时间: %.2f s\n", flare_analysis.duration_seconds))
-    file:write("轨迹下降率取值: " .. (landing_analysis.flare_fpm_source == "PHYSICAL" and "物理轨迹（三项终端测量一致）" or "垂直速度 VVI（三项终端测量存在差异，已自动采用）") .. "\n")
+    file:write("轨迹下降率取值: " .. fpm_source_log_text() .. "\n")
     file:write(string.format("100 ft 附近下降率: %.0f fpm\n", flare_analysis.entry_fpm))
     file:write(string.format("触地下降率: %d fpm\n", landing_fpm))
     file:write(string.format("下降率净改善量: %+.0f fpm\n", flare_analysis.recovery_fpm))
@@ -3568,11 +5272,11 @@ local function write_landing_log()
         FLARE_CONFIG.oscillation_efficiency_max,
         FLARE_CONFIG.oscillation_worsening_ratio_min
     ))
-    file:write("评分说明: v1.1 的拉平曲率仅用于复盘展示，暂不参与评分。\n")
+    file:write("评分说明: v1.1.4 的拉平曲率仅用于复盘展示，暂不参与评分。\n")
     file:write(string.format("曲率分析耗时: %.3f ms\n\n", flare_analysis.calculation_ms))
 
     if landing_analysis.math_log_enabled then
-        file:write("0.5秒聚合轨迹表（高精度复算输入）\n")
+        file:write("0.25秒聚合轨迹表（高精度复算输入）\n")
         file:write("T+秒         RA(ft)       轨迹FPM       VVI          IAS        GS         Pitch       AoA         Roll        物理FPM\n")
         file:write("------------------------------------------------------------------------------------------------------------------------\n")
         for i = 1, flare_trace.bucket_count do
@@ -3648,7 +5352,7 @@ local function write_landing_log()
             sort_scratch[i] = nil
         end
     else
-        file:write("0.5秒聚合轨迹表\n")
+        file:write("0.25秒聚合轨迹表\n")
         file:write("T+秒   RA(ft)   轨迹FPM   VVI   IAS   GS   Pitch   AoA   Roll   物理FPM\n")
         file:write("--------------------------------------------------------------------------------\n")
         for i = 1, flare_trace.bucket_count do
@@ -3676,9 +5380,10 @@ local function write_landing_log()
         file:write("飞机文件: " .. landing_context.aircraft_file .. "\n")
     end
     file:write(string.format("触地点距机场参考点: %.1f km\n", landing_context.airport_distance_km))
-    file:write("跑道说明: 根据触地磁航向推算，暂不区分 L/R/C。\n")
+    log_tools.write_runway_reference(file)
     file:write(string.format("真空速（TAS）: %.0f kt\n", landing_tas_kts))
     file:write(string.format("迎角: %.1f deg\n", landing_aoa_deg))
+    file:write(string.format("俯仰角: %+.1f deg\n", approach_data.pitch_deg))
     file:write("横滚角: " .. roll_log_text(landing_roll_deg) .. "\n")
     file:write(string.format("飞机磁航向: %03d deg\n", round_num(normalize_deg(landing_heading_deg))))
     file:write(string.format(
@@ -3695,79 +5400,49 @@ local function write_landing_log()
     ))
     file:write("道面判定来源: " .. landing_surface.source_text .. "\n\n")
 
-    file:write("四、FPM与G算法诊断\n")
+    file:write("四、着陆数据复核\n")
     file:write("----------------------------------------------------------------------\n")
     file:write("最终显示/评分 FPM: " .. vertical_speed_log_text(landing_fpm) .. "\n")
-    file:write("FPM数据可信度: " .. confidence_text(landing_analysis.fpm_confidence) .. "\n")
+    file:write("FPM 采用源: " .. fpm_source_log_text() .. "\n")
     file:write("下降率取值说明: " .. landing_analysis.fpm_method .. "\n")
-    file:write(string.format(
-        "三链终端窗口: 触地前 %.0f ms、AGL不高于 %.1f ft\n",
-        landing_analysis.fpm_validation.agl_window_seconds * 1000,
-        landing_analysis.fpm_validation.terminal_agl_ft
-    ))
-    file:write("同窗 VVI 中位数: " .. vertical_speed_log_text(round_num(landing_analysis.vvi_fpm)) .. "\n")
     if landing_analysis.physical_fpm_valid then
-        file:write("250 ms 物理速度第25百分位: " .. vertical_speed_log_text(round_num(landing_analysis.physical_fpm)) .. "\n")
+        file:write("接地前物理下降率: " .. vertical_speed_log_text(round_num(landing_analysis.physical_fpm)) .. "\n")
     else
-        file:write("250 ms 物理速度第25百分位: 样本不足\n")
+        file:write("接地前物理下降率: 样本不足\n")
     end
-    file:write("80 ms 物理速度中位数: " .. vertical_speed_log_text(round_num(landing_analysis.physical_short_fpm)) .. "\n")
-    file:write("0.85 s 最差 VVI: " .. vertical_speed_log_text(round_num(landing_analysis.vvi_min_fpm)) .. "\n")
     if landing_analysis.agl_fpm_valid then
-        file:write("第三链 AGL 高度变化下降率: " .. vertical_speed_log_text(round_num(landing_analysis.agl_fpm)) .. "\n")
+        file:write("AGL 几何锚点下降率: " .. vertical_speed_log_text(round_num(landing_analysis.agl_fpm)) .. "\n")
     else
-        file:write("第三链 AGL 高度变化下降率: 样本不足，无法确认\n")
+        file:write("AGL 几何锚点下降率: 样本不足\n")
     end
-    file:write(string.format("物理主值与同窗 VVI 差值: %+d fpm\n", round_num(landing_analysis.fpm_difference)))
-    file:write(string.format("物理FPM与AGL链差值: %+d fpm\n", round_num(landing_analysis.agl_physical_difference)))
-    file:write(string.format("VVI与AGL链差值: %+d fpm\n", round_num(landing_analysis.agl_vvi_difference)))
-    file:write(string.format("三链最大两两差值: %d fpm\n", round_num(landing_analysis.fpm_max_pair_difference)))
+    file:write("VVI 参考下降率: " .. vertical_speed_log_text(round_num(landing_analysis.vvi_fpm)) .. "\n")
     file:write(string.format(
-        "FPM物理/VVI窗口样本数: %d / %d\n",
+        "FPM 物理/VVI有效样本: %d / %d\n",
         landing_analysis.physical_sample_count,
         landing_analysis.vvi_sample_count
     ))
-    file:write(string.format(
-        "AGL验证样本/斜率对/跨度: %d / %d / %.3f s\n",
-        landing_analysis.agl_sample_count,
-        landing_analysis.agl_pair_count,
-        landing_analysis.agl_sample_span_seconds
-    ))
-    file:write(string.format(
-        "三链阈值: 5 ft以下三组两两差值均 ≤ %d fpm 才为高可信；任一组超过阈值立即降低可信度并由 VVI 接管。\n",
-        landing_analysis.fpm_validation.max_pair_difference_fpm
-    ))
-    file:write(string.format("触地帧过载: %.2f G\n", landing_touch_g))
-    file:write(string.format("第一次压缩原始峰值: %.2f G\n", landing_peak_g))
-    file:write(string.format("第75百分位曲线 G: %.2f G\n", landing_analysis.curve_g))
-    if landing_analysis.local_event_g_valid then
-        file:write(string.format("160 ms 局部冲击包络 G: %.2f G\n", landing_analysis.local_event_g))
-        file:write(string.format(
-            "局部包络窗口样本/跨度/P75索引: %d / %.0f ms / %d\n",
-            landing_analysis.local_event_sample_count,
-            landing_analysis.local_event_window_span_seconds * 1000,
-            landing_analysis.local_event_percentile_index
-        ))
-    else
-        file:write("160 ms 局部冲击包络 G: 样本不足，使用全局P75\n")
-    end
-    file:write(string.format("中可信度稳健冲击 G: %.2f G\n", landing_analysis.robust_event_g))
-    file:write(string.format("接地前垂直 G 基线: %.2f G\n", landing_analysis.baseline_g))
-    file:write(string.format("冲量等效 G: %.2f G\n", landing_analysis.equivalent_g))
-    file:write("第一次压缩结束原因: " .. landing_analysis.capture_end_reason .. "\n")
-    file:write(string.format("第一次压缩持续时间: %.0f ms\n", landing_analysis.stop_duration_seconds * 1000))
-    file:write(string.format("高 G 持续时间: %.0f ms\n", landing_analysis.high_g_duration_seconds * 1000))
-    file:write(string.format("G 冲量推算速度变化: %.3f m/s\n", landing_analysis.impulse_delta_mps))
-    file:write(string.format("实际垂直速度变化: %.3f m/s\n", landing_analysis.velocity_delta_mps))
-    file:write(string.format("冲量一致性误差: %.1f%%\n", landing_analysis.consistency_error * 100))
-    file:write("数据可信度: " .. confidence_text(landing_analysis.confidence) .. "\n")
+    file:write(string.format("最终显示/评分 G: %.2f G\n", landing_g))
     file:write("最终 G 采用方式: " .. landing_analysis.method .. "\n")
-    file:write("是否启用备用算法: " .. (landing_analysis.used_fallback and "是" or "否") .. "\n")
-    file:write("冲击阶段有效样本数: " .. tostring(landing_analysis.impact_sample_count) .. "\n")
+    if landing_analysis.local_event_g_valid then
+        file:write(string.format("接地后固定 160 ms 稳健 G: %.2f G\n", landing_analysis.local_event_g))
+    else
+        file:write(string.format(
+            "接地后固定 160 ms 稳健 G: %.2f G（固定窗样本不足，采用全段P75）\n",
+            landing_analysis.local_event_g
+        ))
+    end
+    file:write(string.format("物理平均 G: %.2f G\n", landing_analysis.equivalent_g))
+    file:write(string.format("G 冲量闭合误差: %.1f%%\n", landing_analysis.consistency_error * 100))
+    file:write("G 复核结论: " .. (
+        landing_analysis.used_fallback and log_tools.ui_text("采样不足，已使用备用值", "Insufficient samples; fallback used")
+        or (landing_analysis.consistency_error <= CONSISTENCY_MEDIUM_MAX_ERROR
+            and log_tools.ui_text("通过", "Pass")
+            or log_tools.ui_text("偏差较大，请结合原始轨迹复核", "Large deviation; review the raw trace"))
+    ) .. "\n")
+    file:write("G 有效样本数: " .. tostring(landing_analysis.impact_sample_count) .. "\n")
     file:write(string.format("平均采样间隔: %.1f ms\n", landing_analysis.average_sample_gap_seconds * 1000))
     file:write(string.format("最大采样间隔: %.1f ms\n", landing_analysis.max_sample_gap_seconds * 1000))
-    file:write(string.format("落地分析耗时: %.3f ms\n", landing_analysis.analysis_ms))
-    file:write(string.format("最终评分耗时: %.3f ms\n\n", landing_analysis.finalize_ms))
+    file:write("\n")
 
     file:write("五、评分阈值与显示设置\n")
     file:write("----------------------------------------------------------------------\n")
@@ -3779,11 +5454,12 @@ local function write_landing_log()
     file:write("弹窗时机: " .. log_tools.popup_mode_log_text() .. "\n")
     file:write("显示时长: " .. tostring(DISPLAY_SECONDS) .. " 秒\n")
     file:write("屏幕位置: " .. position_log_label(POPUP_POSITION) .. "\n")
-    file:write("窗口布局: " .. (POPUP_LAYOUT == "vertical" and "竖向" or "横向") .. "\n")
+    file:write("窗口布局: " .. (POPUP_LAYOUT == "vertical" and log_tools.ui_text("竖向", "Vertical") or log_tools.ui_text("横向", "Horizontal")) .. "\n")
     file:write("背景透明度档位: " .. tostring(PANEL_OPACITY_LEVEL) .. "%\n")
+    file:write("精准跑道识别: " .. (runtime_state.runway_detection_enabled and log_tools.ui_text("开启", "On") or log_tools.ui_text("关闭", "Off")) .. "\n")
     file:write(
         "完整数学复算附录: "
-        .. (landing_analysis.math_log_enabled and "开启" or "关闭")
+        .. (landing_analysis.math_log_enabled and log_tools.ui_text("开启", "On") or log_tools.ui_text("关闭", "Off"))
         .. "\n\n"
     )
 
@@ -3810,14 +5486,17 @@ local function schedule_landing_jobs(now)
     landing_jobs.context_after = now + CONTEXT_RESOLVE_DELAY_SECONDS
     landing_jobs.log_pending = true
     landing_jobs.log_after = now + LOG_WRITE_DELAY_SECONDS
+    landing_jobs.runway_deadline = landing_jobs.context_after + log_tools.runway_config.timeout_seconds
 end
 
-local function resolve_context_safely()
+local function resolve_context_safely(now)
     landing_jobs.context_pending = false
-    local call_ok, resolve_ok, reason = pcall(resolve_landing_context)
+    local call_ok, resolve_ok, reason = pcall(resolve_landing_context, now)
     if not call_ok then
         landing_context.airport_id = "UNKNOWN"
         landing_context.airport_name = ""
+        landing_context.runway_status = "unavailable"
+        log_tools.finish_runway_resolver("unavailable", tostring(resolve_ok))
         if logMsg then
             logMsg("[StarLux LMM] Airport lookup failed; monitoring will continue: " .. tostring(resolve_ok))
         end
@@ -3825,36 +5504,77 @@ local function resolve_context_safely()
         logMsg("[StarLux LMM] Airport not identified: " .. tostring(reason))
     elseif logMsg then
         logMsg(string.format(
-            "[StarLux LMM] Airport identified: %s (%s), %.1f km from touchdown, estimated RWY %s",
+            "[StarLux LMM] Airport identified: %s (%s), %.1f km from touchdown; runway resolution %s",
             landing_context.airport_id,
             landing_context.airport_name,
             landing_context.airport_distance_km,
-            landing_context.runway
+            runtime_state.runway_detection_enabled and "started" or "disabled"
         ))
     end
     refresh_popup_cache()
 end
 
-local function process_landing_jobs(now)
+local function process_landing_jobs(now, allow_prefetch_scan)
     if landing_jobs.context_pending == true and now >= landing_jobs.context_after then
-        resolve_context_safely()
+        resolve_context_safely(now)
+    end
+
+    local runway_state = log_tools.runway_state
+    local may_scan = runway_state.mode ~= "prefetch" or allow_prefetch_scan == true
+    if runway_state.active and may_scan then
+        local call_ok, finished = pcall(log_tools.process_runway_resolver, now)
+        if not call_ok then
+            log_tools.finish_runway_resolver("unavailable", "apt.dat 解析异常: " .. tostring(finished))
+            finished = true
+        end
+        if finished then
+            refresh_popup_cache()
+            if logMsg then
+                if runway_state.last_mode == "prefetch" and runway_state.last_status == "prefetched" then
+                    logMsg("[StarLux LMM] Runway data prefetched for " .. tostring(runway_state.target_airport) .. ".")
+                elseif runway_state.last_mode ~= "prefetch" and landing_context.runway_detected then
+                    logMsg(string.format(
+                        "[StarLux LMM] Runway resolved: %s RWY %s, %.1f m after threshold, confidence %s.",
+                        landing_context.airport_id,
+                        landing_context.runway,
+                        landing_context.touchdown_from_threshold_m,
+                        landing_context.runway_confidence
+                    ))
+                elseif runway_state.last_mode ~= "prefetch" then
+                    logMsg("[StarLux LMM] Runway unavailable; core landing data remains valid: " .. tostring(runway_state.last_reason))
+                end
+            end
+        end
     end
 
     if landing_jobs.log_pending == true and now >= landing_jobs.log_after then
-        landing_jobs.log_pending = false
-
         -- 正常情况下机场查询会先完成；若模拟时间发生跳变，则在写文件前补做一次。
         if landing_jobs.context_pending == true then
-            resolve_context_safely()
+            resolve_context_safely(now)
         end
+        -- 报告最早在 8 秒写入；若分帧扫描尚未完成，则只等待到独立时间预算耗尽。
+        if log_tools.runway_state.active and now < landing_jobs.runway_deadline then
+            return
+        end
+        if log_tools.runway_state.active then
+            log_tools.finish_runway_resolver("timeout", "跑道识别超过独立时间预算")
+            refresh_popup_cache()
+        end
+        landing_jobs.log_pending = false
 
         log_landing_summary()
         local call_ok, write_ok, result = pcall(write_landing_log)
         if call_ok and write_ok then
             -- 新日志直接追加到内存索引，避免每次落地后重新遍历整个文件夹。
             log_tools.register_log_filename(file_name_from_path(result))
-            landing_report_notice.text = "落地详细报告已生成: " .. file_name_from_path(result)
-            landing_report_notice.until_time = now + REPORT_NOTICE_SECONDS
+            landing_report_notice.file_name = file_name_from_path(result)
+            if POPUP_MODE ~= "clean" and runtime_state.replay_active == false then
+                landing_report_notice.text = log_tools.ui_text("落地详细报告已生成: ", "Detailed landing report generated: ") .. landing_report_notice.file_name
+                landing_report_notice.until_time = now + REPORT_NOTICE_SECONDS
+            else
+                landing_report_notice.text = ""
+                landing_report_notice.until_time = 0
+            end
         elseif logMsg then
             local error_text = result
             if not call_ok then
@@ -3882,6 +5602,7 @@ local function begin_bounce_monitor(now)
     bounce_state.second_peak_g = 1
     bounce_state.second_curve_g = 1
     bounce_state.second_g_ready = false
+    bounce_state.result_status = landing_status
     bounce_state.score_applied = false
 end
 
@@ -3904,6 +5625,7 @@ local function apply_bounce_score(now)
         landing_status = "ATTENTION"
     end
     -- Attention 发生弹跳后仍保持 Attention；只有任一次稳健 G 超过黄色上限才进入红色。
+    bounce_state.result_status = landing_status
 
     bounce_state.score_applied = true
     refresh_popup_cache()
@@ -4024,6 +5746,7 @@ local function finalize_landing_analysis(now)
     landing_complete = true
     armed = false
     bounce_state.original_status = landing_status
+    bounce_state.result_status = landing_status
 
     debug_data.last_frame_fpm = round_num(approach_data.vs_fpm)
     debug_data.selected_fpm = landing_fpm
@@ -4093,6 +5816,10 @@ end
 local storage_init_ok, storage_init_error = pcall(function()
     ensure_log_directory()
     load_settings()
+    -- 关闭精准跑道功能时连数据源发现也跳过，形成完整的最小更新回退路径。
+    if runtime_state.runway_detection_enabled then
+        log_tools.discover_apt_sources()
+    end
     -- 初始化阶段只建立文件名索引，不批量读取报告正文。
     log_tools.refresh_log_index()
 end)
@@ -4124,126 +5851,98 @@ function ma_open_settings_window()
         return
     end
 
-    settings_window = float_wnd_create(520, 650, 1, true)
-    float_wnd_set_title(settings_window, "StarLux Landing Meter - Settings")
+    settings_window = float_wnd_create(520, 720, 1, true)
+    float_wnd_set_title(settings_window, log_tools.settings_text("StarLux Landing Meter - 打开设置", "StarLux Landing Meter - Settings"))
     float_wnd_set_imgui_builder(settings_window, "ma_build_settings_window")
     float_wnd_set_onclose(settings_window, "ma_settings_window_closed")
 
     local screen_w = SCREEN_WIDTH or 1920
     local screen_h = SCREEN_HIGHT or 1080
-    float_wnd_set_position(settings_window, math.floor((screen_w - 520) / 2), math.floor((screen_h - 650) / 2))
+    float_wnd_set_position(settings_window, math.floor((screen_w - 520) / 2), math.floor((screen_h - 720) / 2))
 end
 
 function ma_build_settings_window(wnd, x, y)
-    imgui.TextUnformatted("Landing data popup timing")
-    if imgui.RadioButton("Show immediately after analysis", POPUP_MODE == "immediate") then
-        POPUP_MODE = "immediate"
-        save_settings()
+    imgui.TextUnformatted("Data output language")
+    if imgui.RadioButton("Chinese##lmm_language_zh", runtime_state.document_language == "zh") then
+        runtime_state.document_language = "zh"; refresh_popup_cache(); float_wnd_set_title(settings_window, "StarLux Landing Meter - Settings"); save_settings()
     end
-    if imgui.RadioButton("Show after slowing below 30 kt", POPUP_MODE == "taxi") then
-        POPUP_MODE = "taxi"
-        save_settings()
+    imgui.SameLine()
+    if imgui.RadioButton("English##lmm_language_en", runtime_state.document_language == "en") then
+        runtime_state.document_language = "en"; refresh_popup_cache(); float_wnd_set_title(settings_window, "StarLux Landing Meter - Settings"); save_settings()
     end
-    if imgui.RadioButton("Show after stopped for 10 seconds", POPUP_MODE == "stopped") then
-        POPUP_MODE = "stopped"
-        runtime_state.stopped_popup_since = 0
-        save_settings()
-    end
-    if imgui.RadioButton("Do not show automatically", POPUP_MODE == "off") then
-        POPUP_MODE = "off"
-        show_until = 0
-        runtime_state.stopped_popup_since = 0
+    imgui.TextUnformatted("Controls the TXT report language and _CN / _EN filename suffix.")
+
+    imgui.Separator()
+    imgui.TextUnformatted(log_tools.settings_text("落地数据弹窗时机", "Landing data popup timing"))
+    if imgui.RadioButton(log_tools.settings_text("分析完成后立即显示", "Show immediately after analysis") .. "##lmm_immediate", POPUP_MODE == "immediate") then POPUP_MODE = "immediate"; save_settings() end
+    if imgui.RadioButton(log_tools.settings_text("地速低于 30 kt 时显示", "Show after slowing below 30 kt") .. "##lmm_taxi", POPUP_MODE == "taxi") then POPUP_MODE = "taxi"; save_settings() end
+    if imgui.RadioButton(log_tools.settings_text("停稳并持续 10 秒后显示", "Show after stopped for 10 seconds") .. "##lmm_stopped", POPUP_MODE == "stopped") then POPUP_MODE = "stopped"; runtime_state.stopped_popup_since = 0; save_settings() end
+    if imgui.RadioButton(log_tools.settings_text("不自动显示", "Do not show automatically") .. "##lmm_off", POPUP_MODE == "off") then POPUP_MODE = "off"; show_until = 0; runtime_state.stopped_popup_since = 0; save_settings() end
+    if imgui.RadioButton(log_tools.settings_text("纯净模式（关闭全部自动提示）", "Clean mode (disable all automatic popups)") .. "##lmm_clean", POPUP_MODE == "clean") then
+        POPUP_MODE = "clean"; show_until = 0; runtime_state.stopped_popup_since = 0
+        landing_report_notice.text = ""; landing_report_notice.file_name = ""; landing_report_notice.until_time = 0
         save_settings()
     end
 
     imgui.Separator()
-    imgui.TextUnformatted("Popup duration")
-    if imgui.RadioButton("30 seconds", DISPLAY_SECONDS == 30) then
-        DISPLAY_SECONDS = 30
+    imgui.TextUnformatted(log_tools.settings_text("精准跑道与触地点", "Exact runway and touchdown point"))
+    local runway_changed, new_runway_value = imgui.Checkbox(log_tools.settings_text("进近阶段预读 apt.dat 并在触地后匹配真实跑道", "Prefetch apt.dat on approach and match the real runway after touchdown") .. "##lmm_runway", runtime_state.runway_detection_enabled)
+    if runway_changed then
+        runtime_state.runway_detection_enabled = new_runway_value
+        if new_runway_value then
+            pcall(log_tools.discover_apt_sources)
+        else
+            log_tools.cancel_runway_resolver("用户已关闭精准跑道识别")
+        end
         save_settings()
     end
-    imgui.SameLine()
-    if imgui.RadioButton("60 seconds", DISPLAY_SECONDS == 60) then
-        DISPLAY_SECONDS = 60
-        save_settings()
-    end
-    imgui.SameLine()
-    if imgui.RadioButton("120 seconds (maximum)", DISPLAY_SECONDS == 120) then
-        DISPLAY_SECONDS = 120
-        save_settings()
-    end
+    imgui.TextUnformatted(log_tools.settings_text("关闭后仍保留 1.1.4 落地算法，不使用磁航向猜测跑道。", "Off keeps the v1.1.4 landing algorithm and never guesses a runway from heading."))
 
     imgui.Separator()
-    imgui.TextUnformatted("Popup position")
-    if imgui.BeginCombo("Screen position##lmm_position", position_label(POPUP_POSITION)) then
+    imgui.TextUnformatted(log_tools.settings_text("弹窗显示时长", "Popup duration"))
+    if imgui.RadioButton(log_tools.settings_text("30 秒", "30 seconds") .. "##lmm_30", DISPLAY_SECONDS == 30) then DISPLAY_SECONDS = 30; save_settings() end
+    imgui.SameLine()
+    if imgui.RadioButton(log_tools.settings_text("60 秒", "60 seconds") .. "##lmm_60", DISPLAY_SECONDS == 60) then DISPLAY_SECONDS = 60; save_settings() end
+    imgui.SameLine()
+    if imgui.RadioButton(log_tools.settings_text("120 秒（最大）", "120 seconds (maximum)") .. "##lmm_120", DISPLAY_SECONDS == 120) then DISPLAY_SECONDS = 120; save_settings() end
+
+    imgui.Separator()
+    imgui.TextUnformatted(log_tools.settings_text("弹窗位置", "Popup position"))
+    if imgui.BeginCombo(log_tools.settings_text("屏幕位置", "Screen position") .. "##lmm_position", position_label(POPUP_POSITION)) then
         for i = 1, #POSITION_OPTIONS do
             local option = POSITION_OPTIONS[i]
-            if imgui.Selectable(option.label, POPUP_POSITION == option.id) then
-                POPUP_POSITION = option.id
-                save_settings()
-            end
+            local label = option.label
+            if imgui.Selectable(label, POPUP_POSITION == option.id) then POPUP_POSITION = option.id; save_settings() end
         end
         imgui.EndCombo()
     end
 
     imgui.Separator()
-    imgui.TextUnformatted("Popup layout")
-    if imgui.RadioButton("Horizontal - accent on the left", POPUP_LAYOUT == "horizontal") then
-        POPUP_LAYOUT = "horizontal"
-        save_settings()
-    end
-    if imgui.RadioButton("Vertical - accent on the top", POPUP_LAYOUT == "vertical") then
-        POPUP_LAYOUT = "vertical"
-        save_settings()
-    end
+    imgui.TextUnformatted(log_tools.settings_text("弹窗布局", "Popup layout"))
+    if imgui.RadioButton(log_tools.settings_text("横向－左侧状态色", "Horizontal - accent on the left") .. "##lmm_horizontal", POPUP_LAYOUT == "horizontal") then POPUP_LAYOUT = "horizontal"; save_settings() end
+    if imgui.RadioButton(log_tools.settings_text("竖向－顶部状态色", "Vertical - accent on the top") .. "##lmm_vertical", POPUP_LAYOUT == "vertical") then POPUP_LAYOUT = "vertical"; save_settings() end
 
     imgui.Separator()
-    imgui.TextUnformatted("Background opacity")
-    if imgui.RadioButton("25%", PANEL_OPACITY_LEVEL == 25) then
-        PANEL_OPACITY_LEVEL = 25
-        save_settings()
-    end
+    imgui.TextUnformatted(log_tools.settings_text("背景透明度", "Background opacity"))
+    if imgui.RadioButton("25%##lmm_opacity_25", PANEL_OPACITY_LEVEL == 25) then PANEL_OPACITY_LEVEL = 25; save_settings() end
     imgui.SameLine()
-    if imgui.RadioButton("50%", PANEL_OPACITY_LEVEL == 50) then
-        PANEL_OPACITY_LEVEL = 50
-        save_settings()
-    end
+    if imgui.RadioButton("50%##lmm_opacity_50", PANEL_OPACITY_LEVEL == 50) then PANEL_OPACITY_LEVEL = 50; save_settings() end
     imgui.SameLine()
-    if imgui.RadioButton("100%", PANEL_OPACITY_LEVEL == 100) then
-        PANEL_OPACITY_LEVEL = 100
-        save_settings()
-    end
+    if imgui.RadioButton("100%##lmm_opacity_100", PANEL_OPACITY_LEVEL == 100) then PANEL_OPACITY_LEVEL = 100; save_settings() end
 
     imgui.Separator()
-    local changed, new_debug_value = imgui.Checkbox("Show measurement debug details", DEBUG_MODE)
-    if changed then
-        DEBUG_MODE = new_debug_value
-        save_settings()
-    end
+    local changed, new_debug_value = imgui.Checkbox(log_tools.settings_text("显示测量调试详情", "Show measurement debug details") .. "##lmm_debug", DEBUG_MODE)
+    if changed then DEBUG_MODE = new_debug_value; save_settings() end
 
     imgui.Separator()
-    imgui.TextUnformatted("TXT report detail")
-    local math_changed, new_math_value = imgui.Checkbox(
-        "Include full mathematical audit (larger TXT files)",
-        DETAILED_MATH_LOG
-    )
-    if math_changed then
-        DETAILED_MATH_LOG = new_math_value
-        save_settings()
-    end
-    imgui.TextUnformatted("Off: concise report. On: complete reproducible calculations.")
-
-    if imgui.Button("Preview popup for 5 seconds", 220, 28) then
-        refresh_popup_cache()
-        show_until = current_sim_time() + 5
-    end
+    imgui.TextUnformatted(log_tools.settings_text("TXT 报告详细程度", "TXT report detail"))
+    local math_changed, new_math_value = imgui.Checkbox(log_tools.settings_text("包含完整数学复算（文件更大）", "Include full mathematical audit (larger TXT files)") .. "##lmm_math", DETAILED_MATH_LOG)
+    if math_changed then DETAILED_MATH_LOG = new_math_value; save_settings() end
+    imgui.TextUnformatted(log_tools.settings_text("关闭：简洁报告；开启：完整可复算内容。", "Off: concise report. On: complete reproducible calculations."))
+    if imgui.Button(log_tools.settings_text("预览弹窗 5 秒", "Preview popup for 5 seconds") .. "##lmm_preview", 220, 28) then refresh_popup_cache(); show_until = current_sim_time() + 5 end
     imgui.Separator()
-    if settings_save_ok then
-        imgui.TextUnformatted("Settings are saved automatically.")
-    else
-        imgui.TextUnformatted("Warning: settings could not be saved. Check FlyWithLua Log.txt.")
-    end
-    imgui.TextUnformatted("Each completed landing is saved as a TXT file in:")
+    imgui.TextUnformatted(settings_save_ok and log_tools.settings_text("设置已自动保存。", "Settings are saved automatically.") or log_tools.settings_text("警告：设置保存失败，请检查 FlyWithLua Log.txt。", "Warning: settings could not be saved. Check FlyWithLua Log.txt."))
+    imgui.TextUnformatted(log_tools.settings_text("每次完成的落地将保存为 TXT 文件：", "Each completed landing is saved as a TXT file in:"))
     imgui.TextUnformatted(LOG_DIRECTORY_PATH)
 end
 
@@ -4280,23 +5979,23 @@ function ma_build_log_manager_window(wnd, x, y)
     local page_count = math.max(1, math.ceil(record_count / LOG_MANAGER_PAGE_SIZE))
     if log_manager_state.page > page_count then log_manager_state.page = page_count end
 
-    imgui.TextUnformatted("Landing records")
+    imgui.TextUnformatted(log_tools.settings_text("落地记录", "Landing records"))
     imgui.TextUnformatted(
         string.format(
-            "%d record(s) indexed. Click a record to open the visual report.",
+            log_tools.settings_text("已索引 %d 条记录。点击记录可打开可视化报告。", "%d record(s) indexed. Click a record to open the visual report."),
             record_count
         )
     )
-    if imgui.Button("Refresh index", 140, 26) then
+    if imgui.Button(log_tools.settings_text("刷新索引", "Refresh index") .. "##lmm_refresh", 140, 26) then
         local refresh_ok = log_tools.refresh_log_index()
         log_manager_state.notice = refresh_ok
-            and string.format("Index refreshed: %d record(s).", #log_manager_state.records)
+            and string.format(log_tools.settings_text("索引已刷新：%d 条记录。", "Index refreshed: %d record(s)."), #log_manager_state.records)
             or log_manager_state.scan_error
     end
     imgui.SameLine()
-    if imgui.Button("Open LMM_Log folder", 180, 26) then
+    if imgui.Button(log_tools.settings_text("打开 LMM_Log 文件夹", "Open LMM_Log folder") .. "##lmm_folder", 180, 26) then
         local open_ok, open_error = log_tools.open_viewer_in_default_browser(LOG_DIRECTORY_PATH)
-        log_manager_state.notice = open_ok and "Opened LMM_Log folder." or tostring(open_error)
+        log_manager_state.notice = open_ok and log_tools.settings_text("已打开 LMM_Log 文件夹。", "Opened LMM_Log folder.") or tostring(open_error)
     end
 
     if log_manager_state.scan_error ~= "" then
@@ -4305,8 +6004,8 @@ function ma_build_log_manager_window(wnd, x, y)
     imgui.Separator()
 
     if record_count == 0 then
-        imgui.TextUnformatted("No landing records found.")
-        imgui.TextUnformatted("Complete a landing or copy an LMM_*.txt file into LMM_Log.")
+        imgui.TextUnformatted(log_tools.settings_text("未找到落地记录。", "No landing records found."))
+        imgui.TextUnformatted(log_tools.settings_text("完成一次落地，或将 LMM_*.txt 复制到 LMM_Log。", "Complete a landing or copy an LMM_*.txt file into LMM_Log."))
     else
         local first_index = (log_manager_state.page - 1) * LOG_MANAGER_PAGE_SIZE + 1
         local last_index = math.min(record_count, first_index + LOG_MANAGER_PAGE_SIZE - 1)
@@ -4321,17 +6020,17 @@ function ma_build_log_manager_window(wnd, x, y)
                 local call_ok, open_ok, result = pcall(log_tools.open_log_visualization, record.name)
                 log_manager_state.viewer_busy = false
                 if call_ok and open_ok then
-                    log_manager_state.notice = "Visual report opened: " .. record.name
+                    log_manager_state.notice = log_tools.settings_text("可视化报告已打开：", "Visual report opened: ") .. record.name
                 else
                     local error_text = call_ok and result or open_ok
-                    log_manager_state.notice = "Unable to open report: " .. tostring(error_text)
+                    log_manager_state.notice = log_tools.settings_text("无法打开报告：", "Unable to open report: ") .. tostring(error_text)
                     if logMsg then
                         logMsg("[StarLux LMM] Viewer error: " .. tostring(error_text))
                     end
                 end
             end
             imgui.SameLine()
-            if imgui.Button("Delete##lmm_delete_" .. tostring(i), 100, 30) then
+            if imgui.Button(log_tools.settings_text("删除", "Delete") .. "##lmm_delete_" .. tostring(i), 100, 30) then
                 log_manager_state.pending_delete = record.name
                 log_manager_state.notice = ""
             end
@@ -4340,57 +6039,57 @@ function ma_build_log_manager_window(wnd, x, y)
 
     if log_manager_state.pending_delete ~= "" then
         imgui.Separator()
-        imgui.TextUnformatted("Permanently delete this TXT?")
+        imgui.TextUnformatted(log_tools.settings_text("永久删除此 TXT？", "Permanently delete this TXT?"))
         imgui.TextUnformatted(log_tools.shorten_log_filename(log_manager_state.pending_delete, 84))
-        if imgui.Button("Confirm delete", 150, 28) then
+        if imgui.Button(log_tools.settings_text("确认删除", "Confirm delete") .. "##lmm_confirm", 150, 28) then
             local target_name = log_manager_state.pending_delete
             local call_ok, delete_ok, result = pcall(log_tools.delete_indexed_log, target_name)
             if call_ok and delete_ok then
-                log_manager_state.notice = "Deleted: " .. target_name
+                log_manager_state.notice = log_tools.settings_text("已删除：", "Deleted: ") .. target_name
             else
                 local error_text = call_ok and result or delete_ok
-                log_manager_state.notice = "Delete failed: " .. tostring(error_text)
+                log_manager_state.notice = log_tools.settings_text("删除失败：", "Delete failed: ") .. tostring(error_text)
                 log_manager_state.pending_delete = ""
             end
         end
         imgui.SameLine()
-        if imgui.Button("Cancel", 100, 28) then
+        if imgui.Button(log_tools.settings_text("取消", "Cancel") .. "##lmm_cancel", 100, 28) then
             log_manager_state.pending_delete = ""
         end
     end
 
     imgui.Separator()
-    if imgui.Button("< Previous", 110, 26) and log_manager_state.page > 1 then
+    if imgui.Button(log_tools.settings_text("< 上一页", "< Previous") .. "##lmm_prev", 110, 26) and log_manager_state.page > 1 then
         log_manager_state.page = log_manager_state.page - 1
         log_manager_state.pending_delete = ""
     end
     imgui.SameLine()
     imgui.TextUnformatted(
-        string.format("Page %d / %d", log_manager_state.page, page_count)
+        string.format(log_tools.settings_text("第 %d / %d 页", "Page %d / %d"), log_manager_state.page, page_count)
     )
     imgui.SameLine()
-    if imgui.Button("Next >", 110, 26) and log_manager_state.page < page_count then
+    if imgui.Button(log_tools.settings_text("下一页 >", "Next >") .. "##lmm_next", 110, 26) and log_manager_state.page < page_count then
         log_manager_state.page = log_manager_state.page + 1
         log_manager_state.pending_delete = ""
     end
 
     if log_manager_state.viewer_busy then
-        imgui.TextUnformatted("Generating local visual report...")
+        imgui.TextUnformatted(log_tools.settings_text("正在生成本地可视化报告……", "Generating local visual report..."))
     elseif log_manager_state.notice ~= "" then
         imgui.TextUnformatted(log_manager_state.notice)
     end
-    imgui.TextUnformatted("Visualizer runs locally. No landing data is uploaded.")
+    imgui.TextUnformatted(log_tools.settings_text("可视化仅在本机运行，不会上传落地数据。", "Visualizer runs locally. No landing data is uploaded."))
 end
 
-add_macro("StarLux 落地率插件 | 打开设置", "ma_open_settings_window()")
+add_macro("StarLux LMM | 打开设置/Open Setting", "ma_open_settings_window()")
 create_command(
     "starlux/lmm/open_settings",
-    "打开 StarLux 落地率插件设置",
+    "Open StarLux LMM settings / 打开设置",
     "ma_open_settings_window()",
     "",
     ""
 )
-add_macro("StarLux 落地率插件 | 落地记录", "ma_open_log_manager()")
+add_macro("StarLux LMM | 落地记录/Landing Record", "ma_open_log_manager()")
 
 -- =========================
 -- 核心逻辑
@@ -4403,6 +6102,7 @@ function ma_landing_meter_update()
     local vs_fpm = lmm_get_float("vs_fpm")
     local local_vy_mps = lmm_get_float("local_vy_mps")
     local y_agl_m = lmm_get_float("y_agl_m")
+    local elevation_m = lmm_get_double("elevation_m")
     local on_ground = lmm_get_int("on_ground")
     local current_g = lmm_get_float("g_normal")
     local roll_deg = lmm_get_float("roll_deg")
@@ -4416,6 +6116,7 @@ function ma_landing_meter_update()
     local heading_deg_mag = lmm_get_float("heading_deg_mag")
 
     local radio_alt_ft = meters_to_feet(y_agl_m)
+    local trace_altitude_ft = log_tools.flare_reference_height_ft(elevation_m, radio_alt_ft)
     local gs_kt = mps_to_kt(groundspeed_mps)
     local is_replay = lmm_get_int("is_in_replay") ~= 0
 
@@ -4434,6 +6135,12 @@ function ma_landing_meter_update()
             runtime_state.stopped_popup_since = 0
             runtime_state.deferred_popup_done = false
             show_until = 0
+            landing_jobs.context_pending = false
+            landing_jobs.log_pending = false
+            log_tools.cancel_runway_resolver("replay")
+            landing_report_notice.text = ""
+            landing_report_notice.file_name = ""
+            landing_report_notice.until_time = 0
             if logMsg then logMsg("[StarLux LMM] Replay detected; landing capture suspended.") end
         end
         was_on_ground = on_ground
@@ -4449,6 +6156,10 @@ function ma_landing_meter_update()
         reset_bounce_state()
         runtime_state.stopped_popup_since = 0
         runtime_state.deferred_popup_done = false
+        show_until = 0
+        landing_report_notice.text = ""
+        landing_report_notice.file_name = ""
+        landing_report_notice.until_time = 0
         was_on_ground = on_ground
         if logMsg then logMsg("[StarLux LMM] Replay ended; waiting for a fresh approach.") end
         return
@@ -4474,6 +6185,18 @@ function ma_landing_meter_update()
         runtime_state.stopped_popup_since = 0
     end
 
+    -- 5000 ft 以下每 5 秒确认附近机场，并在后台分帧预读 apt.dat。
+    -- 跑道几何只缓存，不会在真正触地前生成跑道号或触地点。
+    pcall(
+        log_tools.update_runway_prefetch,
+        now,
+        radio_alt_ft,
+        on_ground,
+        local_vy_mps,
+        gs_kt,
+        armed
+    )
+
     -- 只在进近阶段低频监测实际降水和跑道摩擦状态；触地后不再读取气象。
     if on_ground == 0 and armed == true and radio_alt_ft <= WEATHER_MONITOR_MAX_AGL_FT then
         update_prelanding_surface_watch(now)
@@ -4498,7 +6221,7 @@ function ma_landing_meter_update()
     -- 进入 100 英尺后以固定 10 Hz 采集下降率、速度和姿态轨迹。
     update_flare_trace(
         now,
-        radio_alt_ft,
+        trace_altitude_ft,
         on_ground,
         local_vy_mps,
         vs_fpm,
@@ -4535,7 +6258,7 @@ function ma_landing_meter_update()
         landing_complete = false
         landing_timestamp = os.date("%Y-%m-%d %H:%M:%S")
 
-        finish_flare_trace(now)
+        finish_flare_trace(now, trace_altitude_ft)
         begin_bounce_monitor(now)
         begin_landing_analysis(now)
 
@@ -4592,7 +6315,10 @@ function ma_landing_meter_update()
     end
 
     -- 分阶段处理机场查询、报告写入和完成提示。
-    process_landing_jobs(now)
+    process_landing_jobs(
+        now,
+        on_ground == 0 and radio_alt_ft > log_tools.runway_config.prefetch_min_agl_ft
+    )
 
     was_on_ground = on_ground
 end
@@ -4602,6 +6328,8 @@ end
 -- =========================
 
 function ma_landing_meter_draw()
+    -- 回放期间不绘制任何自动提示，避免旧提示跨越回放状态残留。
+    if runtime_state.replay_active then return end
     local now = current_sim_time()
     local screen_w = SCREEN_WIDTH or 1920
     local screen_h = SCREEN_HIGHT or 1080
@@ -4612,7 +6340,11 @@ function ma_landing_meter_draw()
         local panel_h = HORIZONTAL_PANEL_H
         local show_surface_warning = landing_surface.wet_warning and landing_status == "NICE"
         local show_bounce_warning = bounce_state.detected
+        local show_centerline_warning = landing_context.centerline_penalty_applied
         local extra_line_count = 0
+        if show_centerline_warning then
+            extra_line_count = extra_line_count + 1
+        end
         if show_bounce_warning then
             extra_line_count = extra_line_count + 1
         end
@@ -4667,6 +6399,19 @@ function ma_landing_meter_draw()
         draw_string(text_x, line_y1 - line_gap * 6, popup_cache.lines[7])
 
         local alert_line_index = 7
+        if show_centerline_warning then
+            if landing_context.centerline_penalty_level == "unstable" then
+                glColor4f(0.92, 0.24, 0.24, 1.0)
+            else
+                glColor4f(0.92, 0.62, 0.10, 1.0)
+            end
+            draw_string(
+                text_x,
+                line_y1 - line_gap * alert_line_index,
+                popup_cache.centerline_text
+            )
+            alert_line_index = alert_line_index + 1
+        end
         if show_bounce_warning then
             if landing_status == "UNSTABLE" then
                 glColor4f(0.92, 0.24, 0.24, 1.0)
@@ -4691,7 +6436,7 @@ function ma_landing_meter_draw()
 
         if DEBUG_MODE == true then
             glColor4f(1, 1, 1, 0.86)
-            local debug_line1 = string.format("DBG FPM %s %s", landing_analysis.flare_fpm_source, landing_analysis.fpm_confidence)
+            local debug_line1 = string.format("DBG FPM source:%s", landing_analysis.flare_fpm_source)
             local debug_line2 = string.format("DBG G pk:%.2f curve:%.2f eq:%.2f", debug_data.peak_g, debug_data.robust_g, debug_data.expected_max_g)
             local debug_line3 = string.format("DBG err:%.0f%% %s %.2fms", debug_data.consistency_error * 100, debug_data.confidence, debug_data.analysis_ms)
             local debug_x = x + panel_w + 12
@@ -4705,7 +6450,9 @@ function ma_landing_meter_draw()
     end
 
     -- 报告完成提示独立于落地数据窗，写入成功后显示数秒。
-    if landing_report_notice.until_time > now and landing_report_notice.text ~= "" then
+    if POPUP_MODE ~= "clean"
+        and landing_report_notice.until_time > now
+        and landing_report_notice.file_name ~= "" then
         local notice_w = math.min(500, screen_w - 40)
         local notice_h = 36
         local notice_x = math.floor((screen_w - notice_w) / 2)
@@ -4716,6 +6463,7 @@ function ma_landing_meter_draw()
         glRectf(notice_x, notice_y, notice_x + notice_w, notice_y + notice_h)
         draw_panel_border(notice_x, notice_y, notice_w, notice_h, 0.08, 0.50, 0.24)
         glColor4f(1, 1, 1, 0.98)
+        landing_report_notice.text = log_tools.ui_text("落地详细报告已生成: ", "Detailed landing report generated: ") .. landing_report_notice.file_name
         draw_string(notice_x + 12, notice_y + 12, landing_report_notice.text)
     end
 end
@@ -4725,7 +6473,7 @@ do_every_draw("ma_landing_meter_draw()")
 
 if logMsg then
     logMsg(string.format(
-        "[StarLux LMM] v1.1 loaded successfully with %d direct XPLM DataRefs.",
+        "[StarLux LMM] v1.1.4 loaded successfully with %d direct XPLM DataRefs.",
         #LMM_DATAREF_SPECS
     ))
 end
