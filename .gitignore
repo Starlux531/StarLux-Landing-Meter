@@ -13,6 +13,14 @@ LMM_Log/.lmm_index.tmp
 
 # Local release packages
 *.zip
+.tools/
+tests/__pycache__/
+installer/bin/
+installer/obj/
+dist/StarLux_LMM_Installer/
+dist/StarLux_LMM_Installer_UI/
+dist/1.1.8/
+.pnpm-store/
 
 # Operating-system files
 .DS_Store

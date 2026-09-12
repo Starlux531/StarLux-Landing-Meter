@@ -4,54 +4,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>StarLux LMM 分析器</title>
-<script type="application/json" id="lmm-bundled-presets">{
-  "schemaVersion": 1,
-  "items": [
-    {"id":"starlux-bundled-default","name":"默认","schemaVersion":1,"settings":{"theme":{"seed":"#2F8DCC"},"layout":{"pageZoom":115,"chartMode":"separated","viewMode":"vertical"},"charts":{"separatedMetrics":["fpm","ra","g"],"fusedMetrics":["n1_1","pitchInput","vvi","ra","throttle1"]}}},
-    {"id":"starlux-bundled-rose","name":"黑暗玫瑰","schemaVersion":1,"settings":{"theme":{"seed":"#030408"},"layout":{"pageZoom":100,"chartMode":"separated","viewMode":"horizontal"},"charts":{"separatedMetrics":["fpm","ra","g"],"fusedMetrics":["n1_1","pitchInput","vvi","ra","throttle1"]}}},
-    {"id":"starlux-bundled-grape","name":"巨峰葡萄","schemaVersion":1,"settings":{"theme":{"seed":"#010309"},"layout":{"pageZoom":75,"chartMode":"separated","viewMode":"vertical"},"charts":{"separatedMetrics":["fpm","ra","g"],"fusedMetrics":["n1_1","pitchInput","vvi","ra","throttle1"]}}},
-    {"id":"starlux-bundled-future","name":"未来展厅","schemaVersion":1,"settings":{"theme":{"seed":"#030F11"},"layout":{"pageZoom":100,"chartMode":"separated","viewMode":"horizontal"},"charts":{"separatedMetrics":["fpm","ra","g"],"fusedMetrics":["n1_1","pitchInput","vvi","ra","throttle1"]}}},
-    {"id":"starlux-bundled-violet","name":"水晶紫罗兰","schemaVersion":1,"settings":{"theme":{"seed":"#26103C"},"layout":{"pageZoom":100,"chartMode":"separated","viewMode":"horizontal"},"charts":{"separatedMetrics":["fpm","ra","g"],"fusedMetrics":["n1_1","pitchInput","vvi","ra","throttle1"]}}}
-  ]
-}
-</script>
+<title>StarLux LMM 报告阅读器 v1.1.4</title>
 <style>
 :root{
   --bg:#07121b;--panel:#102332;--panel2:#142b3c;--line:#284457;
   --text:#eef5f7;--muted:#9fb2bd;--soft:#c8d7df;--accent:#2f8dcc;
-  --status:#596773;--compare:#91a7b3;--shadow:0 22px 60px rgba(0,0,0,.32);
-  --bg2:#0b1722;--glow:#174968;--on-accent:#fff;--surface-a:#122b3c;--surface-b:#0d202d;
-  --line-strong:#3b5a6d;--interactive:#17364a;--interactive-hover:#1d435a;
-  --toolbar-bg:rgba(16,35,50,.96);--toolbar-shadow:0 12px 34px rgba(0,0,0,.22);
-  --viz-bg:#091b27;--viz-bg2:#0d202d;--viz-ink:#dce9ef;--viz-accent:#53b7df;--viz-compare:#d38cff;
-  --chart-grid:#355267;--chart-grid-strong:#557184;--chart-ground:rgba(240,181,78,.08);
-  --chart-event-50:#f0b54e;--chart-event-zero:#ef6070;--chart-runway:#34434c;
-  --chart-runway-edge:#9aadb7;--chart-runway-center:#f4f7f8;--focus-ring:#8bd7fa;
-  --success-text:#61d69a;--warning-text:#f0b54e;--danger-text:#ffc7cd;
-  --success-bg:#092e21;--danger-bg:#311820;--danger-border:#8f4650
+  --status:#596773;--compare:#91a7b3;--shadow:0 22px 60px rgba(0,0,0,.32)
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{scroll-behavior:smooth}
 body{
   margin:0;min-height:100vh;color:var(--text);
-  background:radial-gradient(circle at 86% -8%,var(--glow) 0,transparent 31%),
-    linear-gradient(180deg,var(--bg),var(--bg2) 55%,var(--bg));
+  background:radial-gradient(circle at 86% -8%,#174968 0,transparent 31%),
+    linear-gradient(180deg,#07121b,#0b1722 55%,#08131d);
   font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif
 }
 button,input{font:inherit}
 button{color:inherit}
-.app{max-width:1480px;margin:auto;padding:14px 20px 58px}
-.topbar{position:sticky;top:0;z-index:80;display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 -14px 20px;padding:13px 14px;border:1px solid var(--line);border-top:0;border-radius:0 0 17px 17px;background:var(--toolbar-bg);box-shadow:var(--toolbar-shadow);backdrop-filter:blur(18px) saturate(1.14)}
+.app{max-width:1480px;margin:auto;padding:24px 20px 58px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}
 .brand{color:#70c8f2;font-size:13px;font-weight:800;letter-spacing:.075em}
-.top-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
-.privacy{border:1px solid #225f44;background:#092e21;color:#bce6d0;border-radius:999px;padding:9px 15px;font-size:12px}
-.language-switch,.layout-switch,.theme-panel-toggle,.preset-panel-toggle{min-height:38px;border:1px solid var(--line);background:var(--panel2);color:var(--soft);border-radius:999px;padding:9px 15px;font-size:12px;font-weight:800;cursor:pointer}
-.language-switch:hover,.layout-switch:hover,.theme-panel-toggle:hover,.preset-panel-toggle:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,var(--panel2))}
-.layout-switch[data-layout="horizontal"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--panel2));color:var(--text)}
-.theme-lab,.preset-lab{position:relative;margin:0;padding:0;border:0;background:transparent}.theme-lab>summary,.preset-lab>summary{list-style:none}.theme-lab>summary::-webkit-details-marker,.preset-lab>summary::-webkit-details-marker{display:none}.theme-lab[open]>.theme-panel-toggle,.preset-lab[open]>.preset-panel-toggle{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--panel2));color:var(--text)}.theme-popover,.preset-popover{position:absolute;right:0;top:calc(100% + 11px);z-index:90;padding:20px;border:1px solid var(--line-strong);border-radius:17px;background:var(--toolbar-bg);box-shadow:var(--shadow);backdrop-filter:blur(18px) saturate(1.14)}.theme-popover{width:min(410px,calc(100vw - 32px))}.preset-popover{width:min(520px,calc(100vw - 32px))}.theme-popover-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:15px}.theme-popover-head strong{font-size:15px}.theme-random{min-height:36px;border:1px solid var(--accent);border-radius:10px;background:color-mix(in srgb,var(--accent) 16%,var(--panel2));color:var(--text);padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer}.theme-picker-row{display:grid;grid-template-columns:66px 1fr;gap:15px;align-items:center}.theme-color-input{width:66px;height:60px;padding:4px;border:1px solid var(--line-strong);border-radius:12px;background:var(--panel2);cursor:pointer}.rgb-sliders{display:grid;gap:9px}.rgb-row{display:grid;grid-template-columns:19px 1fr 39px;align-items:center;gap:9px;color:var(--muted);font:700 11px Consolas,monospace}.rgb-row input{width:100%;accent-color:var(--accent)}.rgb-value{text-align:right;color:var(--soft)}.theme-hex{display:block;margin-top:12px;color:var(--soft);font:700 12px Consolas,monospace}.theme-hint{margin-top:11px;color:var(--muted);font-size:10px;line-height:1.55}
-.preset-section{margin:0}.preset-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.preset-head strong{font-size:14px}.preset-count{color:var(--muted);font-size:10px}.preset-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.preset-select,.preset-name{min-width:0;width:100%;min-height:39px;border:1px solid var(--line-strong);border-radius:9px;background:var(--panel2);color:var(--text);padding:9px 11px;font-size:11px}.preset-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}.preset-btn{min-height:36px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--soft);padding:8px 12px;font-size:10px;font-weight:800;cursor:pointer}.preset-btn:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,var(--panel2))}.preset-btn.primary{border-color:var(--accent);background:var(--accent);color:var(--on-accent)}.preset-btn.danger{border-color:#8f4650;color:#f2aeb5;background:color-mix(in srgb,#7e2733 18%,var(--panel2))}.preset-btn:disabled{opacity:.42;cursor:not-allowed}.preset-status{min-height:18px;margin-top:9px;color:var(--muted);font-size:10px;line-height:1.5}.preset-status.dirty{color:#f0b54e}.preset-status.success{color:#16804c}.preset-hint{margin-top:7px;color:var(--muted);font-size:9px;line-height:1.5}
+.top-actions{display:flex;align-items:center;gap:9px}
+.privacy{border:1px solid #225f44;background:#092e21;color:#bce6d0;border-radius:999px;padding:7px 13px;font-size:11px}
+.language-switch,.theme-switch{border:1px solid #315b72;background:#102b3c;color:#d6ecf7;border-radius:999px;padding:7px 13px;font-size:11px;font-weight:800;cursor:pointer}
+.language-switch:hover,.theme-switch:hover{border-color:#4ea1ff;background:#17394f}
 .workspace{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;align-items:start}
 .sidebar{position:sticky;top:18px;border:1px solid var(--line);background:rgba(11,29,42,.96);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
 .side-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
@@ -132,7 +109,7 @@ h1{font-size:30px;line-height:1.2;margin:0 0 9px}
 .compare-values{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:11px}.compare-values b{font-size:13px}.compare-values span{color:#afc0c9}
 .compare-delta{font-size:9px;color:#d0dce1;margin-top:5px}
 .chart-tools{display:grid;gap:10px;margin:0 0 11px}.metric-picker{display:flex;gap:7px;flex-wrap:wrap}.metric-chip{--metric:#4ea1ff;display:inline-flex;align-items:center;gap:6px;padding:7px 9px;border:1px solid #34576b;border-radius:999px;background:#0a2230;color:#aebfc8;font-size:10px;cursor:pointer;user-select:none;transition:.15s ease}.metric-chip:hover{border-color:#638ca2;color:#eaf6fb}.metric-chip.selected{border-color:var(--metric);background:color-mix(in srgb,var(--metric) 16%,#0a2230);color:#fff;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--metric) 24%,transparent)}.metric-chip input{position:absolute;opacity:0;pointer-events:none}.metric-chip:has(input:focus-visible){outline:2px solid #d7f3ff;outline-offset:2px}.metric-dot{width:8px;height:8px;border-radius:50%;background:var(--metric);box-shadow:0 0 8px color-mix(in srgb,var(--metric) 55%,transparent)}
-.chart-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:10px;color:#b7c8d0}.legend-item{display:flex;align-items:center;gap:7px;min-width:0;padding:5px 8px;border:1px solid rgba(92,126,145,.28);border-radius:7px;background:rgba(255,255,255,.025)}.legend-line{display:inline-block;width:24px;border-top:3px solid var(--series-color)}.legend-item small{color:#849ba7}.chart-style-key{display:flex;align-items:center;gap:12px;flex-wrap:wrap;color:#91a7b3;font-size:9px}.style-key{display:inline-flex;align-items:center;gap:6px}.style-line{width:24px;border-top:3px solid #d9edf7}.style-line.compare{border-top-style:dashed;opacity:.74}.chart-scale-note{color:#7f98a5;font-size:9px;line-height:1.5}
+.chart-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:10px;color:#b7c8d0}.legend-item{display:flex;align-items:center;gap:7px;min-width:0;padding:5px 8px;border:1px solid rgba(92,126,145,.28);border-radius:7px;background:rgba(255,255,255,.025)}.legend-line{display:inline-block;width:24px;border-top:3px solid var(--series-color)}.legend-item small{color:#849ba7}.chart-style-key{display:flex;align-items:center;gap:12px;flex-wrap:wrap;color:#91a7b3;font-size:9px}.style-key{display:inline-flex;align-items:center;gap:6px}.style-line{width:24px;border-top:3px solid #d9edf7}.style-line.compare{border-top-style:dashed;opacity:.35}.chart-scale-note{color:#7f98a5;font-size:9px;line-height:1.5}
 .layout{display:grid;grid-template-columns:1.45fr .75fr;gap:15px;margin-top:15px}
 .section{padding:19px}
 .section h2,.viz-title{font-size:17px;margin:0 0 5px}.viz-title{display:flex;align-items:center;gap:8px}.viz-title:before{display:inline-grid;place-items:center;width:23px;height:23px;border:1px solid rgba(83,183,223,.38);border-radius:7px;color:#53b7df;font-size:14px;line-height:1}.wind-title:before{content:"↝"}.pose-title:before{content:"⌁"}.runway-title:before{content:"▤"}
@@ -174,10 +151,7 @@ h1{font-size:30px;line-height:1.2;margin:0 0 9px}
 .attitude-scale{position:relative;height:35px;margin:8px 4px 0}.attitude-scale-track{position:absolute;left:4px;right:4px;top:8px;height:2px;border-radius:2px;background:#3f6578}.attitude-scale-track:before{content:"";position:absolute;left:0;right:0;top:-3px;height:8px;background:repeating-linear-gradient(90deg,transparent 0 calc(25% - 1px),rgba(133,169,187,.52) calc(25% - 1px) 25%)}.attitude-scale-marker{position:absolute;top:1px;left:var(--marker-left);width:5px;height:16px;border-radius:4px;background:var(--primary-visual);transform:translateX(-50%);box-shadow:0 0 0 2px #071923,0 0 8px color-mix(in srgb,var(--primary-visual) 45%,transparent)}.attitude-scale-marker.compare{top:4px;width:3px;height:11px;background:var(--compare-visual);box-shadow:none}.attitude-scale-label{position:absolute;top:20px;left:var(--label-left);transform:translateX(-50%);color:#8da5b1;font-size:8px;white-space:nowrap}.attitude-callout{display:flex;align-items:center;justify-content:center;gap:8px;color:var(--soft);font-size:9px;line-height:1.55;margin-top:9px;padding:8px 10px;border:1px solid rgba(83,183,223,.24);border-radius:9px;background:rgba(83,183,223,.035)}.callout-icon{display:inline-grid;place-items:center;width:16px;height:16px;border:1px solid #53b7df;border-radius:50%;color:#53b7df;font:700 10px Arial,sans-serif;flex:0 0 auto}
 .runway-section{margin-top:15px}.runway-section .viz-sub{margin-bottom:10px}.runway-board{height:258px;border:1px solid #28495c;border-radius:13px;background:#0a1c28;position:relative;overflow:hidden;padding:8px;display:flex;align-items:center}.runway-svg{display:block;width:100%;min-width:0;max-width:100%;height:242px;shape-rendering:geometricPrecision}.runway-svg .shoulder{fill:#46545d}.runway-svg .surface{fill:#303a40;stroke:#a6b3ba;stroke-width:1.2}.runway-svg .runway-end-panel{fill:#1c2a32;stroke:#71838c;stroke-width:.9}.runway-svg .runway-displaced-zone{fill:#3b4245;opacity:.82}.runway-svg .blast{fill:#514f47;stroke:#d6c96a;stroke-width:1}.runway-svg .blast-chevron{stroke:#e6d977;stroke-width:2;fill:none;vector-effect:non-scaling-stroke}.runway-svg .marking,.runway-svg .threshold-bar{fill:#f6f8f8}.runway-svg .edge-mark{stroke:#f6f8f8;stroke-width:1.2}.runway-svg .centerline{stroke:#f6f8f8;stroke-width:2.2;fill:none}.runway-svg .displaced-arrow{stroke:#f6f8f8;stroke-width:1.5;fill:none}.runway-svg .runway-number{fill:#f8fafb;font:800 31px Arial,sans-serif;text-anchor:middle;dominant-baseline:middle}.runway-svg .runway-label{fill:#a9bdc8;font:700 12px "Microsoft YaHei",sans-serif;text-anchor:middle}.runway-svg .distance-tick{stroke:#8ba3ae;stroke-width:1}.runway-svg .distance-label{fill:#8ba3ae;font:700 8px Arial,sans-serif;text-anchor:middle}.runway-svg .runway-light{fill:#fff4a5;opacity:.9}.runway-svg .tdz-light{fill:#f6f6ee}.runway-svg .touchdown-ring{fill:#ffca58;stroke:#301f00;stroke-width:1.5}.runway-svg .touchdown-cross{stroke:#ffca58;stroke-width:2.4}.runway-svg .touchdown-label{fill:#ffda7c;font:800 12px "Microsoft YaHei",sans-serif;text-anchor:middle}.runway-svg .edge-mark,.runway-svg .centerline,.runway-svg .displaced-arrow,.runway-svg .touchdown-cross,.runway-svg .touchdown-ring{vector-effect:non-scaling-stroke}.runway-section>.viz-caption{font-size:12px;margin-top:10px;color:#c4d7e0}.runway-legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-top:10px}.runway-chip{position:relative;min-width:0;border:1px solid rgba(124,160,180,.28);background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.018));border-radius:11px;padding:9px 10px 9px 14px;color:var(--soft);font-size:10px;overflow:hidden}.runway-chip:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#53b7df}.runway-chip[data-kind="length"]:before,.runway-chip[data-kind="lights"]:before{background:#62d98d}.runway-chip[data-kind="displaced"]:before,.runway-chip[data-kind="blast"]:before{background:#f0a43b}.runway-chip-label{display:block;color:var(--muted);font-size:8px;margin-bottom:3px}.runway-chip strong{display:block;color:#dce9ef;font-size:11px;line-height:1.35;overflow-wrap:anywhere}
 .geometry-empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);line-height:1.75;padding:18px}
-.telemetry-section{margin-top:18px}.telemetry-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.telemetry-actions{display:flex;align-items:center;gap:10px;flex:0 0 auto}.telemetry-badge{border:1px solid color-mix(in srgb,var(--accent) 42%,var(--line));border-radius:999px;padding:8px 12px;color:var(--soft);background:color-mix(in srgb,var(--accent) 8%,var(--panel2));font-size:10px;font-weight:800;letter-spacing:.04em}.chart-mode-toggle{min-width:168px;border:2px solid var(--accent);border-radius:12px;padding:12px 18px;background:color-mix(in srgb,var(--accent) 18%,var(--panel2));color:var(--text);font-size:13px;font-weight:900;cursor:pointer;transition:.16s ease;box-shadow:0 6px 18px color-mix(in srgb,var(--accent) 20%,transparent)}.chart-mode-toggle:hover{background:color-mix(in srgb,var(--accent) 28%,var(--panel2));transform:translateY(-1px)}.chart-mode-toggle:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 55%,white);outline-offset:3px}.chart-mode-toggle[data-mode="fused"]{border-color:#3c9d73;background:color-mix(in srgb,#3c9d73 24%,var(--panel2));color:var(--text)}.chart-box{position:relative;height:460px;margin-top:10px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--panel2) 82%,var(--bg));overflow:hidden;transition:height .18s ease}
-.live-panels{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(330px,.7fr);gap:14px;margin:17px 0}.live-panel{border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 7%,var(--panel2)),var(--panel2));padding:15px;min-width:0}.live-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.live-panel-head h3{margin:0;font-size:15px}.live-panel-head p{margin:4px 0 0;color:var(--muted);font-size:10px;line-height:1.5}.live-state{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;padding:6px 9px;color:var(--muted);background:var(--panel);font:700 9px Consolas,"Microsoft YaHei",sans-serif}.throttle-axes{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.engine-axis{border:1px solid color-mix(in srgb,var(--line) 74%,transparent);border-radius:12px;padding:10px;background:color-mix(in srgb,var(--panel) 78%,transparent)}.engine-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:10px}.engine-title b{font-size:12px}.engine-title span{color:var(--muted)}.axis-pair{display:grid;grid-template-columns:1fr 1fr;gap:9px}.vertical-gauge{position:relative;height:196px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 12%,var(--panel2)),var(--panel));overflow:hidden}.gauge-label{position:absolute;left:0;right:0;top:7px;text-align:center;color:var(--soft);font-size:9px;font-weight:800;z-index:4}.gauge-rail{position:absolute;top:27px;bottom:33px;left:50%;width:7px;transform:translateX(-50%);border-radius:999px;background:color-mix(in srgb,var(--line) 72%,var(--bg));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 10%,transparent)}.power-fill{position:absolute;left:0;right:0;bottom:0;height:var(--level,0%);border-radius:999px;background:linear-gradient(0deg,var(--accent),color-mix(in srgb,var(--accent) 55%,white));transition:height .12s linear}.lever-marker,.power-marker{position:absolute;left:50%;bottom:calc(33px + (100% - 60px)*var(--level,0)/100);width:33px;height:8px;transform:translate(-50%,50%);border:2px solid var(--text);border-radius:6px;background:var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.35);z-index:5;transition:bottom .1s linear}.lever-marker.compare,.power-marker.compare{height:5px;width:25px;border:1px dashed var(--compare);background:transparent;box-shadow:none;z-index:6}.detent-tick{position:absolute;left:7px;right:7px;bottom:calc(33px + (100% - 60px)*var(--level)/100);height:1px;background:color-mix(in srgb,var(--text) 24%,transparent);z-index:2}.detent-tick span{position:absolute;left:2px;bottom:2px;color:var(--muted);font:700 7px Consolas,sans-serif}.gauge-readout{position:absolute;left:3px;right:3px;bottom:6px;text-align:center;color:var(--text);font:800 9px Consolas,"Microsoft YaHei",sans-serif;white-space:nowrap}.power-scale-label{position:absolute;right:5px;color:var(--muted);font:700 7px Consolas,sans-serif}.power-scale-label.top{top:28px}.power-scale-label.bottom{bottom:34px}.xy-stage{display:grid;grid-template-columns:minmax(220px,1fr) minmax(112px,.45fr);gap:12px;align-items:center}.xy-pad{position:relative;width:min(100%,280px);aspect-ratio:1;margin:auto;border:1px solid var(--line);border-radius:13px;background:radial-gradient(circle at center,color-mix(in srgb,var(--accent) 9%,var(--panel2)),var(--panel));overflow:hidden}.xy-pad:before,.xy-pad:after{content:"";position:absolute;background:color-mix(in srgb,var(--text) 27%,transparent)}.xy-pad:before{left:50%;top:8%;bottom:8%;width:1px}.xy-pad:after{top:50%;left:8%;right:8%;height:1px}.xy-ring{position:absolute;inset:18%;border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:50%}.axis-name{position:absolute;color:var(--muted);font:800 8px Consolas,sans-serif}.axis-name.pitch{top:5px;left:50%;transform:translateX(-50%)}.axis-name.roll{right:7px;top:50%;transform:translateY(-50%)}.xy-dot{position:absolute;left:var(--x-pos,50%);top:var(--y-pos,50%);width:16px;height:16px;transform:translate(-50%,-50%);border:3px solid var(--text);border-radius:50%;background:var(--accent);box-shadow:0 0 15px color-mix(in srgb,var(--accent) 65%,transparent);transition:left .1s linear,top .1s linear}.xy-dot.compare{width:12px;height:12px;border:2px dashed var(--compare);background:transparent;box-shadow:none}.input-readouts{display:grid;gap:8px}.input-readout{border-left:3px solid var(--accent);border-radius:7px;background:color-mix(in srgb,var(--accent) 7%,var(--panel));padding:8px}.input-readout span{display:block;color:var(--muted);font-size:8px}.input-readout b{display:block;margin-top:2px;font:800 13px Consolas,sans-serif}.yaw-wrap{grid-column:1/-1;margin-top:2px}.yaw-label{display:flex;justify-content:space-between;color:var(--muted);font-size:8px;margin-bottom:5px}.yaw-track{position:relative;height:17px;border:1px solid var(--line);border-radius:999px;background:var(--panel);overflow:visible}.yaw-track:after{content:"";position:absolute;left:50%;top:2px;bottom:2px;width:1px;background:color-mix(in srgb,var(--text) 36%,transparent)}.yaw-marker{position:absolute;left:var(--yaw-pos,50%);top:50%;width:13px;height:13px;transform:translate(-50%,-50%);border:2px solid var(--text);border-radius:50%;background:var(--accent);transition:left .1s linear}.yaw-marker.compare{width:9px;height:9px;border:2px dashed var(--compare);background:transparent}.playback-bar{display:grid;grid-template-columns:auto auto minmax(180px,1fr) auto;gap:10px;align-items:center;margin:14px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}.play-toggle{min-width:88px;border:1px solid var(--accent);border-radius:9px;background:var(--accent);color:var(--on-accent);padding:9px 12px;font-weight:900;cursor:pointer}.speed-select{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:8px 9px;font-weight:800}.timeline-slider{width:100%;accent-color:var(--accent);cursor:ew-resize}.play-time{min-width:112px;color:var(--soft);font:800 10px Consolas,monospace;text-align:right}
-.engine-axis.mixed-style{grid-column:span 2;min-width:300px}.axis-pair.mixed-style{grid-template-columns:repeat(3,minmax(72px,1fr))}
-.control-section{margin-top:28px;padding-top:25px;border-top:1px solid rgba(105,150,173,.28)}.control-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.control-status{flex:0 0 auto;border:1px solid #335b70;border-radius:999px;padding:7px 11px;color:#b8d2df;background:#0b2534;font-size:10px;font-weight:700}.control-legend{display:flex;gap:13px;flex-wrap:wrap;color:var(--muted);font-size:10px;margin:-4px 0 10px}.control-key{display:inline-flex;align-items:center;gap:6px}.control-line{width:25px;border-top:3px solid #75c7f0}.control-line.surface{border-top-width:2px;opacity:.72}.control-line.throttle{border-color:#56c9f4}.control-line.n1{border-top-width:2px;border-top-style:dotted;border-color:#f4be56}.control-line.detent{height:8px;border:0;border-radius:3px;background:linear-gradient(90deg,#7d8d98,#4fc3f7,#62d693,#f2b84d,#d78cff);opacity:.7}.control-line.compare{border-top-style:dashed;opacity:.74}.control-chart-box{position:relative;height:500px;border:1px solid #28495c;border-radius:12px;background:#091b27;overflow:hidden;transition:height .18s ease}.control-empty{height:180px}.control-note{color:var(--muted);font-size:10px;line-height:1.65;margin-top:10px}.diagnostics-section{margin-top:18px}.diagnostics-section .diag td:first-child{width:34%}
+.chart-box{position:relative;height:420px;margin-top:10px}
 canvas{display:block;width:100%;height:100%}
 .tooltip{display:none;white-space:pre-line;position:absolute;pointer-events:none;background:#031019;border:1px solid #3d6b84;border-radius:9px;padding:9px 11px;font-size:10px;line-height:1.55;box-shadow:0 8px 25px rgba(0,0,0,.4);z-index:5;max-width:380px}
 .empty{height:225px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);border:1px dashed #355268;border-radius:12px;line-height:1.8}
@@ -188,11 +162,10 @@ summary{cursor:pointer;font-weight:700;color:#b9d7e8}
 pre{white-space:pre-wrap;word-break:break-word;font-family:Consolas,"Microsoft YaHei",monospace;font-size:10px;line-height:1.65;color:#c8d7df;max-height:540px;overflow:auto;padding:12px;background:#07141e;border-radius:9px}
 .error{display:none;margin-bottom:12px;border:1px solid #7e3b48;background:#311820;color:#ffc7cd;border-radius:11px;padding:11px 13px;font-size:12px}
 footer{color:#7f949f;font-size:10px;line-height:1.7;margin-top:21px;text-align:center}
-.reader-zoom{position:fixed;right:12px;top:50%;z-index:50;transform:translateY(-50%);width:58px;padding:11px 7px 10px;border:1px solid rgba(92,139,162,.58);border-radius:15px;background:rgba(7,25,36,.94);box-shadow:0 12px 34px rgba(0,0,0,.3);backdrop-filter:blur(10px);text-align:center;user-select:none}.reader-zoom-label{display:block;color:#a8c4d2;font-size:10px;font-weight:800;letter-spacing:.08em}.reader-zoom-track{position:relative;width:100%;height:176px;margin:7px 0}.reader-zoom-slider{position:absolute;left:50%;top:50%;width:158px;height:22px;margin:0;transform:translate(-50%,-50%) rotate(-90deg);accent-color:#53b7df;cursor:ns-resize}.reader-zoom-value{display:block;color:#dff4fd;font:800 11px Consolas,"Microsoft YaHei",sans-serif}.reader-zoom-reset{margin-top:7px;border:0;background:transparent;color:#7f9dab;font-size:9px;cursor:pointer;padding:2px}.reader-zoom-reset:hover{color:#bfe9fb}
 /* Readability scale: enlarge the complete dashboard as a coordinated system. */
 body{font-size:15px;line-height:1.55}
-.app{max-width:1880px;padding:14px 82px 72px 26px}.topbar{gap:22px;margin:0 -14px 22px}.brand{font-size:15px}.top-actions{gap:11px}.privacy,.language-switch,.layout-switch,.theme-panel-toggle,.preset-panel-toggle{padding:10px 17px;font-size:13px}
-.workspace{grid-template-columns:300px minmax(0,1fr);gap:22px}.sidebar{top:22px;border-radius:20px;padding:19px}.side-title{margin-bottom:15px}.side-title h2{font-size:18px}.count{padding:5px 10px;font-size:12px}.btn{padding:11px 15px}.side-actions{gap:10px;margin-bottom:16px}.record-list{gap:10px}.record{padding:13px}.record strong{font-size:13px}.record span,.compare-action,.side-note{font-size:11px}.record-wrap{grid-template-columns:minmax(0,1fr) 76px;gap:8px}.compare-action{padding:7px}
+.app{max-width:1660px;padding:30px 26px 72px}.topbar{gap:22px;margin-bottom:22px}.brand{font-size:15px}.top-actions{gap:11px}.privacy,.language-switch,.theme-switch{padding:9px 15px;font-size:12px}
+.workspace{grid-template-columns:330px minmax(0,1fr);gap:22px}.sidebar{top:22px;border-radius:20px;padding:19px}.side-title{margin-bottom:15px}.side-title h2{font-size:18px}.count{padding:5px 10px;font-size:12px}.btn{padding:11px 15px}.side-actions{gap:10px;margin-bottom:16px}.record-list{gap:10px}.record{padding:13px}.record strong{font-size:13px}.record span,.compare-action,.side-note{font-size:11px}.record-wrap{grid-template-columns:minmax(0,1fr) 76px;gap:8px}.compare-action{padding:7px}
 .drop{min-height:620px;padding:44px}.drop-inner{max-width:720px}.drop-mark{width:96px;height:96px;margin-bottom:25px;font-size:40px}.drop h1{font-size:34px}.drop p{font-size:15px}.drop .formats{font-size:12px}
 .hero{padding:32px 34px}.hero-grid{gap:28px}.eyebrow{font-size:12px}h1{font-size:34px}.sub{font-size:14px}.hero-actions{gap:11px;margin-top:21px}.status{min-width:245px;padding:20px 21px}.status small{font-size:12px}.status strong{font-size:21px}.status .version{font-size:12px}
 .grid{gap:16px;margin-top:18px}.card{padding:20px;min-height:125px}.card .label{font-size:12px}.card .value{font-size:27px}.card .hint{font-size:12px}.card .compare-line{font-size:11px}.compare-panel{padding:20px}.compare-identity small,.compare-identity span{font-size:11px}.compare-identity strong{font-size:17px}.compare-metric{padding:11px 13px}.compare-metric .metric-label,.compare-delta{font-size:11px}.compare-values{font-size:12px}.compare-values b{font-size:15px}
@@ -203,67 +176,40 @@ body{font-size:15px;line-height:1.55}
 .pose-grid{gap:14px}.attitude-card{padding:16px 18px 15px;min-height:470px}.attitude-head strong{font-size:15px}.attitude-badge{font-size:10px;padding:6px 9px}.attitude-visual{height:245px;margin:12px 0 8px}.pitch-label{font-size:10px}.bank-label{font-size:9px}.side-horizon-label,.airflow-label,.tail-reference-label{font-size:10px}.aoa-symbol{font-size:16px}.attitude-series{padding:8px 10px}.attitude-series label{font-size:11px}.attitude-series strong{font-size:31px}.attitude-series.compare strong{font-size:27px}.attitude-series>span,.attitude-secondary,.attitude-note{font-size:11px!important}.tail-reference-note{padding:9px 11px;font-size:10px}.attitude-scale{height:43px;margin:11px 5px 0}.attitude-scale.has-reference{height:58px}.attitude-scale-track{top:10px}.attitude-scale-marker{top:2px;height:19px}.attitude-scale-marker.compare{top:5px;height:13px}.attitude-scale-label{top:27px;font-size:10px}.attitude-scale-reference{position:absolute;top:-1px;left:var(--reference-left);width:3px;height:22px;border-radius:3px;background:#ff5664;transform:translateX(-50%);box-shadow:0 0 0 2px #071923,0 0 9px rgba(255,86,100,.45);z-index:3}.attitude-scale-reference:before{content:"";position:absolute;left:50%;top:-4px;transform:translateX(-50%);border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #ff5664}.attitude-scale-reference-label{position:absolute;top:31px;left:var(--reference-left);transform:translateX(-50%);color:#ff7d87;font-size:10px;font-weight:800;white-space:nowrap}.attitude-callout{font-size:11px;padding:10px 13px}.callout-icon{width:18px;height:18px;font-size:11px}
 .runway-board{height:300px;padding:10px}.runway-svg{height:280px}.runway-svg .runway-label{font-size:14px}.runway-svg .distance-label{font-size:10px}.runway-svg .touchdown-label{font-size:14px}.runway-section>.viz-caption{font-size:13px}.runway-legend{gap:10px;margin-top:12px}.runway-chip{padding:11px 12px 11px 16px;font-size:11px}.runway-chip-label{font-size:10px}.runway-chip strong{font-size:13px}
 .chart-box{height:480px}.tooltip{padding:11px 13px;font-size:11px;max-width:440px}.empty{height:260px;font-size:13px}.diag{font-size:12px}.diag td{padding:10px}.geometry-empty{font-size:13px}.section details,details{padding:16px}summary{font-size:14px}pre{font-size:11px;max-height:600px;padding:15px}.error{font-size:13px}footer{font-size:11px;margin-top:25px}
-.gauge-rail>.lever-marker,.gauge-rail>.power-marker{bottom:var(--level,0%)}.gauge-rail>.detent-tick{left:50%;right:auto;bottom:var(--level);width:54px;transform:translateX(-50%)}.xy-pad>.xy-dot{left:var(--x-pos,50%);top:var(--y-pos,50%)}.yaw-track>.yaw-marker{left:var(--yaw-pos,50%)}
-/* The RGB seed continuously generates every non-semantic surface and ink token. */
-.sidebar{background:color-mix(in srgb,var(--panel) 97%,transparent);border-color:var(--line-strong)}
-.hero,.card,.section,.viz-card{background:linear-gradient(180deg,var(--surface-a),var(--surface-b));border-color:var(--line)}
-.record{border-color:var(--line);background:color-mix(in srgb,var(--panel2) 82%,var(--bg))}.record:hover,.record.active{background:color-mix(in srgb,var(--accent) 12%,var(--panel2));border-color:var(--line-strong)}.record.compare{background:color-mix(in srgb,var(--compare) 9%,var(--panel2));border-color:var(--compare)}
-.btn:not(.danger),.compare-action{border-color:var(--line-strong);background:var(--interactive);color:var(--soft)}.btn:not(.danger):hover,.compare-action:hover{background:var(--interactive-hover);border-color:var(--accent)}.btn.primary,.preset-btn.primary,.play-toggle{border-color:var(--accent);background:var(--accent);color:var(--on-accent)}.btn.ghost{background:transparent}
-.privacy{border-color:var(--success-text);background:var(--success-bg);color:var(--success-text)}.preset-status.success{color:var(--success-text)}.preset-status.dirty{color:var(--warning-text)}.btn.danger,.preset-btn.danger{border-color:var(--danger-border);background:var(--danger-bg);color:var(--danger-text)}.error{border-color:var(--danger-border);background:var(--danger-bg);color:var(--danger-text)}
-details,pre{background:color-mix(in srgb,var(--panel2) 84%,var(--bg));border-color:var(--line)}summary{color:var(--soft)}pre{color:var(--soft)}.chart-box,.control-chart-box,.wind-board,.attitude-card,.runway-board{border-color:var(--line-strong);background:var(--viz-bg)}
-.tooltip{background:var(--panel);border-color:var(--accent);color:var(--text)}
-.brand,.eyebrow{color:var(--accent)}.language-switch,.layout-switch,.theme-panel-toggle,.preset-panel-toggle,.preset-select,.preset-name,.speed-select{border-color:var(--line-strong);background:var(--interactive);color:var(--soft)}.language-switch:hover,.layout-switch:hover,.theme-panel-toggle:hover,.preset-panel-toggle:hover{background:var(--interactive-hover)}.theme-lab,.preset-lab{border:0;background:transparent}.theme-popover,.preset-popover{background:var(--toolbar-bg);border-color:var(--line-strong)}
-.count{color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,var(--panel2))}.drop{border-color:var(--line-strong);background:linear-gradient(180deg,var(--surface-a),var(--surface-b))}.drop-mark{border-color:var(--line-strong);background:var(--panel2);color:var(--accent)}.status{background:var(--panel2)}
-.sub,.card .hint,.status small,.status .version,.side-note,.scale,.compare-identity small,.compare-identity span,.compare-values span,.compare-delta,.chart-scale-note,.control-note,.lead,.viz-sub,.fact span,.record span,.live-panel-head p,.live-state,.engine-title span,.input-readout span,.yaw-label,.gauge-readout+.power-scale-label,footer{color:var(--muted)}
-.card .compare-line,.compare-values,.fact b,.runway-section>.viz-caption,.runway-chip strong{color:var(--soft)}
-.compare-panel{background:linear-gradient(180deg,var(--surface-a),var(--surface-b));border-color:var(--line-strong)}.compare-metric,.insight,.attitude-series{background:color-mix(in srgb,var(--text) 5%,transparent)}.metric-chip{border-color:var(--line-strong);background:var(--interactive);color:var(--muted)}.metric-chip:hover{border-color:var(--accent);color:var(--text)}.metric-chip.selected{background:color-mix(in srgb,var(--metric) 14%,var(--panel2));color:var(--text)}.metric-chip:has(input:focus-visible){outline-color:var(--focus-ring)}.legend-item,.runway-chip,.wind-stat,.live-panel,.engine-axis,.input-readout,.playback-bar{background:color-mix(in srgb,var(--text) 4%,var(--panel2));border-color:var(--line)}
-.viz-caption,.nose-label,.attitude-head span,.attitude-note,.attitude-series>span,.instrument-label{color:var(--muted);fill:var(--muted)}.attitude-secondary{color:var(--muted)!important}.wind-board:before,.wind-board:after,.wind-tick{background:var(--chart-grid)}.wind-tick.major{background:var(--chart-grid-strong)}.wind-axis-label,.wind-board .nose-label{color:var(--viz-ink)}.plane-top{color:var(--viz-ink)}.wind-arrow,.visual-dot{background:var(--viz-accent)}.wind-arrow:after{border-top-color:var(--viz-accent)}.wind-arrow.compare{background:repeating-linear-gradient(to bottom,var(--viz-compare) 0 7px,transparent 7px 11px)}.wind-arrow.compare:after{border-top-color:var(--viz-compare)}.visual-key.compare .visual-dot{background:var(--viz-compare)}.wind-stat-series strong{color:var(--viz-accent)}.wind-stat-series.compare strong{color:var(--viz-compare)}
-.attitude-card{--primary-visual:var(--viz-accent);--compare-visual:var(--viz-compare);color:var(--viz-ink)}.attitude-card .attitude-head span,.attitude-card .attitude-note,.attitude-card .attitude-series label,.attitude-card .attitude-series>span,.attitude-card .attitude-secondary,.attitude-card .attitude-scale-label{color:color-mix(in srgb,var(--viz-ink) 78%,var(--viz-bg))!important}.attitude-card .attitude-series{background:color-mix(in srgb,var(--viz-ink) 7%,transparent)}.attitude-card .attitude-badge,.attitude-card .attitude-callout{border-color:var(--chart-grid);background:color-mix(in srgb,var(--viz-accent) 9%,var(--viz-bg2));color:var(--viz-ink)}.attitude-visual{border-color:var(--chart-grid);background:var(--viz-bg2)}.instrument-arc,.instrument-tick,.instrument-horizon,.airflow-axis,.aircraft-axis,.side-horizon{stroke:var(--chart-grid-strong)}.instrument-pointer{fill:var(--viz-ink)}.side-horizon-label,.airflow-label{fill:var(--viz-ink)}.airflow-layer{stroke:var(--viz-accent)}.control-status,.telemetry-badge{border-color:var(--line-strong);background:color-mix(in srgb,var(--accent) 9%,var(--panel2));color:var(--soft)}.attitude-scale-track{background:var(--chart-grid-strong)}
-.chart-legend,.chart-style-key,.chart-scale-note,.legend-item small{color:var(--muted)}.style-line{border-top-color:var(--viz-ink)}.control-line{border-top-color:var(--series-1,var(--accent))}.control-line.throttle{border-color:var(--series-2,var(--accent))}.control-line.n1{border-color:var(--series-3,var(--compare))}.viz-title:before,.callout-icon{color:var(--accent);border-color:var(--line-strong);background:color-mix(in srgb,var(--accent) 9%,transparent)}.reader-zoom{border-color:var(--line-strong);background:var(--toolbar-bg);box-shadow:var(--shadow)}.reader-zoom-label,.reader-zoom-value{color:var(--soft)}.reader-zoom-reset{color:var(--muted)}
-.vertical-gauge,.xy-pad,.yaw-track{border-color:var(--chart-grid);background:var(--viz-bg2)}.vertical-gauge .gauge-label,.vertical-gauge .gauge-readout,.vertical-gauge .power-scale-label,.vertical-gauge .detent-tick span,.xy-pad .axis-name{color:var(--viz-ink)}.gauge-rail{background:var(--chart-grid)}.detent-tick{background:color-mix(in srgb,var(--viz-ink) 32%,transparent)}.power-fill{background:linear-gradient(0deg,var(--viz-accent),color-mix(in srgb,var(--viz-accent) 58%,var(--viz-ink)))}.lever-marker.primary,.power-marker.primary,.xy-dot,.yaw-marker{border-color:var(--viz-ink);background:var(--viz-accent)}.lever-marker.compare,.power-marker.compare,.xy-dot.compare,.yaw-marker.compare{border-color:var(--viz-compare);background:transparent}.xy-ring{border-color:color-mix(in srgb,var(--viz-accent) 48%,transparent)}.xy-pad:before,.xy-pad:after,.yaw-track:after{background:var(--chart-grid-strong)}
-button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--focus-ring);outline-offset:3px}
-/* Optional wide dashboard: summary cards remain full-width, detailed sections use two balanced columns. */
-html[data-layout="horizontal"] .app{width:100%;max-width:2560px}
-html[data-layout="horizontal"] .workspace{grid-template-columns:250px minmax(0,1fr)}
-html[data-layout="horizontal"] .dashboard-columns{display:grid;grid-template-columns:minmax(410px,.75fr) minmax(640px,1.25fr);gap:18px;align-items:start;margin-top:18px}
-html[data-layout="horizontal"] .dashboard-column{display:flex;min-width:0;flex-direction:column;gap:18px}
-html[data-layout="horizontal"] .dashboard-column>*{min-width:0;margin-top:0}
-html[data-layout="horizontal"] .overview-column>.layout{grid-template-columns:1fr}
-html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-columns:minmax(250px,.54fr) minmax(0,1.46fr)}
-@media(max-width:1650px){html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-columns:1fr}}
-@media(max-width:1400px){html[data-layout="horizontal"] .workspace{grid-template-columns:1fr}}
-@media(max-width:1180px){html[data-layout="horizontal"] .dashboard-columns{display:flex;flex-direction:column}html[data-layout="horizontal"] .dashboard-column{display:contents}html[data-layout="horizontal"] .overview-column>.layout{order:1}html[data-layout="horizontal"] .analysis-column>.context-detail{order:2}html[data-layout="horizontal"] .overview-column>.runway-section{order:3}html[data-layout="horizontal"] .analysis-column>.telemetry-section{order:4}html[data-layout="horizontal"] .overview-column>.diagnostics-section{order:5}}
+html[data-theme="light"]{--bg:#eef3f6;--panel:#fff;--panel2:#f4f7f9;--line:#c9d7df;--text:#17252e;--muted:#607682;--soft:#344c59;--accent:#176d9f;--shadow:0 18px 45px rgba(38,66,82,.14)}
+html[data-theme="light"] body{background:radial-gradient(circle at 86% -8%,#cfe8f5 0,transparent 31%),linear-gradient(180deg,#f7fafb,#eef3f6 55%,#e8eff3)}
+html[data-theme="light"] .brand,html[data-theme="light"] .eyebrow{color:#176d9f}html[data-theme="light"] .privacy{border-color:#9fcbb5;background:#e8f6ef;color:#245c43}
+html[data-theme="light"] .language-switch,html[data-theme="light"] .theme-switch{border-color:#a8c4d3;background:#f4f8fa;color:#234a60}html[data-theme="light"] .language-switch:hover,html[data-theme="light"] .theme-switch:hover{border-color:#438db6;background:#e7f2f7}
+html[data-theme="light"] .sidebar{background:rgba(255,255,255,.96)}html[data-theme="light"] .count{color:#176d9f;background:#e2f0f7}html[data-theme="light"] .btn{border-color:#a9beca;background:#edf3f6}html[data-theme="light"] .btn:hover{background:#e2edf2}
+html[data-theme="light"] .btn.primary{background:#19754f;border-color:#19754f;color:#fff}html[data-theme="light"] .btn.ghost{background:transparent}html[data-theme="light"] .btn.danger{border-color:#cf8d96;color:#8d2633;background:#fff0f2}
+html[data-theme="light"] .record{border-color:#cad7de;background:#f7fafb}html[data-theme="light"] .record:hover{border-color:#8fb2c4;background:#edf5f8}html[data-theme="light"] .record.active{background:#e9f3f7}html[data-theme="light"] .record.compare{background:#eff5f7}
+html[data-theme="light"] .compare-action{border-color:#b6c7d0;background:#f1f5f7;color:#405966}html[data-theme="light"] .compare-action.selected{background:#dfe9ee;color:#223b47}
+html[data-theme="light"] .drop{background:linear-gradient(180deg,rgba(255,255,255,.92),rgba(235,243,247,.96));border-color:#8db3c7}html[data-theme="light"] .drop-mark{background:#e5f2f8;color:#176d9f;border-color:#9cc5d8}
+html[data-theme="light"] .hero,html[data-theme="light"] .card,html[data-theme="light"] .section,html[data-theme="light"] .viz-card{background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(243,247,249,.98))}
+html[data-theme="light"] .status{background:#edf4f7}html[data-theme="light"] .sub,html[data-theme="light"] .card .hint{color:#536e7b}html[data-theme="light"] .compare-panel{background:linear-gradient(180deg,#f8fafb,#edf3f6)}
+html[data-theme="light"] .compare-metric,html[data-theme="light"] .insight{background:rgba(31,81,108,.045)}html[data-theme="light"] .metric-chip{border-color:#b6c8d1;background:#f2f6f8;color:#526a76}html[data-theme="light"] .metric-chip.selected{background:color-mix(in srgb,var(--metric) 12%,#fff);color:#18313d}
+html[data-theme="light"] .legend-item,html[data-theme="light"] .runway-chip{background:rgba(34,77,101,.04);border-color:rgba(80,113,131,.22)}html[data-theme="light"] .wind-board,html[data-theme="light"] .attitude-card,html[data-theme="light"] .runway-board{background:#edf3f6;border-color:#9fb9c6}
+html[data-theme="light"] .viz-caption{color:#355565}html[data-theme="light"] .nose-label{color:#4b6877}html[data-theme="light"] .wind-board:before,html[data-theme="light"] .wind-board:after{background:#9fb8c5}html[data-theme="light"] .wind-arrow{background:#1781b2}html[data-theme="light"] .wind-arrow:after{border-top-color:#1781b2}html[data-theme="light"] .plane-top{color:#294957}
+html[data-theme="light"] .attitude-card{--primary-visual:#006a9c;--compare-visual:#8735aa}html[data-theme="light"] .aoa-card{--primary-visual:#955300;--compare-visual:#8735aa}html[data-theme="light"] .attitude-head span,html[data-theme="light"] .instrument-label{color:#526c79;fill:#526c79}html[data-theme="light"] .attitude-note,html[data-theme="light"] .attitude-series>span{color:#294b5b}html[data-theme="light"] .attitude-visual{background:linear-gradient(180deg,#edf4f7,#e2edf2);border-color:#8faebd}html[data-theme="light"] .instrument-arc,html[data-theme="light"] .instrument-tick,html[data-theme="light"] .instrument-horizon,html[data-theme="light"] .airflow-axis,html[data-theme="light"] .aircraft-axis{stroke:#668796}html[data-theme="light"] .instrument-pointer{fill:#294b5b}html[data-theme="light"] .attitude-series{background:rgba(35,83,105,.055)}html[data-theme="light"] .tooltip{background:#fff;border-color:#5f96b1;color:#172e39;box-shadow:0 8px 25px rgba(45,72,87,.2)}
+html[data-theme="light"] details{background:#f7fafb}html[data-theme="light"] summary{color:#315f76}html[data-theme="light"] pre{background:#edf3f6;color:#263c47}html[data-theme="light"] .runway-svg .surface{fill:#65727a;stroke:#344850}html[data-theme="light"] .runway-svg .shoulder{fill:#a7b1b6}
+html[data-theme="light"] .runway-svg .runway-label{fill:#294e60}html[data-theme="light"] .chart-legend,html[data-theme="light"] .chart-style-key,html[data-theme="light"] .chart-scale-note{color:#3d5d6c}html[data-theme="light"] .legend-item small{color:#4b6876}html[data-theme="light"] .style-line{border-top-color:#315f76}
+html[data-theme="light"] .viz-title:before{color:#006a9c;border-color:#78a7bc;background:#e6f2f7}html[data-theme="light"] .callout-icon{color:#006a9c;border-color:#006a9c}html[data-theme="light"] .wind-arrow.compare{background:repeating-linear-gradient(to bottom,var(--compare) 0 7px,transparent 7px 11px);box-shadow:none}html[data-theme="light"] .wind-arrow.compare:after{border-top-color:var(--compare)}html[data-theme="light"] .wind-tick{background:#93aeba}html[data-theme="light"] .wind-tick.major{background:#426d82}html[data-theme="light"] .wind-axis-label{color:#3e6171}html[data-theme="light"] .wind-stat{background:#f7fafb;border-color:#9db7c4}html[data-theme="light"] .wind-stat-series strong{color:#006a9c}html[data-theme="light"] .wind-stat-series.compare strong{color:#8735aa}html[data-theme="light"] .wind-stat-series.compare small{color:#694078}
+html[data-theme="light"] .attitude-badge{color:#31586b;background:#e5f1f6;border-color:#86aabd}html[data-theme="light"] .attitude-scale-track{background:#7998a7}html[data-theme="light"] .attitude-scale-label{color:#405f6e}html[data-theme="light"] .attitude-scale-marker{box-shadow:0 0 0 2px #edf4f7}html[data-theme="light"] .attitude-callout{color:#294b5b;background:#eaf4f8;border-color:#9cc3d4}
+html[data-theme="light"] .runway-section>.viz-caption{color:#284c5d}html[data-theme="light"] .runway-chip{background:linear-gradient(180deg,#f8fafb,#edf3f6)}html[data-theme="light"] .runway-chip strong{color:#183744}html[data-theme="light"] .runway-svg .runway-end-panel{fill:#36464f;stroke:#1f3038;opacity:.92}
+html[data-theme="light"] .attitude-sky{fill:#49a9d8}html[data-theme="light"] .attitude-ground{fill:#a97825}html[data-theme="light"] .attitude-horizon,html[data-theme="light"] .pitch-ladder{stroke:#fff}html[data-theme="light"] .pitch-label{fill:#fff}html[data-theme="light"] .bank-arc,html[data-theme="light"] .bank-tick{stroke:#365c6e}html[data-theme="light"] .bank-label{fill:#365c6e}html[data-theme="light"] .fixed-aircraft{fill:#fff;stroke:#172c36}html[data-theme="light"] .fixed-aircraft-center{fill:#172c36;stroke:#fff}html[data-theme="light"] .side-horizon{stroke:#7796a5}html[data-theme="light"] .side-horizon-label,html[data-theme="light"] .airflow-label{fill:#3f6171}html[data-theme="light"] .airflow-layer{stroke:#397995}html[data-theme="light"] .tail-reference-note{color:#8f2430;background:#fff0f1;border-color:#d6858d}html[data-theme="light"] .tail-reference-label{fill:#a92432}
+html[data-theme="light"] .runway-board{background:#edf3f6;border-color:#9fb9c6}html[data-theme="light"] .runway-svg .surface{fill:#65727a;stroke:#344850}html[data-theme="light"] .runway-svg .shoulder{fill:#a7b1b6}html[data-theme="light"] .runway-svg .runway-end-panel{fill:#3e4d55;stroke:#21333c}html[data-theme="light"] .runway-svg .runway-displaced-zone{fill:#4d5960}html[data-theme="light"] .runway-svg .runway-label,html[data-theme="light"] .runway-svg .distance-label{fill:#294e60}html[data-theme="light"] .runway-svg .distance-tick{stroke:#466d80}html[data-theme="light"] .runway-section>.viz-caption{color:#284c5d}html[data-theme="light"] .runway-chip{background:linear-gradient(180deg,#f8fafb,#edf3f6)}html[data-theme="light"] .runway-chip strong{color:#183744}
+html[data-theme="light"] .attitude-scale-reference{box-shadow:0 0 0 2px #edf4f7,0 0 8px rgba(169,36,50,.24)}html[data-theme="light"] .attitude-scale-reference-label{color:#a92432}
 @media(max-width:760px){.runway-board{height:260px}.runway-svg{height:240px}.attitude-card{min-height:450px}.attitude-visual{height:230px}.attitude-scale-reference-label{font-size:9px}}
 @media(max-width:1400px){.workspace{grid-template-columns:1fr}.sidebar{position:static}.record-list{max-height:240px}.context-detail{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}.compare-grid{grid-template-columns:1fr 1fr}}
-@media(max-width:980px){.live-panels{grid-template-columns:1fr}.xy-stage{grid-template-columns:minmax(220px,1fr) minmax(132px,.45fr)}}
-@media(max-width:760px){.app{padding:8px 70px 46px 13px}.layout,.hero-grid{grid-template-columns:1fr}.status{min-width:0}.facts{grid-template-columns:1fr}.pose-grid{grid-template-columns:1fr}.drop{min-height:520px}.topbar{align-items:flex-start;flex-direction:column;margin:0 -5px 18px;padding:10px 11px}.top-actions{position:relative;width:100%;justify-content:flex-start;flex-wrap:wrap}.theme-lab,.preset-lab{position:static}.theme-popover,.preset-popover{left:0;right:0;top:calc(100% + 9px);width:auto}.compare-head,.telemetry-heading{flex-direction:column}.telemetry-actions{width:100%;justify-content:space-between}.chart-mode-toggle{min-width:150px}.compare-grid{grid-template-columns:1fr}.reader-zoom{right:7px}.reader-zoom-track{height:142px}.reader-zoom-slider{width:126px}.playback-bar{grid-template-columns:auto auto 1fr}.play-time{grid-column:1/-1;text-align:center}.xy-stage{grid-template-columns:1fr}.input-readouts{grid-template-columns:repeat(3,1fr)}.yaw-wrap{grid-column:1/-1}}
-@media(max-width:470px){.grid{grid-template-columns:1fr}h1,.drop h1{font-size:27px}.hero{padding:24px}.privacy{display:none}.attitude-card{padding:14px 12px}.attitude-series strong{font-size:28px}.preset-fields{grid-template-columns:1fr}.preset-btn{flex:1 1 calc(50% - 7px)}}
+@media(max-width:760px){.app{padding:18px 13px 46px}.layout,.hero-grid{grid-template-columns:1fr}.status{min-width:0}.facts{grid-template-columns:1fr}.pose-grid{grid-template-columns:1fr}.drop{min-height:520px}.topbar{align-items:flex-start;flex-direction:column}.compare-head{flex-direction:column}.compare-grid{grid-template-columns:1fr}}
+@media(max-width:470px){.grid{grid-template-columns:1fr}h1,.drop h1{font-size:27px}.hero{padding:24px}.privacy{display:none}.attitude-card{padding:14px 12px}.attitude-series strong{font-size:28px}}
 </style>
 </head>
 <body>
 <div class="app">
   <header class="topbar">
-    <div class="brand">STARLUX LANDING METRICS MONITOR · 分析器</div>
-    <div class="top-actions">
-      <div class="privacy">完全本地读取 · 数据不会上传</div>
-      <details class="theme-lab" id="themeLab"><summary class="theme-panel-toggle">RGB 配色</summary><div class="theme-popover">
-        <div class="theme-popover-head"><strong>自定义主题色</strong><button class="theme-random" id="themeRandom" type="button">随机颜色</button></div>
-        <div class="theme-picker-row"><input class="theme-color-input" id="themeColor" type="color" value="#2f8dcc" aria-label="主题颜色"><div class="rgb-sliders">
-          <label class="rgb-row">R<input id="themeR" type="range" min="0" max="255" value="47"><output class="rgb-value" id="themeRValue">47</output></label>
-          <label class="rgb-row">G<input id="themeG" type="range" min="0" max="255" value="141"><output class="rgb-value" id="themeGValue">141</output></label>
-          <label class="rgb-row">B<input id="themeB" type="range" min="0" max="255" value="204"><output class="rgb-value" id="themeBValue">204</output></label>
-        </div></div><output class="theme-hex" id="themeHex">#2F8DCC</output><div class="theme-hint">界面明暗连续跟随 RGB 感知亮度；文字和图表曲线会按实际背景独立校正对比度，评分与安全标线保留固定语义色。</div>
-      </div></details>
-      <details class="preset-lab" id="presetLab"><summary class="preset-panel-toggle">保存预设</summary><div class="preset-popover">
-        <section class="preset-section" aria-label="用户预设">
-          <div class="preset-head"><strong>用户预设</strong><span class="preset-count" id="presetCount">0 个预设</span></div>
-          <div class="preset-fields"><select class="preset-select" id="presetSelect" aria-label="选择用户预设"><option value="">新建预设…</option></select><input class="preset-name" id="presetName" type="text" maxlength="32" placeholder="预设名称" aria-label="预设名称"></div>
-          <div class="preset-actions"><button class="preset-btn" id="presetNew" type="button">新建</button><button class="preset-btn primary" id="presetSave" type="button">保存当前</button><button class="preset-btn" id="presetApply" type="button" disabled>应用</button><button class="preset-btn danger" id="presetDelete" type="button" disabled>删除</button></div>
-          <div class="preset-status" id="presetStatus" role="status" aria-live="polite"></div><div class="preset-hint">当前保存 RGB、横向／竖向布局、网页缩放、图表模式与曲线选择；预设结构可继续扩展。</div>
-        </section>
-      </div></details>
-      <button class="layout-switch" id="layoutToggle" type="button" data-layout="vertical" aria-pressed="false" aria-label="切换至横向布局">↔ 横向布局</button><button class="language-switch" id="languageToggle" type="button" aria-label="切换语言">EN</button>
-    </div>
+    <div class="brand">STARLUX LANDING METRICS MONITOR · 报告阅读器 v1.1.4</div>
+    <div class="top-actions"><div class="privacy">完全本地读取 · 数据不会上传</div><button class="theme-switch" id="themeToggle" type="button" aria-label="切换浅色模式">浅色</button><button class="language-switch" id="languageToggle" type="button" aria-label="切换语言">EN</button></div>
   </header>
   <div class="workspace">
     <aside class="sidebar">
@@ -364,31 +310,9 @@ html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-co
           <div id="runwayGraphic"></div><div class="viz-caption" id="runwayCaption">--</div><div class="runway-legend" id="runwayLegend"></div>
         </section>
 
-        <section class="section telemetry-section">
-          <div class="telemetry-heading">
-            <div><h2 id="telemetryTitle">100 ft 后多参数轨迹</h2><div class="lead" id="telemetryLead">T+ 秒固定为横轴，可同时选择多个聚合参数；新日志使用 0.25 秒显示点和跑道相对高度，底部跑道事件带与同一时间轴对齐。</div></div>
-            <div class="telemetry-actions"><span class="telemetry-badge">同步绘图区</span><button class="chart-mode-toggle" id="chartModeToggle" type="button" data-mode="separated" aria-pressed="false">融合</button></div>
-          </div>
-            <div class="live-panels" id="livePanels">
-              <article class="live-panel">
-                <div class="live-panel-head"><div><h3>油门轴与动力输出</h3><p>按发动机数量绘制；空客记录显示卡位，动力输出统一为满量程比例。</p></div><span class="live-state" id="throttleState">等待图表定位</span></div>
-                <div class="throttle-axes" id="throttleAxes"></div>
-              </article>
-              <article class="live-panel">
-                <div class="live-panel-head"><div><h3>XYZ 操纵输入</h3><p>横滚 X、俯仰 Y；Yaw / Z 轴位于下方。</p></div><span class="live-state" id="inputState">中立</span></div>
-                <div class="xy-stage">
-                  <div class="xy-pad" aria-label="俯仰横滚输入"><i class="xy-ring"></i><span class="axis-name pitch">PITCH / Y</span><span class="axis-name roll">ROLL / X</span><i class="xy-dot" id="xyDot"></i><i class="xy-dot compare" id="xyCompareDot" hidden></i></div>
-                  <div class="input-readouts"><div class="input-readout"><span>Pitch / Y</span><b id="pitchInputValue">0.0%</b></div><div class="input-readout"><span>Roll / X</span><b id="rollInputValue">0.0%</b></div><div class="input-readout"><span>Yaw / Z</span><b id="yawInputValue">0.0%</b></div></div>
-                  <div class="yaw-wrap"><div class="yaw-label"><span>-100% LEFT</span><b id="yawCompareValue"></b><span>RIGHT +100%</span></div><div class="yaw-track"><i class="yaw-marker" id="yawMarker"></i><i class="yaw-marker compare" id="yawCompareMarker" hidden></i></div></div>
-                </div>
-              </article>
-            </div>
-            <div class="playback-bar" aria-label="图表播放控制">
-              <button class="play-toggle" id="playToggle" type="button">▶ 播放</button>
-              <select class="speed-select" id="playSpeed" aria-label="播放速度"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
-              <input class="timeline-slider" id="playProgress" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度">
-              <output class="play-time" id="playTime">--:-- / --:--</output>
-            </div>
+        <div class="layout">
+          <section class="section">
+            <h2>100 ft 后多参数轨迹</h2><div class="lead">T+ 秒固定为横轴，可同时选择多个聚合参数；新日志使用 0.25 秒显示点和跑道相对高度，底部跑道事件带与同一时间轴对齐。</div>
             <div class="chart-tools">
               <div class="metric-picker" id="metricPicker" role="group" aria-label="选择图表数据源"></div>
               <div class="chart-style-key">
@@ -400,59 +324,36 @@ html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-co
             </div>
             <div class="chart-box" id="chartBox"><canvas id="flareChart"></canvas><div class="tooltip" id="chartTip"></div></div>
             <div class="empty" id="chartEmpty" hidden>该日志没有可绘制的聚合轨迹。<br>早期版本仍可查看评分、触地数据和完整原文。</div>
-
-          <div class="control-section" id="controlSection" hidden>
-          <div class="control-head">
-            <div><h2>操纵输入与舵面响应</h2><div class="lead">上方同步显示当前选择的 100 ft 参数轨迹；Pitch、Roll、Yaw、Thrust 与底部小跑道使用完全一致的 T+ 时间轴。</div></div>
-            <div class="control-status" id="controlStatus">--</div>
-          </div>
-          <div class="control-legend">
-            <span class="control-key"><i class="control-line"></i>玩家输入（-100%—+100%）</span>
-            <span class="control-key"><i class="control-line surface"></i>实际舵面（deg）</span>
-            <span class="control-key"><i class="control-line throttle"></i>逐台油门</span>
-            <span class="control-key"><i class="control-line n1"></i>逐台动力输出</span>
-            <span class="control-key"><i class="control-line detent"></i>空客卡位</span>
-            <span class="control-key"><i class="control-line compare"></i>对比日志</span>
-          </div>
-          <div class="control-chart-box" id="controlChartBox"><canvas id="controlChart"></canvas><div class="tooltip" id="controlTip"></div></div>
-          <div class="empty control-empty" id="controlEmpty" hidden>当前日志未记录可用的操纵数据。</div>
-          <div class="control-note">舵面角度保留 X-Plane 原始符号；油门以手柄行程为参考并保留反推/Beta 负值，右侧动力刻度按日志识别为 N1、EPR、螺旋桨或扭矩；空客卡位只在机模提供已验证专用接口时显示。本版本不计算 100 ms 以下响应延迟。</div>
-          </div>
-        </section>
-
-        <section class="section diagnostics-section">
-          <h2>着陆数据复核</h2><div class="lead">当前稳定版沿用原有落地算法；同步仪表、播放与自适应 RGB 主题只用于复盘和显示，不参与评分。</div>
-          <table class="diag" id="diagnostics"></table>
-        </section>
+          </section>
+          <aside class="section">
+            <h2>着陆数据复核</h2><div class="lead">v1.1.4 以 AGL 几何下降率作为 FPM 锚点：物理 FPM 与 VVI 中更接近 AGL 且差值不超过 30 fpm 的值胜出，两者均超限时直接采用 AGL；G 继续采用固定 160 ms 稳健载荷。</div>
+            <table class="diag" id="diagnostics"></table>
+          </aside>
+        </div>
 
         <details id="rawDetails"><summary>展开完整原始 TXT</summary><pre id="rawText"></pre></details>
-        <footer>StarLux LMM 分析器 · 文件仅由当前浏览器页面读取<br>本报告仅用于飞行模拟复盘，不替代航司、维修或适航判定。</footer>
+        <footer>StarLux LMM 报告阅读器 v1.1.4 · 文件仅由当前浏览器页面读取<br>本报告仅用于飞行模拟复盘，不替代航司、维修或适航判定。</footer>
       </section>
     </main>
   </div>
 </div>
-<aside class="reader-zoom" id="readerZoom" aria-label="网页缩放">
-  <span class="reader-zoom-label">缩放</span>
-  <div class="reader-zoom-track"><input class="reader-zoom-slider" id="readerZoomSlider" type="range" min="65" max="135" step="5" value="100" aria-label="网页缩放百分比"></div>
-  <output class="reader-zoom-value" id="readerZoomValue" for="readerZoomSlider">100%</output>
-  <button class="reader-zoom-reset" id="readerZoomReset" type="button">重置</button>
-</aside>
 <input id="fileInput" type="file" accept=".txt,text/plain" multiple hidden>
 
 <!-- LMM_LUA_BRIDGE -->
+
 <script>
 "use strict";
 
 const LANGUAGE_PREFERENCE_KEY="starlux-lmm-interface-language";
 const STATIC_TEXT={
-  "STARLUX LANDING METRICS MONITOR · 分析器":"STARLUX LANDING METRICS MONITOR · ANALYZER",
+  "STARLUX LANDING METRICS MONITOR · 报告阅读器 v1.1.4":"STARLUX LANDING METRICS MONITOR · REPORT READER v1.1.4",
   "完全本地读取 · 数据不会上传":"100% local · No data is uploaded",
   "已载入记录":"Loaded records","选择 TXT":"Select TXT","清空":"Clear",
   "点击记录主体切换主要数据；右侧“对比”按钮选择参考数据。关闭页面后自动清空，不会删除原始 TXT。":"Select a record as primary data; use Compare for a reference. Closing the page clears memory only and never deletes TXT files.",
   "把落地日志拖到这里":"Drop landing logs here",
   "无需启动 X-Plane。选择一份或多份":"No need to launch X-Plane. Select one or more",
   "，网页会立即在本机解析评分、载荷、风向、姿态和 100 ft 后拉平轨迹。":" files to analyse rating, load, wind, attitude and the flare trajectory locally.",
-  "选择落地日志":"Select landing logs","支持 StarLux LMM 早期日志及 0.7–1.1 记录 · 可多选":"Supports legacy and v0.7–1.1 logs · Multiple files allowed",
+  "选择落地日志":"Select landing logs","支持 StarLux LMM 早期日志及 0.7–1.1.1 记录 · 可多选":"Supports legacy and v0.7–1.1.1 logs · Multiple files allowed",
   "下载原始 TXT":"Download original TXT","载入更多日志":"Load more logs","选择对比日志":"Choose comparison",
   "最终评价":"Final rating","当前对比数据":"Current comparison","交换主／对比":"Swap primary / comparison","取消对比":"Cancel comparison",
   "触地下降率":"Touchdown vertical speed","按报告记录的下降率来源显示":"Uses the source recorded in the report",
@@ -463,48 +364,19 @@ const STATIC_TEXT={
   "接地姿态":"Touchdown attitude","姿态仪用移动地平线联合显示横滚与俯仰；迎角侧视图仅保留机翼、气流和 7.5° 通用尾擦俯仰参考；对比时用紫色虚线叠加参考姿态。":"The attitude display combines roll and pitch with a moving horizon. The AoA side view keeps only the wing, airflow and a general 7.5° tail-strike pitch reference; comparison attitude is overlaid in dashed purple.","姿态仪彩色地平线属于主要记录，紫色虚线属于对比记录；尾擦红线是通用俯仰参考，不是机型限制或 AoA 限制。":"The coloured horizon is the primary record and dashed purple is the comparison. The red tail-strike line is a general pitch reference, not an aircraft-specific or AoA limit.",
   "跑道与准确触地点":"Runway and exact touchdown point","跑道使用固定可读视角；入口、接地点和剩余距离仍按 apt.dat 实距比例定位，跑道长度通过中心线与接地区标线密度表达；阅读器不再解析或绘制进近灯。":"The runway uses a fixed readable view. Threshold, touchdown and remaining distance retain apt.dat longitudinal proportions; runway length is expressed through centreline and touchdown-zone marking density. Approach lights are no longer parsed or drawn.",
   "100 ft 后多参数轨迹":"Multi-parameter trajectory below 100 ft","T+ 秒固定为横轴，可同时选择多个聚合参数；新日志使用 0.25 秒显示点和跑道相对高度，底部跑道事件带与同一时间轴对齐。":"T+ seconds stays on the horizontal axis. New logs use 0.25-second display points and runway-relative altitude, while the runway event band stays aligned to the same timeline.",
-  "同步绘图区":"Synchronized plots","融合":"Fuse","分离":"Separate","横向布局":"Horizontal layout","竖向布局":"Vertical layout","缩放":"Zoom","重置":"Reset","RGB 配色":"RGB theme","保存预设":"Save presets","自定义主题色":"Custom theme colour","随机颜色":"Random colour","界面明暗连续跟随 RGB 感知亮度；文字和图表曲线会按实际背景独立校正对比度，评分与安全标线保留固定语义色。":"Interface brightness follows RGB perceptual luminance continuously. Text and chart series are contrast-corrected against their actual backgrounds; ratings and safety markers retain fixed semantic colours.",
-  "用户预设":"User presets","0 个预设":"0 presets","新建预设…":"New preset…","预设名称":"Preset name","新建":"New","保存当前":"Save current","应用":"Apply","删除":"Delete","当前保存 RGB、横向／竖向布局、网页缩放、图表模式与曲线选择；预设结构可继续扩展。":"Presets now store RGB, horizontal/vertical layout, page zoom, chart mode and curve selections; the schema remains extensible.",
-  "油门轴与动力输出":"Throttle axes and power output","按发动机数量绘制；空客记录显示卡位，动力输出统一为满量程比例。":"One axis per engine; Airbus records show detents and power is normalized to a common full-scale gauge.","等待图表定位":"Awaiting chart position","XYZ 操纵输入":"XYZ control input","横滚 X、俯仰 Y；Yaw / Z 轴位于下方。":"Roll is X, pitch is Y, and Yaw / Z is shown below.","中立":"Neutral","播放":"Play","暂停":"Pause","图表播放控制":"Chart playback controls","播放速度":"Playback speed","播放进度":"Playback progress",
   "主要日志":"Primary log","对比日志（虚化）":"Comparison log (faded)","跨单位曲线按各自量程对齐，悬停可查看真实数值":"Different units use their own ranges; hover for actual values",
   "该日志没有可绘制的聚合轨迹。":"This log has no drawable aggregated trajectory.","早期版本仍可查看评分、触地数据和完整原文。":"Ratings, touchdown data and raw text remain available for legacy logs.",
-  "操纵输入与舵面响应":"Control inputs and surface response","上方同步显示当前选择的 100 ft 参数轨迹；Pitch、Roll、Yaw、Thrust 与底部小跑道使用完全一致的 T+ 时间轴。":"The selected 100 ft trajectory metrics appear above the control lanes; Pitch, Roll, Yaw, Thrust and the mini-runway use exactly the same T+ timeline.",
-  "玩家输入（-100%—+100%）":"Pilot input (-100%—+100%)","实际舵面（deg）":"Actual surfaces (deg)","逐台油门":"Per-engine throttle","逐台动力输出":"Per-engine power output","空客卡位":"Airbus detents","对比日志":"Comparison log","当前日志未记录可用的操纵数据。":"This log has no usable control data.",
-  "舵面角度保留 X-Plane 原始符号；油门以手柄行程为参考并保留反推/Beta 负值，右侧动力刻度按日志识别为 N1、EPR、螺旋桨或扭矩；空客卡位只在机模提供已验证专用接口时显示。本版本不计算 100 ms 以下响应延迟。":"Surface angles retain X-Plane's raw signs. Throttle uses handle travel and preserves negative reverse/beta values. The right-side power scale follows the type identified in the log: N1, EPR, propeller or torque. Airbus detents appear only when the aircraft exposes a verified interface. This version does not calculate sub-100 ms response lag.",
-  "着陆数据复核":"Landing data review","当前稳定版沿用原有落地算法；同步仪表、播放与自适应 RGB 主题只用于复盘和显示，不参与评分。":"The current stable analyzer retains the existing landing algorithm; synchronized instruments, playback and adaptive RGB themes are review-only and do not affect scoring.",
-  "展开完整原始 TXT":"Show complete original TXT","StarLux LMM 分析器 · 文件仅由当前浏览器页面读取":"StarLux LMM Analyzer · Files are read only by this browser page",
+  "着陆数据复核":"Landing data review","v1.1.4 以 AGL 几何下降率作为 FPM 锚点：物理 FPM 与 VVI 中更接近 AGL 且差值不超过 30 fpm 的值胜出，两者均超限时直接采用 AGL；G 继续采用固定 160 ms 稳健载荷。":"v1.1.4 uses AGL geometric vertical speed as the FPM anchor: physical FPM or VVI wins when it is closest to AGL within 30 fpm; if both exceed the limit, AGL is used directly. G continues to use the fixed 160 ms robust load.",
+  "展开完整原始 TXT":"Show complete original TXT","StarLux LMM 报告阅读器 v1.1.4 · 文件仅由当前浏览器页面读取":"StarLux LMM Report Reader v1.1.4 · Files are read only by this browser page",
   "本报告仅用于飞行模拟复盘，不替代航司、维修或适航判定。":"For flight-simulation review only; not a substitute for airline, maintenance or airworthiness determinations."
 };
 let storedLanguage="";
 try{storedLanguage=localStorage.getItem(LANGUAGE_PREFERENCE_KEY)||""}catch{}
 let currentLanguage=(window.LMM_DEFAULT_LANGUAGE==="zh"||window.LMM_DEFAULT_LANGUAGE==="en")?window.LMM_DEFAULT_LANGUAGE:(storedLanguage==="zh"||storedLanguage==="en")?storedLanguage:(navigator.language||"").toLowerCase().startsWith("zh")?"zh":"en";
-const THEME_COLOR_PREFERENCE_KEY="starlux-lmm-reader-theme-color-v116";
-const USER_PRESET_STORAGE_KEY="starlux-lmm-reader-presets-v1";
-const ACTIVE_PRESET_STORAGE_KEY="starlux-lmm-reader-active-preset-v1";
-const USER_PRESET_SCHEMA_VERSION=1;
-let themeSeed="#2F8DCC";try{const saved=localStorage.getItem(THEME_COLOR_PREFERENCE_KEY);if(/^#[0-9a-f]{6}$/i.test(saved||""))themeSeed=saved.toUpperCase()}catch{}
-let themeTone=themeToneFromSeed(themeSeed);
-let generatedThemePalette=null;
-function normalizeUserPreset(value){if(!value||typeof value!=="object")return null;const id=String(value.id||""),name=String(value.name||"").trim().slice(0,32),settings=value.settings&&typeof value.settings==="object"?value.settings:{};if(!id||!name)return null;return{id,name,schemaVersion:Number(value.schemaVersion)||1,createdAt:String(value.createdAt||value.updatedAt||""),updatedAt:String(value.updatedAt||""),settings:{...settings,theme:settings.theme&&typeof settings.theme==="object"?settings.theme:{},layout:settings.layout&&typeof settings.layout==="object"?settings.layout:{},charts:settings.charts&&typeof settings.charts==="object"?settings.charts:{},extensions:settings.extensions&&typeof settings.extensions==="object"?settings.extensions:{}}}}
-function bundledUserPresets(){try{return JSON.parse(document.getElementById("lmm-bundled-presets")?.textContent||'{"items":[]}').items.map(normalizeUserPreset).filter(Boolean)}catch{return[]}}
-function loadUserPresets(){try{const raw=localStorage.getItem(USER_PRESET_STORAGE_KEY);if(raw===null)return bundledUserPresets();const parsed=JSON.parse(raw),items=Array.isArray(parsed)?parsed:Array.isArray(parsed?.items)?parsed.items:[];return items.map(normalizeUserPreset).filter(Boolean).slice(0,40)}catch{return[]}}
-let userPresets=loadUserPresets(),activePresetId="";try{const saved=localStorage.getItem(ACTIVE_PRESET_STORAGE_KEY)||"";if(userPresets.some(item=>item.id===saved))activePresetId=saved}catch{}
-let applyingPreset=false,presetStatusState={message:"",kind:""};
-function hexToRgb(hex){const value=parseInt(String(hex).replace("#",""),16);return{r:value>>16&255,g:value>>8&255,b:value&255}}
-function rgbToHex(r,g,b){return`#${[r,g,b].map(value=>clamp(Math.round(value),0,255).toString(16).padStart(2,"0")).join("")}`.toUpperCase()}
-function rgbToHsl({r,g,b}){r/=255;g/=255;b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b),l=(max+min)/2,d=max-min;let h=0,s=0;if(d){s=d/(1-Math.abs(2*l-1));if(max===r)h=60*(((g-b)/d)%6);else if(max===g)h=60*((b-r)/d+2);else h=60*((r-g)/d+4)}return{h:(h+360)%360,s:s*100,l:l*100}}
-function hslToRgb(h,s,l){h=((h%360)+360)%360;s=clamp(s,0,100)/100;l=clamp(l,0,100)/100;const chroma=(1-Math.abs(2*l-1))*s,x=chroma*(1-Math.abs(h/60%2-1)),m=l-chroma/2;let channels;if(h<60)channels=[chroma,x,0];else if(h<120)channels=[x,chroma,0];else if(h<180)channels=[0,chroma,x];else if(h<240)channels=[0,x,chroma];else if(h<300)channels=[x,0,chroma];else channels=[chroma,0,x];return{r:(channels[0]+m)*255,g:(channels[1]+m)*255,b:(channels[2]+m)*255}}
-function rgbColor(rgb,alpha=null){const values=[rgb.r,rgb.g,rgb.b].map(value=>Math.round(clamp(value,0,255)));return alpha===null?`rgb(${values.join(", ")})`:`rgba(${values.join(", ")}, ${clamp(alpha,0,1).toFixed(3)})`}
-function mixRgb(from,to,amount){const ratio=clamp(amount,0,1);return{r:from.r+(to.r-from.r)*ratio,g:from.g+(to.g-from.g)*ratio,b:from.b+(to.b-from.b)*ratio}}
-function relativeLuminance({r,g,b}){const linear=channel=>{channel/=255;return channel<=.04045?channel/12.92:((channel+.055)/1.055)**2.4};return.2126*linear(r)+.7152*linear(g)+.0722*linear(b)}
-function contrastRatio(a,b){const high=Math.max(relativeLuminance(a),relativeLuminance(b)),low=Math.min(relativeLuminance(a),relativeLuminance(b));return(high+.05)/(low+.05)}
-function accessibleHslRgb(h,s,preferredLightness,backgrounds,minRatio=4.5){const targets=(Array.isArray(backgrounds)?backgrounds:[backgrounds]).filter(Boolean);let eligible=null,fallback=null;for(let lightness=3;lightness<=97;lightness++){const rgb=hslToRgb(h,s,lightness),ratio=Math.min(...targets.map(background=>contrastRatio(rgb,background))),distance=Math.abs(lightness-preferredLightness);if(!fallback||ratio>fallback.ratio)fallback={rgb,ratio,distance};if(ratio>=minRatio&&(!eligible||distance<eligible.distance||(distance===eligible.distance&&ratio>eligible.ratio)))eligible={rgb,ratio,distance}}return(eligible||fallback).rgb}
-function themeToneFromSeed(value){const {r,g,b}=hexToRgb(value),linear=channel=>{channel/=255;return channel<=.04045?channel/12.92:((channel+.055)/1.055)**2.4},luminance=.2126*linear(r)+.7152*linear(g)+.0722*linear(b),perceptual=luminance<=216/24389?luminance*(24389/27)/100:(116*Math.cbrt(luminance)-16)/100;return clamp(perceptual,0,1)}
-function syncThemeToneFromSeed(){themeTone=themeToneFromSeed(themeSeed);delete document.documentElement.dataset.theme;document.documentElement.style.setProperty("--theme-tone",themeTone.toFixed(4));const meta=document.querySelector('meta[name="color-scheme"]');if(meta)meta.content="dark light"}
-function hslColor(h,s,l){return`hsl(${((h%360)+360)%360} ${clamp(s,0,100)}% ${clamp(l,0,100)}%)`}
-function themeHsl(offset=0,saturation=null,lightness=null){const base=rgbToHsl(hexToRgb(themeSeed));return hslColor(base.h+offset,saturation??clamp(base.s,48,82),lightness??base.l)}
-function themeRgbChannels(){return hexToRgb(themeSeed)}
-function themeSeriesColor(offset=0,variant=0){const palette=generatedThemePalette,base=palette?.base||rgbToHsl(hexToRgb(themeSeed)),backgrounds=palette?[palette.vizBg,palette.vizBg2]:[hslToRgb(base.h,26,10),hslToRgb(base.h+3,22,14)],saturation=clamp(base.s+34-(variant%3)*4,72,94),preferred=68+(variant%2)*4;return rgbColor(accessibleHslRgb(base.h+offset,saturation,preferred,backgrounds,4.58))}
+const THEME_PREFERENCE_KEY="starlux-lmm-reader-theme";
+let storedTheme="";try{storedTheme=localStorage.getItem(THEME_PREFERENCE_KEY)||""}catch{}
+let currentTheme=storedTheme==="light"||storedTheme==="dark"?storedTheme:"dark";
+document.documentElement.dataset.theme=currentTheme;
 function tr(zh,en){return currentLanguage==="en"?en:zh}
 function metricLabel(metric){return currentLanguage==="en"?(metric.labelEn||metric.label):metric.label}
 function translateValue(value){
@@ -569,8 +441,6 @@ function translateValue(value){
     ["长行程压缩达到采集上限，局部包络样本不足，采用全局第75百分位曲线G","Long-travel compression reached the capture limit; local envelope insufficient, global P75 G selected"],
     ["物理样本不足，使用备用一致性上限","Insufficient physical samples; consistency safety cap used"],
     ["下降率轨迹震荡高","High vertical-speed oscillation"],["下降率轨迹正常","Vertical-speed trend normal"],
-    ["首次接地后连续记录满2秒","Recorded 2 continuous seconds after first touchdown"],["最后一次接地后连续记录满2秒","Recorded 2 continuous seconds after final touchdown"],["达到接地过程8秒安全上限","Reached the 8 s touchdown-process safety limit"],
-    ["完整（9/9）","Complete (9/9)"],["不可用（0/9）","Unavailable (0/9)"],["部分（","Partial ("],
     ["未检测到弹跳","No bounce detected"],["发生弹跳","Bounce detected"],["道面湿滑，注意摩擦力","Wet surface: reduced friction"],
     ["持续降雨，道面可能湿滑","Persistent rain: runway may be wet"],["最近三分钟未确认持续降雨或湿滑道面","No persistent rain or wet runway confirmed in the last three minutes"],
     ["左前侧风","left-front crosswind"],["右前侧风","right-front crosswind"],["左后侧风","left-rear crosswind"],["右后侧风","right-rear crosswind"],["顶风","headwind"],["顺风","tailwind"],
@@ -579,15 +449,13 @@ function translateValue(value){
     ["样本不足","Insufficient samples"],["无法确认","unable to confirm"],["左倾","Left bank"],["右倾","Right bank"],["水平","Level"]
   ];
   for(const [zh,en] of pairs)output=currentLanguage==="en"?output.replaceAll(zh,en):output.replaceAll(en,zh);
-  if(currentLanguage==="en"&&output.includes("Partial ("))output=output.replaceAll("）",")");
-  if(currentLanguage==="zh"&&output.includes("部分（"))output=output.replaceAll(")","）");
   if(currentLanguage==="en"&&output.startsWith("风 "))output="Wind "+output.slice(2);
   if(currentLanguage==="zh"&&output.startsWith("Wind "))output="风 "+output.slice(5);
   return output
 }
 function applyStaticTranslations(){
   document.documentElement.lang=currentLanguage==="en"?"en":"zh-CN";
-  document.title=tr("StarLux LMM 分析器","StarLux LMM Analyzer");
+  document.title=tr("StarLux LMM 报告阅读器 v1.1.4","StarLux LMM Report Reader v1.1.4");
   const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let node;
   while((node=walker.nextNode())){
     if(node.parentElement&&["SCRIPT","STYLE","PRE"].includes(node.parentElement.tagName))continue;
@@ -597,120 +465,50 @@ function applyStaticTranslations(){
     node.nodeValue=original.replace(trimmed,translated)
   }
   const toggle=document.getElementById("languageToggle");
-  if(toggle){toggle.hidden=window.LMM_LANGUAGE_LOCKED===true;toggle.textContent=currentLanguage==="en"?"中文":"EN";toggle.setAttribute("aria-label",tr("切换至英文","Switch to Chinese"))}
+  if(toggle){toggle.textContent=currentLanguage==="en"?"中文":"EN";toggle.setAttribute("aria-label",tr("切换至英文","Switch to Chinese"))}
   const clear=document.getElementById("clearFiles");if(clear)clear.title=tr("只清除网页内存，不删除磁盘文件","Clear browser memory only; original files are not deleted");
-  const themeColor=document.getElementById("themeColor");if(themeColor)themeColor.setAttribute("aria-label",tr("主题颜色","Theme colour"));
-  const playSpeed=document.getElementById("playSpeed");if(playSpeed)playSpeed.setAttribute("aria-label",tr("播放速度","Playback speed"));
-  const playProgress=document.getElementById("playProgress");if(playProgress)playProgress.setAttribute("aria-label",tr("播放进度","Playback progress"));
-  const presetName=document.getElementById("presetName");if(presetName){presetName.placeholder=tr("预设名称","Preset name");presetName.setAttribute("aria-label",tr("预设名称","Preset name"))}const presetSelect=document.getElementById("presetSelect");if(presetSelect)presetSelect.setAttribute("aria-label",tr("选择用户预设","Select user preset"));const presetSection=document.querySelector(".preset-section");if(presetSection)presetSection.setAttribute("aria-label",tr("用户预设","User presets"));renderLayoutMode();renderPresetControls();
+  const themeToggle=document.getElementById("themeToggle");if(themeToggle){themeToggle.textContent=currentTheme==="dark"?tr("浅色","Light"):tr("深色","Dark");themeToggle.setAttribute("aria-label",currentTheme==="dark"?tr("切换至浅色模式","Switch to light theme"):tr("切换至深色模式","Switch to dark theme"))}
 }
-function applyGeneratedPalette(){
-  const base=rgbToHsl(hexToRgb(themeSeed)),root=document.documentElement,tone=themeTone,ease=tone*tone*(3-2*tone),lerp=(from,to)=>from+(to-from)*ease,seedS=clamp(base.s,42,84),surfaceS=lerp(29,12);
-  const bg=hslToRgb(base.h,surfaceS,lerp(4,86)),bg2=hslToRgb(base.h+7,lerp(28,13),lerp(8,87)),panel=hslToRgb(base.h,lerp(29,9),lerp(12,94)),panel2=hslToRgb(base.h+4,lerp(28,13),lerp(16,90)),surfaceA=hslToRgb(base.h+3,lerp(30,10),lerp(15,94)),surfaceB=hslToRgb(base.h,lerp(27,12),lerp(11,89)),vizS=clamp(base.s*.42,0,42),vizBg=hslToRgb(base.h,vizS,lerp(8,17)),vizBg2=hslToRgb(base.h+3,vizS*.78,lerp(12,21));
-  const textBackgrounds=[panel,panel2,surfaceA,surfaceB],preferredInk=lerp(96,7),text=accessibleHslRgb(base.h,9,preferredInk,textBackgrounds,7),soft=accessibleHslRgb(base.h,14,lerp(88,15),textBackgrounds,5.7),muted=accessibleHslRgb(base.h,12,lerp(76,25),textBackgrounds,4.6),accent=accessibleHslRgb(base.h,seedS,lerp(64,31),textBackgrounds,4.1),compare=accessibleHslRgb(base.h+148,clamp(seedS-7,54,78),lerp(72,29),textBackgrounds,4.1),onAccent=accessibleHslRgb(base.h,7,relativeLuminance(accent)>.36?8:97,accent,7),vizInk=accessibleHslRgb(base.h,8,preferredInk,[vizBg,vizBg2],6.4);
-  const line=mixRgb(panel,text,.34),lineStrong=mixRgb(panel,text,.52),interactive=mixRgb(panel2,accent,.055),interactiveHover=mixRgb(panel2,accent,.14),chartGrid=mixRgb(vizBg,vizInk,.27),chartGridStrong=mixRgb(vizBg,vizInk,.46),event50=accessibleHslRgb(39,88,lerp(68,32),vizBg,4.2),eventZero=accessibleHslRgb(350,78,lerp(71,38),vizBg,4.2),runway=mixRgb(vizBg,vizInk,.22),runwayEdge=mixRgb(vizBg,vizInk,.58),runwayCenter=accessibleHslRgb(base.h,3,preferredInk,vizBg,7),focusRing=accessibleHslRgb(base.h+18,seedS,lerp(76,28),[panel,bg],4.5),glow=hslToRgb(base.h,clamp(seedS-12,38,68),lerp(18,82));
-  const successBase=hslToRgb(148,62,lerp(55,36)),successBg=mixRgb(panel2,successBase,.16),successText=accessibleHslRgb(148,64,lerp(72,27),successBg,4.6),warningText=accessibleHslRgb(39,82,lerp(72,31),textBackgrounds,4.6),dangerBase=hslToRgb(352,72,lerp(56,43)),dangerBg=mixRgb(panel2,dangerBase,.18),dangerText=accessibleHslRgb(352,55,lerp(78,27),dangerBg,5),dangerBorder=mixRgb(dangerBg,dangerText,.52);
-  generatedThemePalette={base,tone,ease,bg,panel,panel2,vizBg,vizBg2,text,soft,muted,accent,compare,vizInk};
-  const vizAccent=themeSeriesColor(0,0),vizCompare=themeSeriesColor(148,1);
-  const set=(name,value)=>root.style.setProperty(name,value),setRgb=(name,value)=>set(name,rgbColor(value));
-  setRgb("--bg",bg);setRgb("--bg2",bg2);setRgb("--panel",panel);setRgb("--panel2",panel2);setRgb("--line",line);setRgb("--line-strong",lineStrong);setRgb("--text",text);setRgb("--muted",muted);setRgb("--soft",soft);setRgb("--accent",accent);setRgb("--on-accent",onAccent);setRgb("--glow",glow);setRgb("--surface-a",surfaceA);setRgb("--surface-b",surfaceB);setRgb("--compare",compare);setRgb("--viz-bg",vizBg);setRgb("--viz-bg2",vizBg2);setRgb("--viz-ink",vizInk);set("--viz-accent",vizAccent);set("--viz-compare",vizCompare);setRgb("--interactive",interactive);setRgb("--interactive-hover",interactiveHover);setRgb("--success-text",successText);setRgb("--warning-text",warningText);setRgb("--danger-text",dangerText);setRgb("--success-bg",successBg);setRgb("--danger-bg",dangerBg);setRgb("--danger-border",dangerBorder);set("--toolbar-bg",rgbColor(panel,.965));set("--toolbar-shadow",`0 ${Math.round(12-2*ease)}px ${Math.round(34-7*ease)}px rgba(0, 0, 0, ${(0.28-.13*ease).toFixed(3)})`);set("--shadow",`0 ${Math.round(22-4*ease)}px ${Math.round(60-15*ease)}px rgba(0, 0, 0, ${(0.34-.18*ease).toFixed(3)})`);setRgb("--chart-grid",chartGrid);setRgb("--chart-grid-strong",chartGridStrong);set("--chart-ground",rgbColor(event50,lerp(.10,.075)));setRgb("--chart-event-50",event50);setRgb("--chart-event-zero",eventZero);setRgb("--chart-runway",runway);setRgb("--chart-runway-edge",runwayEdge);setRgb("--chart-runway-center",runwayCenter);setRgb("--focus-ring",focusRing);[0,58,121,181,238,302].forEach((offset,index)=>set(`--series-${index+1}`,themeSeriesColor(offset,index)))
+function applyTheme(theme){
+  currentTheme=theme==="light"?"light":"dark";document.documentElement.dataset.theme=currentTheme;
+  const meta=document.querySelector('meta[name="color-scheme"]');if(meta)meta.content=currentTheme;
+  try{localStorage.setItem(THEME_PREFERENCE_KEY,currentTheme)}catch{}
+  applyStaticTranslations()
 }
-function renderThemeControls(){const rgb=themeRgbChannels(),color=document.getElementById("themeColor");if(!color)return;color.value=themeSeed.toLowerCase();for(const key of["R","G","B"]){const input=document.getElementById(`theme${key}`),output=document.getElementById(`theme${key}Value`),value=rgb[key.toLowerCase()];input.value=String(value);output.value=String(value);output.textContent=String(value)}const hex=document.getElementById("themeHex");hex.value=themeSeed;hex.textContent=themeSeed}
-function persistUserPresets(){try{localStorage.setItem(USER_PRESET_STORAGE_KEY,JSON.stringify({schemaVersion:USER_PRESET_SCHEMA_VERSION,items:userPresets}));return true}catch{return false}}
-function setActivePresetId(id){activePresetId=userPresets.some(item=>item.id===id)?id:"";try{if(activePresetId)localStorage.setItem(ACTIVE_PRESET_STORAGE_KEY,activePresetId);else localStorage.removeItem(ACTIVE_PRESET_STORAGE_KEY)}catch{}}
-function presetArraysEqual(a,b){return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((value,index)=>value===b[index])}
-function presetMatchesCurrent(preset){const settings=preset?.settings||{},theme=settings.theme||{},layout=settings.layout||{},charts=settings.charts||{},viewMatches=!layout.viewMode||layout.viewMode===state.layoutMode;return String(theme.seed||"").toUpperCase()===themeSeed&&Number(layout.pageZoom)===Number(state.zoom)&&layout.chartMode===state.chartMode&&viewMatches&&presetArraysEqual(charts.separatedMetrics,state.separatedMetrics)&&presetArraysEqual(charts.fusedMetrics,state.fusedMetrics)}
-function setPresetStatus(message="",kind=""){presetStatusState={message,kind};const node=document.getElementById("presetStatus");if(node){node.textContent=message;node.className=`preset-status${kind?` ${kind}`:""}`}}
-function renderPresetControls(){
-  const select=document.getElementById("presetSelect"),name=document.getElementById("presetName"),count=document.getElementById("presetCount"),save=document.getElementById("presetSave"),apply=document.getElementById("presetApply"),remove=document.getElementById("presetDelete");if(!select)return;
-  const selected=userPresets.find(item=>item.id===activePresetId)||null;select.replaceChildren();const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent=tr("新建预设…","New preset…");select.append(placeholder);for(const preset of[...userPresets].sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)))){const option=document.createElement("option");option.value=preset.id;option.textContent=preset.name;select.append(option)}select.value=selected?.id||"";count.textContent=tr(`${userPresets.length} 个预设`,`${userPresets.length} preset${userPresets.length===1?"":"s"}`);save.textContent=selected?tr("更新预设","Update preset"):tr("保存当前","Save current");apply.disabled=!selected;remove.disabled=!selected;
-  if(!presetStatusState.message){if(selected&&!presetMatchesCurrent(selected))presetStatusState={message:tr("当前设置与所选预设不同，尚未保存。","Current settings differ from the selected preset."),kind:"dirty"};else if(selected)presetStatusState={message:tr(`已选择：${selected.name}`,`Selected: ${selected.name}`),kind:""}}
-  setPresetStatus(presetStatusState.message,presetStatusState.kind);if(selected&&!name.value)name.value=selected.name
-}
-function capturePresetSettings(){return{theme:{seed:themeSeed},layout:{pageZoom:state.zoom,chartMode:state.chartMode,viewMode:state.layoutMode,regions:{}},charts:{separatedMetrics:[...state.separatedMetrics],fusedMetrics:[...state.fusedMetrics]},extensions:{}}}
-function createPresetId(){try{return crypto.randomUUID()}catch{return`preset-${Date.now()}-${Math.random().toString(36).slice(2,8)}`}}
-function saveCurrentPreset(){
-  const input=document.getElementById("presetName"),requested=String(input.value||"").trim().slice(0,32),selected=userPresets.find(item=>item.id===activePresetId),sameName=!selected&&requested?userPresets.find(item=>item.name.toLocaleLowerCase()===requested.toLocaleLowerCase()):null,target=selected||sameName,name=requested||target?.name||tr("我的配色","My theme"),now=new Date().toISOString(),preset={id:target?.id||createPresetId(),name,schemaVersion:USER_PRESET_SCHEMA_VERSION,createdAt:target?.createdAt||now,updatedAt:now,settings:{...(target?.settings||{}),...capturePresetSettings()}};
-  if(target)userPresets=userPresets.map(item=>item.id===target.id?preset:item);else{if(userPresets.length>=40){setPresetStatus(tr("最多保存 40 个预设，请先删除不需要的预设。","You can save up to 40 presets; delete one before adding another."),"dirty");return}userPresets.push(preset)}if(!persistUserPresets()){setPresetStatus(tr("保存失败：浏览器本地存储不可用。","Save failed: browser local storage is unavailable."),"dirty");return}setActivePresetId(preset.id);input.value=preset.name;presetStatusState={message:tr(`已保存预设：${preset.name}`,`Saved preset: ${preset.name}`),kind:"success"};renderPresetControls()
-}
-function applyUserPreset(){
-  const preset=userPresets.find(item=>item.id===activePresetId);if(!preset)return;const settings=preset.settings||{},theme=settings.theme||{},layout=settings.layout||{},charts=settings.charts||{};applyingPreset=true;pausePlayback();if(/^#[0-9a-f]{6}$/i.test(theme.seed||""))themeSeed=theme.seed.toUpperCase();syncThemeToneFromSeed();try{localStorage.setItem(THEME_COLOR_PREFERENCE_KEY,themeSeed)}catch{}
-  if(Number.isFinite(Number(layout.pageZoom)))state.zoom=clamp(Math.round(Number(layout.pageZoom)),65,135);if(layout.chartMode==="fused"||layout.chartMode==="separated")state.chartMode=layout.chartMode;if(layout.viewMode==="horizontal"||layout.viewMode==="vertical")state.layoutMode=layout.viewMode;const validSeparated=Array.isArray(charts.separatedMetrics)?charts.separatedMetrics.filter(key=>TRAJECTORY_METRICS.some(metric=>metric.key===key)):[],validFused=Array.isArray(charts.fusedMetrics)?charts.fusedMetrics.filter(key=>metricByKey[key]):[];if(validSeparated.length)state.separatedMetrics=[...new Set(validSeparated)];if(validFused.length)state.fusedMetrics=[...new Set(validFused)];try{localStorage.setItem(ZOOM_PREFERENCE_KEY,String(state.zoom));localStorage.setItem(CHART_MODE_PREFERENCE_KEY,state.chartMode);localStorage.setItem(LAYOUT_MODE_PREFERENCE_KEY,state.layoutMode);localStorage.setItem(METRIC_PREFERENCE_KEY,JSON.stringify(state.separatedMetrics));localStorage.setItem(FUSED_METRIC_PREFERENCE_KEY,JSON.stringify(state.fusedMetrics))}catch{}
-  applyGeneratedPalette();renderThemeControls();arrangeDashboardLayout(state.layoutMode);applyStaticTranslations();applyReaderZoom(state.zoom,false);renderCurrent();applyingPreset=false;presetStatusState={message:tr(`已应用预设：${preset.name}`,`Applied preset: ${preset.name}`),kind:"success"};renderPresetControls()
-}
-function startNewPreset(){setActivePresetId("");document.getElementById("presetName").value="";presetStatusState={message:tr("已进入新建预设模式。","Ready to save a new preset."),kind:""};renderPresetControls();document.getElementById("presetName").focus()}
-function deleteUserPreset(){const preset=userPresets.find(item=>item.id===activePresetId);if(!preset||!confirm(tr(`确定删除预设“${preset.name}”吗？`,`Delete preset “${preset.name}”?`)))return;userPresets=userPresets.filter(item=>item.id!==preset.id);persistUserPresets();setActivePresetId("");document.getElementById("presetName").value="";presetStatusState={message:tr("预设已删除。","Preset deleted."),kind:""};renderPresetControls()}
-function markPresetDirty(){if(applyingPreset||!activePresetId)return;const preset=userPresets.find(item=>item.id===activePresetId);if(preset&&!presetMatchesCurrent(preset)){setPresetStatus(tr("当前设置已修改，记得更新预设。","Settings changed; update the preset to keep them."),"dirty")}}
-function setThemeSeed(value,persist=true){if(!/^#[0-9a-f]{6}$/i.test(value||""))return;themeSeed=value.toUpperCase();syncThemeToneFromSeed();if(persist)try{localStorage.setItem(THEME_COLOR_PREFERENCE_KEY,themeSeed)}catch{}applyGeneratedPalette();renderThemeControls();renderMetricPicker();renderInstrumentPanels(activeRecord()?.report,comparisonRecord()?.report||null);updateInstrumentPanels(state.playback?.touched?state.playback.time:null);redrawTrajectoryChart();markPresetDirty()}
+function setTheme(theme){applyTheme(theme);renderMetricPicker();redrawTrajectoryChart()}
 function setLanguage(language){
-  if(window.LMM_LANGUAGE_LOCKED===true)language=window.LMM_DEFAULT_LANGUAGE;
   if(language!=="zh"&&language!=="en")return;
   currentLanguage=language;try{localStorage.setItem(LANGUAGE_PREFERENCE_KEY,language)}catch{}
-  presetStatusState={message:"",kind:""};applyStaticTranslations();renderChartMode();renderMetricPicker();renderCurrent()
+  applyStaticTranslations();renderMetricPicker();renderCurrent()
 }
 
 const METRIC_PREFERENCE_KEY="starlux-lmm-trajectory-metrics";
-const FUSED_METRIC_PREFERENCE_KEY="starlux-lmm-fused-metrics";
-const CHART_MODE_PREFERENCE_KEY="starlux-lmm-chart-mode";
-const ZOOM_PREFERENCE_KEY="starlux-lmm-reader-zoom";
-const LAYOUT_MODE_PREFERENCE_KEY="starlux-lmm-layout-mode-v116";
 const TRAJECTORY_METRICS=[
-  {key:"fpm",label:"轨迹 FPM",labelEn:"Trajectory FPM",unit:"fpm",group:"verticalSpeed",decimals:0},
-  {key:"vvi",label:"VVI",labelEn:"VVI",unit:"fpm",group:"verticalSpeed",decimals:0},
-  {key:"physicalFpm",label:"物理 FPM",labelEn:"Physical FPM",unit:"fpm",group:"verticalSpeed",decimals:0},
-  {key:"ra",label:"RA 高度",labelEn:"RA altitude",unit:"ft",group:"altitude",decimals:1},
-  {key:"ias",label:"IAS",labelEn:"IAS",unit:"kt",group:"speed",decimals:0},
-  {key:"gs",label:"GS",labelEn:"GS",unit:"kt",group:"speed",decimals:0},
-  {key:"g",label:"法向载荷 G",labelEn:"Normal load G",unit:"G",group:"load",decimals:2},
-  {key:"pitch",label:"Pitch",labelEn:"Pitch",unit:"°",group:"attitude",decimals:1},
-  {key:"aoa",label:"AoA",labelEn:"AoA",unit:"°",group:"attitude",decimals:1},
-  {key:"roll",label:"Roll",labelEn:"Roll",unit:"°",group:"attitude",decimals:1}
+  {key:"fpm",label:"轨迹 FPM",labelEn:"Trajectory FPM",unit:"fpm",group:"verticalSpeed",color:"#4EA1FF",lightColor:"#0069C2",decimals:0},
+  {key:"vvi",label:"VVI",labelEn:"VVI",unit:"fpm",group:"verticalSpeed",color:"#FFB84D",lightColor:"#9A5600",decimals:0},
+  {key:"physicalFpm",label:"物理 FPM",labelEn:"Physical FPM",unit:"fpm",group:"verticalSpeed",color:"#D67CFF",lightColor:"#8A35AF",decimals:0},
+  {key:"ra",label:"RA 高度",labelEn:"RA altitude",unit:"ft",group:"altitude",color:"#42D3C5",lightColor:"#007A72",decimals:1},
+  {key:"ias",label:"IAS",labelEn:"IAS",unit:"kt",group:"speed",color:"#45D483",lightColor:"#087743",decimals:0},
+  {key:"gs",label:"GS",labelEn:"GS",unit:"kt",group:"speed",color:"#A7D83D",lightColor:"#587500",decimals:0},
+  {key:"pitch",label:"Pitch",labelEn:"Pitch",unit:"°",group:"attitude",color:"#FFD34E",lightColor:"#936300",decimals:1},
+  {key:"aoa",label:"AoA",labelEn:"AoA",unit:"°",group:"attitude",color:"#FF7D9C",lightColor:"#B52F57",decimals:1},
+  {key:"roll",label:"Roll",labelEn:"Roll",unit:"°",group:"attitude",color:"#F45B69",lightColor:"#BE293D",decimals:1}
 ];
-const CONTROL_METRICS=[
-  {key:"pitchInput",source:"control",label:"Pitch（操纵）",labelEn:"Pitch (control)",unit:"%",group:"pitchControl",decimals:1,factor:100},
-  {key:"rollInput",source:"control",label:"Roll（操纵）",labelEn:"Roll (control)",unit:"%",group:"rollControl",decimals:1,factor:100},
-  {key:"yawInput",source:"control",label:"Yaw（操纵）",labelEn:"Yaw (control)",unit:"%",group:"yawControl",decimals:1,factor:100},
-  {key:"elevator1",source:"control",label:"升降舵 1",labelEn:"Elevator 1",unit:"°",group:"elevator",decimals:2},
-  {key:"elevator2",source:"control",label:"升降舵 2",labelEn:"Elevator 2",unit:"°",group:"elevator",decimals:2},
-  {key:"aileron1",source:"control",label:"副翼 1",labelEn:"Aileron 1",unit:"°",group:"aileron",decimals:2},
-  {key:"aileron2",source:"control",label:"副翼 2",labelEn:"Aileron 2",unit:"°",group:"aileron",decimals:2},
-  {key:"rudder1",source:"control",label:"方向舵 1",labelEn:"Rudder 1",unit:"°",group:"rudder",decimals:2},
-  {key:"rudder2",source:"control",label:"方向舵 2",labelEn:"Rudder 2",unit:"°",group:"rudder",decimals:2},
-  {key:"throttle1",source:"control",label:"油门 1",labelEn:"Throttle 1",unit:"%",group:"throttle",decimals:1,factor:100},
-  {key:"throttle2",source:"control",label:"油门 2",labelEn:"Throttle 2",unit:"%",group:"throttle",decimals:1,factor:100},
-  {key:"throttle3",source:"control",label:"油门 3",labelEn:"Throttle 3",unit:"%",group:"throttle",decimals:1,factor:100},
-  {key:"throttle4",source:"control",label:"油门 4",labelEn:"Throttle 4",unit:"%",group:"throttle",decimals:1,factor:100},
-  {key:"n1_1",source:"control",label:"N1 1",labelEn:"N1 1",unit:"%",group:"n1",decimals:1},
-  {key:"n1_2",source:"control",label:"N1 2",labelEn:"N1 2",unit:"%",group:"n1",decimals:1},
-  {key:"n1_3",source:"control",label:"N1 3",labelEn:"N1 3",unit:"%",group:"n1",decimals:1},
-  {key:"n1_4",source:"control",label:"N1 4",labelEn:"N1 4",unit:"%",group:"n1",decimals:1}
-];
-const METRIC_HUE_OFFSETS=[0,34,68,112,150,184,218,252,286,320,18,52,92,132,172,212,242,272,302,332];
-function activeMetricColor(metric){const index=Math.max(0,[...TRAJECTORY_METRICS,...CONTROL_METRICS].indexOf(metric));return themeSeriesColor(METRIC_HUE_OFFSETS[index%METRIC_HUE_OFFSETS.length],index)}
-const metricByKey=Object.fromEntries([...TRAJECTORY_METRICS,...CONTROL_METRICS].map(metric=>[metric.key,metric]));
+function activeMetricColor(metric){return currentTheme==="light"?(metric.lightColor||metric.color):metric.color}
+const metricByKey=Object.fromEntries(TRAJECTORY_METRICS.map(metric=>[metric.key,metric]));
 let savedMetricKeys=["fpm"];
 try{
   const saved=JSON.parse(localStorage.getItem(METRIC_PREFERENCE_KEY)||"null");
   if(Array.isArray(saved))savedMetricKeys=saved
 }catch{}
-savedMetricKeys=[...new Set(savedMetricKeys.filter(key=>TRAJECTORY_METRICS.some(metric=>metric.key===key)))];
+savedMetricKeys=[...new Set(savedMetricKeys.filter(key=>metricByKey[key]))];
 if(!savedMetricKeys.length)savedMetricKeys=["fpm"];
-let storedChartMode="";try{storedChartMode=localStorage.getItem(CHART_MODE_PREFERENCE_KEY)||""}catch{}
-let savedFusedKeys=[];try{const saved=JSON.parse(localStorage.getItem(FUSED_METRIC_PREFERENCE_KEY)||"null");if(Array.isArray(saved))savedFusedKeys=saved}catch{}
-savedFusedKeys=[...new Set(savedFusedKeys.filter(key=>metricByKey[key]&&key!=="pitch"&&key!=="roll"))];
-if(!savedFusedKeys.length)savedFusedKeys=savedMetricKeys.map(key=>key==="pitch"?"pitchInput":key==="roll"?"rollInput":key).filter(key=>metricByKey[key]);
-if(!savedFusedKeys.length)savedFusedKeys=["fpm"];
-let storedZoom=100;try{storedZoom=Number(localStorage.getItem(ZOOM_PREFERENCE_KEY)||100)}catch{}storedZoom=clamp(Number.isFinite(storedZoom)?storedZoom:100,65,135);
-let storedLayoutMode="";try{storedLayoutMode=localStorage.getItem(LAYOUT_MODE_PREFERENCE_KEY)||""}catch{}
-const state={records:[],activeId:null,compareId:null,importMode:"main",chartMode:storedChartMode==="fused"?"fused":"separated",layoutMode:storedLayoutMode==="horizontal"?"horizontal":"vertical",separatedMetrics:savedMetricKeys,fusedMetrics:savedFusedKeys,zoom:storedZoom,playback:{recordId:null,time:null,touched:false,playing:false,speed:1,lastFrame:0,frame:0}};
+const state={records:[],activeId:null,compareId:null,importMode:"main",selectedMetrics:savedMetricKeys};
 const $=id=>document.getElementById(id);
 const ui={
   fileInput:$("fileInput"),drop:$("dropZone"),report:$("report"),error:$("errorBox"),
   list:$("recordList"),count:$("recordCount"),canvas:$("flareChart"),tip:$("chartTip"),
-  comparePanel:$("comparePanel"),chartLegend:$("chartLegend"),metricPicker:$("metricPicker"),
-  controlSection:$("controlSection"),controlCanvas:$("controlChart"),controlTip:$("controlTip"),controlStatus:$("controlStatus"),
-  chartModeToggle:$("chartModeToggle"),layoutToggle:$("layoutToggle"),telemetryTitle:$("telemetryTitle"),telemetryLead:$("telemetryLead"),zoomSlider:$("readerZoomSlider"),zoomValue:$("readerZoomValue"),
-  throttleAxes:$("throttleAxes"),throttleState:$("throttleState"),inputState:$("inputState"),xyDot:$("xyDot"),xyCompareDot:$("xyCompareDot"),yawMarker:$("yawMarker"),yawCompareMarker:$("yawCompareMarker"),playToggle:$("playToggle"),playSpeed:$("playSpeed"),playProgress:$("playProgress"),playTime:$("playTime")
+  comparePanel:$("comparePanel"),chartLegend:$("chartLegend"),metricPicker:$("metricPicker")
 };
 
 function showError(message){
@@ -781,42 +579,11 @@ function parseTrajectory(content){
     if(!inTable)continue;
     const values=[...line.matchAll(/[+-]?\d+(?:\.\d+)?/g)].map(m=>Number(m[0]));
     if(values.length>=3){
-      points.push({t:values[0],ra:values[1],fpm:values[2],vvi:values[3]??null,ias:values[4]??null,gs:values[5]??null,pitch:values[6]??null,aoa:values[7]??null,roll:values[8]??null,physicalFpm:values[9]??null,g:values[10]??null,ground:values[11]??null});
+      points.push({t:values[0],ra:values[1],fpm:values[2],vvi:values[3]??null,ias:values[4]??null,gs:values[5]??null,pitch:values[6]??null,aoa:values[7]??null,roll:values[8]??null,physicalFpm:values[9]??null});
       dataStarted=true
     }else if(dataStarted)break
   }
   return calibrateLegacyTrajectoryEndpoint(points)
-}
-function normalizeControlHeader(token){
-  const raw=String(token||"").trim(),upper=raw.toUpperCase().replace(/[()（）]/g,"");
-  if(/^T\+/.test(upper))return"t";
-  const exact={PITCHIN:"pitchInput",ROLLIN:"rollInput",YAWIN:"yawInput",ELEVATOR1:"elevator1",ELEVATOR2:"elevator2",AILERON1:"aileron1",AILERON2:"aileron2",RUDDER1:"rudder1",RUDDER2:"rudder2",DETENTMODE:"detentMode"};
-  if(exact[upper])return exact[upper];
-  let match=upper.match(/^THROTTLE_?(\d+)$/);if(match)return`throttle${match[1]}`;
-  match=upper.match(/^DETENT_?(\d+)$/);if(match)return`detent${match[1]}`;
-  match=upper.match(/^N1_?(\d+)$/);if(match)return`n1_${match[1]}`;
-  match=upper.match(/^EPR_?(\d+)$/);if(match)return`epr_${match[1]}`;
-  match=upper.match(/^(?:PROP|PROPELLER|PROPRPM|PROP_RPM|RPM)_?(\d+)$/);if(match)return`prop_${match[1]}`;
-  match=upper.match(/^(?:TORQUE|SHAFT)_?(\d+)$/);if(match)return`torque_${match[1]}`;
-  return null
-}
-function parseControlTrace(content){
-  const points=[];let inTable=false,dataStarted=false,headerKeys=null,energyType="N1";
-  const fallbackKeys=["t","pitchInput","rollInput","yawInput","elevator1","elevator2","aileron1","aileron2","rudder1","rudder2","throttle1","throttle2","throttle3","throttle4","n1_1","n1_2","n1_3","n1_4","detent1","detent2","detent3","detent4","detentMode"];
-  for(const line of content.split(/\r?\n/)){
-    if(line.includes("0.10秒操纵响应表")||/0\.10\s*s\s*control\s+response\s+table/i.test(line)){inTable=true;continue}
-    if(!inTable)continue;
-    const tokens=line.trim().split(/\s+/);if(!tokens.length)continue;
-    if(!Number.isFinite(Number(tokens[0]))&&tokens.some(token=>/^PitchIn$/i.test(token))){headerKeys=tokens.map(normalizeControlHeader);if(headerKeys.some(key=>/^epr_/.test(key||"")))energyType="EPR";else if(headerKeys.some(key=>/^prop_/.test(key||"")))energyType="PROP";else if(headerKeys.some(key=>/^torque_/.test(key||"")))energyType="TORQUE";continue}
-    if(tokens.length>=10&&Number.isFinite(Number(tokens[0]))){
-      const point={},keys=headerKeys?.length===tokens.length?headerKeys:fallbackKeys;
-      keys.forEach((key,index)=>{if(!key)return;const token=tokens[index],missing=!token||token.toUpperCase()==="NA";if(/^detent\d+$/.test(key))point[key]=missing?null:token.toUpperCase();else point[key]=!missing&&Number.isFinite(Number(token))?Number(token):null});
-      for(let engine=1;engine<=8;engine++){for(const [prefix,type] of[["n1_","N1"],["epr_","EPR"],["prop_","PROP"],["torque_","TORQUE"]]){const value=point[`${prefix}${engine}`];if(Number.isFinite(value)){point[`power${engine}`]=value;energyType=type;break}}}point.energyType=energyType;
-      points.push(point);dataStarted=true
-    }else if(dataStarted)break
-  }
-  points.energyType=energyType;
-  return points
 }
 function filenameIdentity(name){
   const match=name.match(/^LMM_([^_]+)_([^_]+)_RWY([^_]+)_/);
@@ -843,7 +610,7 @@ function parseReport(fileName,content){
   const windSourceText=firstField(fields,["风向和风速","Wind direction and speed"]);
   const windMatch=windSourceText.match(/来自\s*([+-]?\d+(?:\.\d+)?)\s*deg[^\d]+([+-]?\d+(?:\.\d+)?)\s*kt/i)||windSourceText.match(/(?:from\s*)?([+-]?\d+(?:\.\d+)?)\s*deg[^\d]+([+-]?\d+(?:\.\d+)?)\s*kt/i);
   const aoaText=firstField(fields,["迎角","Angle of attack"]),rollText=firstField(fields,["横滚角","Roll angle"]),pitchText=firstField(fields,["俯仰角","Pitch angle"]);
-  const trajectory=parseTrajectory(content),controlTrace=parseControlTrace(content),trajectoryCalibrationText=firstField(fields,["轨迹接地基准校准","Trajectory touchdown-reference calibration"]),trajectoryCalibrationFieldFt=parseNumber(trajectoryCalibrationText),explicitPitch=parseNumber(pitchText),endpointPitch=trajectory.length?trajectory[trajectory.length-1].pitch:null,pitchDeg=Number.isFinite(explicitPitch)?explicitPitch:(Number.isFinite(endpointPitch)?endpointPitch:null);
+  const trajectory=parseTrajectory(content),trajectoryCalibrationText=firstField(fields,["轨迹接地基准校准","Trajectory touchdown-reference calibration"]),trajectoryCalibrationFieldFt=parseNumber(trajectoryCalibrationText),explicitPitch=parseNumber(pitchText),endpointPitch=trajectory.length?trajectory[trajectory.length-1].pitch:null,pitchDeg=Number.isFinite(explicitPitch)?explicitPitch:(Number.isFinite(endpointPitch)?endpointPitch:null);
   const version=(content.match(/StarLux[^\r\n]*?v(\d+\.\d+(?:\.\d+)?)/)||[])[1]||"Legacy";
   return{
     fileName,raw:content,fields,version,legacy:version==="Legacy",
@@ -855,14 +622,6 @@ function parseReport(fileName,content){
     physicalFpm:firstField(fields,["接地前物理下降率","250 ms 物理速度第25百分位","Pre-touchdown physical vertical speed","250 ms physical-velocity P25"]),
     vviFpm:firstField(fields,["VVI 参考下降率","同窗 VVI 中位数","VVI reference vertical speed","Windowed VVI median"]),aglFpm:firstField(fields,["AGL 几何锚点下降率","AGL 几何复核下降率","第三链 AGL 高度变化下降率","AGL geometric anchor vertical speed","AGL geometric cross-check vertical speed","Third-chain AGL-derived vertical speed"]),
     airport,airportText:airportText||airport,aircraft,runway,ias,gs,
-    engineCount:parseNumber(firstField(fields,["发动机数量","Engine count"])),
-    throttleSource:firstField(fields,["油门参考","Throttle reference"]),
-    throttleStyle:firstField(fields,["油门杆类型","Throttle lever type"]),
-    n1Source:firstField(fields,["N1 来源","N1 source"]),
-    energyType:controlTrace.energyType||(/EPR/i.test(firstField(fields,["EPR 来源","EPR source"]))?"EPR":/螺旋桨|prop/i.test(firstField(fields,["螺旋桨动力来源","Propeller power source"]))?"PROP":"N1"),
-    energySource:firstField(fields,["N1 来源","N1 source","EPR 来源","EPR source","螺旋桨动力来源","Propeller power source","扭矩来源","Torque source"]),
-    throttleChannels:firstField(fields,["可用油门通道","Available throttle channels"]),powerChannels:firstField(fields,["可用 N1 通道","Available N1 channels","可用 EPR 通道","Available EPR channels","可用螺旋桨动力通道","Available propeller power channels"]),
-    detentSource:firstField(fields,["空客卡位来源","Airbus detent source"]),
     tasText:firstField(fields,["真空速（TAS）","True airspeed (TAS)"]),aoaText,aoaDeg:parseNumber(aoaText),
     pitchText:pitchText||"",pitchDeg,rollText,rollDeg:parseRoll(rollText),headingText,headingDeg:parseNumber(headingText),
     windText:firstField(fields,["相对风","Relative wind"]),windSourceText,
@@ -888,8 +647,6 @@ function parseReport(fileName,content){
     bounceText:firstField(fields,["弹跳检测","Bounce detection"]),flareMetric:parseNumber(firstField(fields,["拉平曲率","Flare curvature"])),
     flareTrend:firstField(fields,["拉平轨迹结论","轨迹结论","Flare trajectory conclusion","Trajectory conclusion"]),
     flareDuration:firstField(fields,["100 ft 至触地时间","100 ft to touchdown time"]),trajectoryHeightReference:firstField(fields,["轨迹高度基准","Trajectory height reference"]),
-    firstTouchTime:parseNumber(firstField(fields,["首次接地 T+秒","First touchdown T+s"])),traceDuration:parseNumber(firstField(fields,["完整接地过程记录时长","Full touchdown-process trace duration"])),postTouchDuration:parseNumber(firstField(fields,["接地后记录时长","Post-touchdown trace duration"])),traceEndReason:firstField(fields,["轨迹结束原因","Trace end reason"]),
-    controlCapture:firstField(fields,["操纵数据采集","Control-data capture"]),controlChannels:firstField(fields,["可用操纵通道","Available input channels"]),surfaceChannels:firstField(fields,["可用舵面通道","Available surface channels"]),controlTrace,
     trajectoryEndpointCalibrationText:trajectoryCalibrationText,trajectoryEndpointCalibrationFt:Number.isFinite(trajectoryCalibrationFieldFt)?trajectoryCalibrationFieldFt:(trajectory.endpointCalibrationFt??null),trajectoryEndpointCalibrationLegacy:!trajectoryCalibrationText&&trajectory.endpointCalibrationSource==="legacy-forced-zero",
     flareEntry:firstField(fields,["100 ft 附近下降率","Vertical speed near 100 ft"]),
     flareRecovery:firstField(fields,["下降率净改善量","Net vertical-speed improvement"]),
@@ -1067,8 +824,7 @@ function renderFacts(report){
     [tr("机场","Airport"),report.airportText],[tr("跑道方向","Runway"),runwayFact],
     [tr("机型","Aircraft"),report.aircraft],[tr("相对风","Relative wind"),translateValue(report.windText||"--")],[tr("迎角","AoA"),translateValue(report.aoaText||"--")],
     [tr("俯仰","Pitch"),Number.isFinite(report.pitchDeg)?`${report.pitchDeg>=0?"+":""}${report.pitchDeg.toFixed(1)}°`:"--"],[tr("横滚","Roll"),translateValue(report.rollText||"--")],[tr("距机场参考点","Airport reference distance"),report.airportDistanceText||"--"],
-    [tr("拉平用时","Flare time"),report.flareDuration||"--"],[tr("完整过程","Full trace"),Number.isFinite(report.traceDuration)?`${report.traceDuration.toFixed(2)} s`:"--"],
-    [tr("接地后记录","Post-touch trace"),Number.isFinite(report.postTouchDuration)?`${report.postTouchDuration.toFixed(2)} s`:"--"],[tr("净改善量","Net improvement"),report.flareRecovery||"--"]
+    [tr("拉平用时","Flare time"),report.flareDuration||"--"],[tr("净改善量","Net improvement"),report.flareRecovery||"--"]
   ];
   const root=$("facts");root.replaceChildren();
   for(const [label,value] of facts){const div=document.createElement("div");div.className="fact";const span=document.createElement("span");span.textContent=label;const strong=document.createElement("b");strong.textContent=value||"--";div.append(span,strong);root.append(div)}
@@ -1084,8 +840,6 @@ function renderDiagnostics(report){
     [tr("下降率取值","Vertical-speed source"),translateValue(report.fpmSource||"--")],[tr("下降率取值说明","Source rationale"),translateValue(report.fpmMethod||"--")],
     [tr("接地前物理 / VVI 候选","Pre-touchdown physical / VVI candidates"),`${report.physicalFpm||"--"} / ${report.vviFpm||"--"}`],[tr("AGL 几何锚点","AGL geometric anchor"),translateValue(report.aglFpm||"--")],
     [tr("轨迹端点校准","Trajectory endpoint calibration"),trajectoryCalibration],
-    [tr("首次接地时间","First-touch time"),Number.isFinite(report.firstTouchTime)?`T+${report.firstTouchTime.toFixed(2)} s`:"--"],[tr("轨迹结束原因","Trace end reason"),translateValue(report.traceEndReason||"--")],
-    [tr("操纵数据采集","Control-data capture"),translateValue(report.controlCapture||tr("旧日志未记录","Not recorded in legacy log"))],
     [tr("轨迹下降率取值","Trajectory source"),translateValue(report.trajectorySource||report.fpmSource||"--")],[tr("轨迹高度基准","Trajectory height reference"),translateValue(report.trajectoryHeightReference||tr("旧日志：X-Plane 地形 AGL","Legacy log: X-Plane terrain AGL"))],
     [tr("最终 G","Final G"),fmt(report.g,3," G")],[isV114Plus?tr("固定 160 ms 稳健 G","Fixed 160 ms robust G"):tr("160 ms 局部包络（旧算法）","160 ms local envelope (legacy)"),fmt(Number.isFinite(report.localEventG)?report.localEventG:report.curveG,3," G")],
     [isV114Plus?tr("物理平均 G","Physics-average G"):tr("冲量等效／上限 G（旧算法）","Impulse-equivalent / cap G (legacy)"),fmt(report.equivalentG,3," G")],
@@ -1198,7 +952,7 @@ function pointGroundSpeedMps(point,report){
 function estimateRunwayTimeline(data,report){
   const target=report?.touchdownFromThresholdM;if(!Number.isFinite(target)||target<0)return null;
   const points=data.filter(point=>Number.isFinite(point.t)).slice().sort((a,b)=>a.t-b.t);if(points.length<2)return null;const trajectoryGsSamples=points.filter(point=>Number.isFinite(point.gs)&&point.gs>1).length;
-  const touchdownTime=Number.isFinite(report?.firstTouchTime)?report.firstTouchTime:(findRaTime(points,0)??points[points.length-1].t);let laterTime=touchdownTime,laterSpeed=pointGroundSpeedMps(nearestPoint(points,touchdownTime),report),accumulated=0,measuredSegments=0,thresholdTime=null;
+  const touchdownTime=findRaTime(points,0)??points[points.length-1].t;let laterTime=touchdownTime,laterSpeed=pointGroundSpeedMps(nearestPoint(points,touchdownTime),report),accumulated=0,measuredSegments=0,thresholdTime=null;
   for(let index=points.length-1;index>=0;index--){
     const point=points[index];if(point.t>=laterTime)continue;const dt=laterTime-point.t,earlySpeed=pointGroundSpeedMps(point,report),speed=Number.isFinite(earlySpeed)&&Number.isFinite(laterSpeed)?(earlySpeed+laterSpeed)/2:(earlySpeed??laterSpeed);
     if(Number.isFinite(speed)&&speed>0&&dt>0){const segment=speed*dt;measuredSegments++;if(accumulated+segment>=target){thresholdTime=laterTime-dt*(target-accumulated)/segment;break}accumulated+=segment}
@@ -1209,9 +963,9 @@ function estimateRunwayTimeline(data,report){
   const touchdownSpeed=pointGroundSpeedMps(nearestPoint(points,touchdownTime),report),remaining=Number.isFinite(report.runwayRemainingM)?Math.max(0,report.runwayRemainingM):null,runwayEndTime=Number.isFinite(remaining)&&Number.isFinite(touchdownSpeed)&&touchdownSpeed>0?touchdownTime+remaining/touchdownSpeed:null;
   return{thresholdTime,touchdownTime,runwayEndTime,fiftyTime:findRaTime(points,50),touchdownDistanceM:target,remainingM:remaining,extrapolated:extrapolated||trajectoryGsSamples<2,measuredSegments}
 }
-function drawRunwayTimeline(c,timeline,X,p,W,H,palette,verticalOffset=0){
-  const left=p.l,right=W-p.r,chartBottom=H-p.b,y=chartBottom+52+verticalOffset,height=13,rawThreshold=X(timeline.thresholdTime),rawTouchdown=X(timeline.touchdownTime),rawEnd=Number.isFinite(timeline.runwayEndTime)?X(timeline.runwayEndTime):right,thresholdX=clamp(rawThreshold,left,right),touchdownX=clamp(rawTouchdown,left,right),endX=clamp(Math.max(rawEnd,rawTouchdown),left,right);
-  c.save();c.fillStyle=palette.runwayPanel;c.fillRect(left,chartBottom+31+verticalOffset,right-left,66);
+function drawRunwayTimeline(c,timeline,X,p,W,H,palette){
+  const left=p.l,right=W-p.r,chartBottom=H-p.b,y=chartBottom+52,height=13,rawThreshold=X(timeline.thresholdTime),rawTouchdown=X(timeline.touchdownTime),rawEnd=Number.isFinite(timeline.runwayEndTime)?X(timeline.runwayEndTime):right,thresholdX=clamp(rawThreshold,left,right),touchdownX=clamp(rawTouchdown,left,right),endX=clamp(Math.max(rawEnd,rawTouchdown),left,right);
+  c.save();c.fillStyle=palette.runwayPanel;c.fillRect(left,chartBottom+31,right-left,66);
   c.fillStyle=palette.runwaySurface;c.strokeStyle=palette.runwayEdge;c.lineWidth=1;c.fillRect(thresholdX,y,Math.max(2,endX-thresholdX),height);c.strokeRect(thresholdX+.5,y+.5,Math.max(1,endX-thresholdX-1),height-1);
   c.save();c.setLineDash([9,7]);c.strokeStyle=palette.runwayCenter;c.lineWidth=1.2;c.beginPath();c.moveTo(thresholdX+7,y+height/2);c.lineTo(Math.max(thresholdX+7,endX-5),y+height/2);c.stroke();c.restore();
   c.save();c.setLineDash([4,5]);c.strokeStyle=palette.thresholdGuide;c.globalAlpha=.82;c.beginPath();c.moveTo(thresholdX,p.t);c.lineTo(thresholdX,y+height+2);c.stroke();c.restore();
@@ -1277,8 +1031,7 @@ function renderReport(report,comparison=null){
   setText("warningInsight",`${tr("中心线","Centerline")}: ${centerlineAssessment}; ${tr("弹跳状态","Bounce status")}: ${translateValue(report.bounceText)||tr("未提供","Not provided")}; ${tr("道面提示","Surface advisory")}: ${translateValue(report.surfaceText)||tr("无","None")}`);
   renderComparison(report,comparison);renderFacts(report);renderDiagnostics(report);renderWind(report,comparison);renderPose(report,comparison);renderRunway(report);
   $("rawText").textContent=report.raw;$("rawDetails").open=false;
-  preparePlayback(report);renderInstrumentPanels(report,comparison);updateInstrumentPanels(state.playback.touched?state.playback.time:null);renderPlayback();renderChartMode();renderMetricPicker();
-  drawFlare(report.trajectory,comparison?.trajectory||[],report,comparison);drawControlChart(report.controlTrace,comparison?.controlTrace||[],report,comparison)
+  drawFlare(report.trajectory,comparison?.trajectory||[],report)
 }
 function findRaTime(data,targetRa){
   for(let i=1;i<data.length;i++){
@@ -1300,138 +1053,30 @@ function nearestPoint(data,targetTime){
   for(const point of data){const gap=Math.abs(point.t-targetTime);if(gap<distance){distance=gap;best=point}}
   return best
 }
-const AIRBUS_DETENT_LEVELS={REV:0,IDLE:6,MANUAL:34,CL:62,"FLX/MCT":82,TOGA:100};
-function engineCountFor(report,comparison){
-  const detected=source=>{let max=0;for(const point of source||[])for(let engine=1;engine<=8;engine++)if(Number.isFinite(point[`throttle${engine}`])||Number.isFinite(point[`power${engine}`])||point[`detent${engine}`])max=Math.max(max,engine);return max};
-  return clamp(Math.max(1,Number(report?.engineCount)||0,Number(comparison?.engineCount)||0,detected(report?.controlTrace),detected(comparison?.controlTrace)),1,8)
-}
-function powerGaugeSpec(report,comparison){
-  const type=report?.energyType||comparison?.energyType||"N1",values=[];for(const point of[...(report?.controlTrace||[]),...(comparison?.controlTrace||[])])for(let engine=1;engine<=8;engine++)if(Number.isFinite(point[`power${engine}`]))values.push(point[`power${engine}`]);
-  const observed=Math.max(0,...values),source=`${report?.energySource||""} ${comparison?.energySource||""}`;
-  if(type==="EPR")return{type,label:"EPR",max:Math.max(2,Math.ceil(observed*10)/10),unit:"",decimals:2};
-  if(type==="PROP"){const rpm=/RPM/i.test(source)||observed>150;return rpm?{type,label:"PROP RPM",max:Math.max(2500,Math.ceil(observed/100)*100),unit:" rpm",decimals:0}:{type,label:"PROP",max:observed<=1.5?1:Math.max(100,Math.ceil(observed/10)*10),unit:"%",decimals:observed<=1.5?0:1,factor:observed<=1.5?100:1}}
-  if(type==="TORQUE")return{type,label:"TORQUE",max:observed<=1.5?1:Math.max(100,Math.ceil(observed/10)*10),unit:"%",decimals:1,factor:observed<=1.5?100:1};
-  return{type:"N1",label:"N1",max:Math.max(110,Math.ceil(observed/10)*10),unit:"%",decimals:1}
-}
-function powerText(value,spec){if(!Number.isFinite(value))return"N/A";return`${(value*(spec.factor||1)).toFixed(spec.decimals)}${spec.unit}`}
-function throttleVisualLevel(point,engine){const detent=point?.[`detent${engine}`];if(detent&&Object.hasOwn(AIRBUS_DETENT_LEVELS,detent))return AIRBUS_DETENT_LEVELS[detent];const raw=point?.[`throttle${engine}`];return Number.isFinite(raw)?clamp(raw*100,0,100):0}
-function appendGaugeMarker(rail,className){const marker=document.createElement("i");marker.className=className;marker.style.setProperty("--level","0%");rail.append(marker);return marker}
-function reportUsesAirbusThrottle(report){
-  const explicit=String(report?.throttleStyle||"").trim().toUpperCase();if(explicit==="AIRBUS_DETENT")return true;if(explicit==="CONVENTIONAL")return false;
-  const trace=report?.controlTrace||[];if(trace.some(point=>[1,2,3,4,5,6,7,8].some(engine=>Boolean(point[`detent${engine}`]))))return true;
-  const source=String(report?.detentSource||"");if(/TOLISS|AIRBUSFBW/i.test(source)&&!/NO VERIFIED|RECORDED AS NA|无已验证|记录为\s*NA/i.test(source))return true;
-  const aircraft=String(report?.aircraft||"").trim().toUpperCase();return /^A3/.test(aircraft)||["A20N","A21N","A318","A319","A320","A321"].includes(aircraft)
-}
-function throttleStyleLabel(style){return style==="airbus"?tr("空客卡位","Airbus detents"):tr("连续轴","Continuous axis")}
-function createThrottleGauge(style,label,markerClass,includeCompareMarker=false){
-  const gauge=document.createElement("div");gauge.className="vertical-gauge";gauge.dataset.throttleStyle=style;
-  const gaugeLabel=document.createElement("span");gaugeLabel.className="gauge-label";gaugeLabel.textContent=label;
-  const rail=document.createElement("div");rail.className="gauge-rail";
-  const ticks=style==="airbus"?[[0,"REV"],[6,"IDLE"],[62,"CL"],[82,"FLX"],[100,"TOGA"]]:[[0,"0"],[25,"25"],[50,"50"],[75,"75"],[100,"100"]];
-  for(const [level,tickLabel] of ticks){const tick=document.createElement("i"),text=document.createElement("span");tick.className="detent-tick";tick.style.setProperty("--level",`${level}%`);text.textContent=tickLabel;tick.append(text);rail.append(tick)}
-  const marker=appendGaugeMarker(rail,markerClass),compareMarker=includeCompareMarker?appendGaugeMarker(rail,"lever-marker compare"):null;const readout=document.createElement("b");readout.className="gauge-readout";readout.textContent="N/A";gauge.append(gaugeLabel,rail,readout);return{gauge,marker,compareMarker,readout}
-}
-function renderInstrumentPanels(report,comparison=null){
-  if(!ui.throttleAxes)return;ui.throttleAxes.replaceChildren();const count=engineCountFor(report,comparison),spec=powerGaugeSpec(report,comparison),primaryStyle=reportUsesAirbusThrottle(report)?"airbus":"conventional",comparisonStyle=reportUsesAirbusThrottle(comparison)?"airbus":"conventional",mixed=Boolean(comparison)&&primaryStyle!==comparisonStyle;ui.throttleAxes._powerSpec=spec;
-  for(let engine=1;engine<=count;engine++){
-    const card=document.createElement("div");card.className=`engine-axis${mixed?" mixed-style":""}`;card.dataset.engine=String(engine);const head=document.createElement("div");head.className="engine-title";const title=document.createElement("b");title.textContent=`ENG ${engine}`;const mode=document.createElement("span");mode.textContent=mixed?`P ${throttleStyleLabel(primaryStyle)} / C ${throttleStyleLabel(comparisonStyle)}`:throttleStyleLabel(primaryStyle);head.append(title,mode);
-    const pair=document.createElement("div"),power=document.createElement("div");pair.className=`axis-pair${mixed?" mixed-style":""}`;power.className="vertical-gauge";
-    const primaryThrottle=createThrottleGauge(primaryStyle,mixed?tr("主油门","Primary throttle"):tr("油门","Throttle"),"lever-marker primary",Boolean(comparison)&&!mixed),comparisonThrottle=mixed?createThrottleGauge(comparisonStyle,tr("对比油门","Compare throttle"),"lever-marker compare",false):null;
-    const powerLabel=document.createElement("span");powerLabel.className="gauge-label";powerLabel.textContent=spec.label;const powerRail=document.createElement("div");powerRail.className="gauge-rail";const fill=document.createElement("i");fill.className="power-fill";fill.style.setProperty("--level","0%");powerRail.append(fill);appendGaugeMarker(powerRail,"power-marker primary");const powerCompare=appendGaugeMarker(powerRail,"power-marker compare");powerCompare.hidden=!comparison;const top=document.createElement("span"),bottom=document.createElement("span");top.className="power-scale-label top";bottom.className="power-scale-label bottom";top.textContent=powerText(spec.max,spec);bottom.textContent="0";const powerReadout=document.createElement("b");powerReadout.className="gauge-readout";powerReadout.textContent="N/A";power.append(powerLabel,powerRail,top,bottom,powerReadout);
-    const powerMarker=powerRail.querySelector(".power-marker.primary");if(mixed)pair.append(primaryThrottle.gauge,comparisonThrottle.gauge,power);else pair.append(primaryThrottle.gauge,power);card.append(head,pair);card._instrument={mixed,primaryThrottle,comparisonThrottle,powerMarker,powerCompare,fill,powerReadout};ui.throttleAxes.append(card)
-  }
-}
-function signedPercent(value){return Number.isFinite(value)?`${value>=0?"+":""}${(value*100).toFixed(1)}%`:"N/A"}
-function setAxisDot(element,roll,pitch){element.style.setProperty("--x-pos",`${50+clamp(Number(roll)||0,-1,1)*42}%`);element.style.setProperty("--y-pos",`${50+clamp(Number(pitch)||0,-1,1)*42}%`)}
-function setYawMarker(element,yaw){element.style.setProperty("--yaw-pos",`${50+clamp(Number(yaw)||0,-1,1)*48}%`)}
-function updateInstrumentPanels(time){
-  const report=activeRecord()?.report,comparison=comparisonRecord()?.report||null,active=Number.isFinite(time)&&Boolean(report),main=active?nearestPoint(report.controlTrace||[],time):null,reference=active&&comparison?nearestPoint(comparison.controlTrace||[],time):null,spec=ui.throttleAxes?._powerSpec||powerGaugeSpec(report,comparison);
-  ui.throttleState.textContent=active?`T+ ${time.toFixed(2)} s`:tr("等待图表定位","Awaiting chart position");ui.inputState.textContent=active?`T+ ${time.toFixed(2)} s`:tr("中立","Neutral");
-  const pitch=main?.pitchInput,roll=main?.rollInput,yaw=main?.yawInput,comparePitch=reference?.pitchInput,compareRoll=reference?.rollInput,compareYaw=reference?.yawInput;setAxisDot(ui.xyDot,roll,pitch);setYawMarker(ui.yawMarker,yaw);const comparing=Boolean(reference);ui.xyCompareDot.hidden=!comparing;ui.yawCompareMarker.hidden=!comparing;if(comparing){setAxisDot(ui.xyCompareDot,compareRoll,comparePitch);setYawMarker(ui.yawCompareMarker,compareYaw)}
-  const value=(id,primary,secondary)=>{const node=$(id);node.textContent=Number.isFinite(secondary)?`P ${signedPercent(primary)} · C ${signedPercent(secondary)}`:signedPercent(primary)};value("pitchInputValue",pitch,comparePitch);value("rollInputValue",roll,compareRoll);value("yawInputValue",yaw,compareYaw);$("yawCompareValue").textContent=comparing?tr("实心：主 · 虚线：对比","Solid: primary · dashed: compare"):"";
-  for(const card of ui.throttleAxes?.children||[]){
-    const engine=Number(card.dataset.engine),instrument=card._instrument;if(!instrument)continue;
-    const throttle=main?.[`throttle${engine}`],compareThrottle=reference?.[`throttle${engine}`],power=main?.[`power${engine}`],comparePower=reference?.[`power${engine}`],detent=main?.[`detent${engine}`],compareDetent=reference?.[`detent${engine}`];
-    const throttleLevel=throttleVisualLevel(main,engine),compareThrottleLevel=throttleVisualLevel(reference,engine),powerLevel=Number.isFinite(power)?clamp(power/spec.max*100,0,100):0,comparePowerLevel=Number.isFinite(comparePower)?clamp(comparePower/spec.max*100,0,100):0;
-    const primaryAvailable=Number.isFinite(throttle)||Boolean(detent),compareAvailable=Number.isFinite(compareThrottle)||Boolean(compareDetent),primaryText=Number.isFinite(throttle)?`${(throttle*100).toFixed(1)}%${detent?` · ${detent}`:""}`:detent||"N/A",compareText=Number.isFinite(compareThrottle)?`${(compareThrottle*100).toFixed(1)}%${compareDetent?` · ${compareDetent}`:""}`:compareDetent||"N/A";
-    instrument.primaryThrottle.marker.style.setProperty("--level",`${throttleLevel}%`);instrument.primaryThrottle.marker.hidden=!primaryAvailable;
-    if(instrument.mixed){instrument.primaryThrottle.readout.textContent=`P ${primaryText}`;instrument.comparisonThrottle.marker.style.setProperty("--level",`${compareThrottleLevel}%`);instrument.comparisonThrottle.marker.hidden=!compareAvailable;instrument.comparisonThrottle.readout.textContent=`C ${compareText}`}
-    else{const compareMarker=instrument.primaryThrottle.compareMarker;if(compareMarker){compareMarker.style.setProperty("--level",`${compareThrottleLevel}%`);compareMarker.hidden=!compareAvailable}instrument.primaryThrottle.readout.textContent=compareAvailable?`P ${primaryText} / C ${compareText}`:primaryText}
-    instrument.powerMarker.style.setProperty("--level",`${powerLevel}%`);instrument.powerMarker.hidden=!Number.isFinite(power);instrument.powerCompare.style.setProperty("--level",`${comparePowerLevel}%`);instrument.powerCompare.hidden=!Number.isFinite(comparePower);instrument.fill.style.setProperty("--level",`${powerLevel}%`);const primaryPower=powerText(power,spec),secondaryPower=powerText(comparePower,spec);instrument.powerReadout.textContent=Number.isFinite(comparePower)?`P ${primaryPower} / C ${secondaryPower}`:primaryPower
-  }
-}
-function playbackDomain(){const report=activeRecord()?.report;return report?synchronizedTimeDomain(report,comparisonRecord()?.report||null):{xmin:0,xmax:1}}
-function timeLabel(seconds){if(!Number.isFinite(seconds))return"--:--";const minutes=Math.floor(Math.max(0,seconds)/60),rest=Math.max(0,seconds)-minutes*60;return`${String(minutes).padStart(2,"0")}:${rest.toFixed(2).padStart(5,"0")}`}
-function renderPlayback(){const {xmin,xmax}=playbackDomain(),time=Number.isFinite(state.playback.time)?state.playback.time:xmin,ratio=clamp((time-xmin)/(xmax-xmin||1),0,1);ui.playProgress.value=String(Math.round(ratio*1000));ui.playTime.value=`${timeLabel(time)} / ${timeLabel(xmax)}`;ui.playTime.textContent=ui.playTime.value;ui.playToggle.textContent=state.playback.playing?`❚❚ ${tr("暂停","Pause")}`:`▶ ${tr("播放","Play")}`;ui.playToggle.setAttribute("aria-pressed",String(state.playback.playing))}
-function pausePlayback(){state.playback.playing=false;state.playback.lastFrame=0;if(state.playback.frame)cancelAnimationFrame(state.playback.frame);state.playback.frame=0;renderPlayback()}
-function setPlaybackTime(time,touched=true){const {xmin,xmax}=playbackDomain();state.playback.time=clamp(Number(time)||xmin,xmin,xmax);state.playback.touched=touched;sharedHoverTime=state.playback.time;renderPlayback();updateInstrumentPanels(state.playback.time);redrawTrajectoryChart()}
-function playbackFrame(now){if(!state.playback.playing)return;const {xmin,xmax}=playbackDomain();if(!state.playback.lastFrame)state.playback.lastFrame=now;const elapsed=Math.min(.1,(now-state.playback.lastFrame)/1000);state.playback.lastFrame=now;const next=clamp((Number.isFinite(state.playback.time)?state.playback.time:xmin)+elapsed*state.playback.speed,xmin,xmax);setPlaybackTime(next,true);if(next>=xmax){pausePlayback();return}state.playback.frame=requestAnimationFrame(playbackFrame)}
-function togglePlayback(){const {xmin,xmax}=playbackDomain();if(state.playback.playing){pausePlayback();return}if(!state.playback.touched||!Number.isFinite(state.playback.time)||state.playback.time>=xmax-.001)setPlaybackTime(xmin,true);state.playback.playing=true;state.playback.lastFrame=0;renderPlayback();state.playback.frame=requestAnimationFrame(playbackFrame)}
-function preparePlayback(report){if(state.playback.recordId===state.activeId){renderPlayback();return}pausePlayback();state.playback.recordId=state.activeId;state.playback.time=null;state.playback.touched=false;sharedHoverTime=null;renderInstrumentPanels(report,comparisonRecord()?.report||null);updateInstrumentPanels(null);renderPlayback()}
-function activeMetricKeys(){return state.chartMode==="fused"?state.fusedMetrics:state.separatedMetrics}
-function setActiveMetricKeys(keys){if(state.chartMode==="fused")state.fusedMetrics=keys;else state.separatedMetrics=keys}
-function availableMetricDefs(){
-  if(state.chartMode!=="fused")return TRAJECTORY_METRICS;
-  const primary=activeRecord()?.report,comparison=comparisonRecord()?.report,control=[...(primary?.controlTrace||[]),...(comparison?.controlTrace||[])];
-  const availableControls=CONTROL_METRICS.filter(metric=>!control.length||control.some(point=>Number.isFinite(point[metric.key])));
-  return [...TRAJECTORY_METRICS.filter(metric=>metric.key!=="pitch"&&metric.key!=="roll"),...availableControls]
-}
-function selectedMetricDefs(){const keys=activeMetricKeys();return keys.map(key=>metricByKey[key]).filter(metric=>metric&&(state.chartMode==="fused"||metric.source!=="control"))}
+function selectedMetricDefs(){return state.selectedMetrics.map(key=>metricByKey[key]).filter(Boolean)}
 function saveMetricPreference(){
-  try{localStorage.setItem(state.chartMode==="fused"?FUSED_METRIC_PREFERENCE_KEY:METRIC_PREFERENCE_KEY,JSON.stringify(activeMetricKeys()))}catch{}
+  try{localStorage.setItem(METRIC_PREFERENCE_KEY,JSON.stringify(state.selectedMetrics))}catch{}
 }
 function renderMetricPicker(){
   ui.metricPicker.replaceChildren();
-  const selected=activeMetricKeys(),available=availableMetricDefs();
-  if(!selected.some(key=>available.some(metric=>metric.key===key))){selected.push("fpm");saveMetricPreference()}
-  for(const metric of available){
-    const chip=document.createElement("label");chip.className="metric-chip"+(selected.includes(metric.key)?" selected":"");
+  for(const metric of TRAJECTORY_METRICS){
+    const chip=document.createElement("label");chip.className="metric-chip"+(state.selectedMetrics.includes(metric.key)?" selected":"");
     chip.style.setProperty("--metric",activeMetricColor(metric));
-    const input=document.createElement("input");input.type="checkbox";input.value=metric.key;input.checked=selected.includes(metric.key);
+    const input=document.createElement("input");input.type="checkbox";input.value=metric.key;input.checked=state.selectedMetrics.includes(metric.key);
     const dot=document.createElement("i");dot.className="metric-dot";
     const label=document.createElement("span");label.textContent=metricLabel(metric);
     input.addEventListener("change",()=>{
       if(input.checked){
-        if(!selected.includes(metric.key))selected.push(metric.key)
+        if(!state.selectedMetrics.includes(metric.key))state.selectedMetrics.push(metric.key)
       }else{
-        if(selected.filter(key=>available.some(item=>item.key===key)).length===1){input.checked=true;return}
-        setActiveMetricKeys(selected.filter(key=>key!==metric.key))
+        if(state.selectedMetrics.length===1){input.checked=true;return}
+        state.selectedMetrics=state.selectedMetrics.filter(key=>key!==metric.key)
       }
-      saveMetricPreference();renderMetricPicker();redrawTrajectoryChart();markPresetDirty()
+      saveMetricPreference();renderMetricPicker();redrawTrajectoryChart()
     });
     chip.append(input,dot,label);ui.metricPicker.append(chip)
   }
 }
-function renderChartMode(){
-  const fused=state.chartMode==="fused";ui.chartModeToggle.dataset.mode=state.chartMode;ui.chartModeToggle.setAttribute("aria-pressed",String(fused));ui.chartModeToggle.textContent=fused?`▤ ${tr("切换为分离图表","Separate charts")}`:`⇄ ${tr("切换为融合图表","Fuse charts")}`;
-  ui.telemetryTitle.textContent=fused?tr("100 ft 轨迹与操纵响应（融合）","100 ft trajectory and controls (fused)"):tr("100 ft 后多参数轨迹","Multi-parameter trajectory below 100 ft");
-  ui.telemetryLead.textContent=fused?tr("聚合飞行参数与操纵、舵面、油门和 N1 共用同一时间轴；顶部按钮可逐项显示或隐藏，Pitch 与 Roll 使用操纵输入。","Flight, control, surface, throttle and N1 data share one timeline. Use the chips above to show individual series; Pitch and Roll use control inputs."):tr("T+ 秒固定为横轴，可同时选择多个聚合参数；新日志使用 0.25 秒显示点和跑道相对高度，底部跑道事件带与同一时间轴对齐。","T+ seconds stays on the horizontal axis. New logs use 0.25-second display points and runway-relative altitude, while the runway event band stays aligned to the same timeline.");
-  $("chartBox").style.height=fused?"620px":"480px"
-}
-function setChartMode(mode){
-  state.chartMode=mode==="fused"?"fused":"separated";try{localStorage.setItem(CHART_MODE_PREFERENCE_KEY,state.chartMode)}catch{}
-  renderChartMode();renderMetricPicker();redrawTrajectoryChart();markPresetDirty()
-}
-function renderLayoutMode(){
-  const horizontal=state.layoutMode==="horizontal",toggle=ui.layoutToggle||document.getElementById("layoutToggle");document.documentElement.dataset.layout=state.layoutMode;
-  if(!toggle)return;toggle.dataset.layout=state.layoutMode;toggle.setAttribute("aria-pressed",String(horizontal));toggle.textContent=horizontal?`↕ ${tr("竖向布局","Vertical layout")}`:`↔ ${tr("横向布局","Horizontal layout")}`;toggle.setAttribute("aria-label",horizontal?tr("切换至竖向布局","Switch to vertical layout"):tr("切换至横向布局","Switch to horizontal layout"))
-}
-function arrangeDashboardLayout(mode=state.layoutMode){
-  const report=ui.report||document.getElementById("report");if(!report)return;const find=selector=>report.querySelector(selector),nodes={rating:find(".layout"),context:find(".context-detail"),runway:find(".runway-section"),telemetry:find(".telemetry-section"),diagnostics:find(".diagnostics-section")};let shell=Array.from(report.children).find(node=>node.classList?.contains("dashboard-columns"));
-  if(mode==="horizontal"){
-    if(!shell&&nodes.rating){shell=document.createElement("div");shell.className="dashboard-columns";const overview=document.createElement("div"),analysis=document.createElement("div");overview.className="dashboard-column overview-column";analysis.className="dashboard-column analysis-column";report.insertBefore(shell,nodes.rating);shell.append(overview,analysis);for(const node of[nodes.rating,nodes.runway,nodes.diagnostics])if(node)overview.append(node);for(const node of[nodes.context,nodes.telemetry])if(node)analysis.append(node)}
-  }else if(shell){for(const node of[nodes.rating,nodes.context,nodes.runway,nodes.telemetry,nodes.diagnostics])if(node)report.insertBefore(node,shell);shell.remove()}
-}
-function setLayoutMode(mode,persist=true){
-  state.layoutMode=mode==="horizontal"?"horizontal":"vertical";arrangeDashboardLayout(state.layoutMode);renderLayoutMode();if(persist)try{localStorage.setItem(LAYOUT_MODE_PREFERENCE_KEY,state.layoutMode)}catch{}if(persist)markPresetDirty();requestAnimationFrame(redrawTrajectoryChart)
-}
-function applyReaderZoom(value,persist=true){
-  state.zoom=clamp(Math.round(Number(value)||100),65,135);const workspace=document.querySelector(".workspace");if(workspace)workspace.style.zoom=String(state.zoom/100);
-  ui.zoomSlider.value=String(state.zoom);ui.zoomValue.value=`${state.zoom}%`;ui.zoomValue.textContent=`${state.zoom}%`;ui.zoomSlider.setAttribute("aria-valuetext",`${state.zoom}%`);
-  if(persist)try{localStorage.setItem(ZOOM_PREFERENCE_KEY,String(state.zoom))}catch{}if(persist)markPresetDirty();
-  requestAnimationFrame(redrawTrajectoryChart)
-}
-function metricPointValue(metric,point){const value=point?.[metric.key];return Number.isFinite(value)?value*(metric.factor||1):null}
 function metricValueText(metric,value){
   if(!Number.isFinite(value))return"--";
   return`${value>=0&&metric.group==="verticalSpeed"?"+":""}${value.toFixed(metric.decimals)} ${metric.unit}`
@@ -1439,21 +1084,14 @@ function metricValueText(metric,value){
 function metricRangeText(metric,scale){
   return`${scale.min.toFixed(metric.decimals)}–${scale.max.toFixed(metric.decimals)} ${metric.unit}`
 }
-function buildMetricSeries(metrics,data,compareData,report,comparisonReport){
-  return metrics.map(metric=>{const mainSource=metric.source==="control"?(report?.controlTrace||[]):data,compareSource=metric.source==="control"?(comparisonReport?.controlTrace||[]):compareData;return{metric,main:mainSource.filter(point=>Number.isFinite(point.t)&&Number.isFinite(metricPointValue(metric,point))),compare:compareSource.filter(point=>Number.isFinite(point.t)&&Number.isFinite(metricPointValue(metric,point)))}}).filter(item=>item.main.length>=2||item.compare.length>=2)
-}
-function buildMetricScales(series){
+function buildMetricScales(metrics,data,compareData){
   const groups={};
-  for(const item of series){const metric=item.metric;
+  for(const metric of metrics){
     const bucket=groups[metric.group]||(groups[metric.group]={group:metric.group,unit:metric.unit,values:[]});
-    for(const point of [...item.main,...item.compare]){const value=metricPointValue(metric,point);if(Number.isFinite(value))bucket.values.push(value)}
+    for(const point of [...data,...compareData])if(Number.isFinite(point[metric.key]))bucket.values.push(point[metric.key])
   }
   for(const bucket of Object.values(groups)){
     let min=Math.min(...bucket.values),max=Math.max(...bucket.values);
-    if(["pitchControl","rollControl","yawControl"].includes(bucket.group)){bucket.min=-100;bucket.max=100;continue}
-    if(["elevator","aileron","rudder"].includes(bucket.group)){const magnitude=Math.max(5,Math.abs(min),Math.abs(max));bucket.min=-magnitude;bucket.max=magnitude;continue}
-    if(bucket.group==="throttle"){bucket.min=min<-101?-200:min<0?-100:0;bucket.max=100;continue}
-    if(bucket.group==="n1"){bucket.min=0;bucket.max=Math.max(110,Math.ceil(Math.max(0,max)/10)*10);continue}
     if(bucket.group==="verticalSpeed"){max=Math.max(0,max)}
     if(bucket.group==="altitude"||bucket.group==="attitude"){min=Math.min(0,min);max=Math.max(0,max)}
     let span=max-min;
@@ -1476,47 +1114,35 @@ function renderChartLegend(series,scales){
 function drawMetricLine(c,points,metric,X,Y,comparison=false){
   if(points.length<2)return;
   c.save();c.strokeStyle=activeMetricColor(metric);c.lineWidth=comparison?3.5:2.6;c.lineJoin="round";c.lineCap="round";
-  c.globalAlpha=comparison?.74:1;c.setLineDash(comparison?[8,7]:[]);c.shadowColor=activeMetricColor(metric);c.shadowBlur=comparison?3:2;c.beginPath();
-  points.forEach((point,index)=>{const x=X(point.t),y=Y(metric,metricPointValue(metric,point));index?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();c.restore()
+  c.globalAlpha=comparison?.24:1;c.setLineDash(comparison?[8,7]:[]);c.shadowColor=activeMetricColor(metric);c.shadowBlur=comparison?5:3;c.beginPath();
+  points.forEach((point,index)=>{const x=X(point.t),y=Y(metric,point[metric.key]);index?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();c.restore()
 }
-let sharedHoverTime=null;
-function drawGroundBands(c,data,X,top,bottom,color){
-  if(data.length<2)return;c.save();c.fillStyle=color;
-  for(let index=1;index<data.length;index++){
-    const a=data[index-1],b=data[index];if((a.ground??0)<.5&&(b.ground??0)<.5)continue;
-    const left=Math.min(X(a.t),X(b.t)),right=Math.max(X(a.t),X(b.t));c.fillRect(left,top,Math.max(1,right-left),bottom-top)
-  }
-  c.restore()
-}
-function synchronizedTimeDomain(report,comparisonReport,...fallbackSets){
-  const points=[report?.trajectory||[],report?.controlTrace||[],comparisonReport?.trajectory||[],comparisonReport?.controlTrace||[],...fallbackSets].flat();
-  const timeline=points.map(point=>point?.t).filter(Number.isFinite);
-  return timeline.length?{xmin:Math.min(...timeline),xmax:Math.max(...timeline)}:{xmin:0,xmax:1}
-}
-function synchronizedHorizontalPadding(width){return width<700?{l:64,r:48}:{l:82,r:72}}
-function chartPalette(){const style=getComputedStyle(document.documentElement),css=(name,fallback)=>style.getPropertyValue(name).trim()||fallback;return{grid:css("--chart-grid","#355267"),gridStrong:css("--chart-grid-strong","#557184"),text:css("--viz-ink","#dce9ef"),zero:css("--viz-ink","#eef5f7"),minor:css("--chart-grid-strong","#557184"),minorText:css("--viz-ink","#dce9ef"),td:css("--viz-ink","#dce9ef"),tdText:css("--viz-ink","#eef5f7"),fifty:css("--chart-event-50","#f0b54e"),fiftyText:css("--chart-event-50","#f0b54e"),rollZero:css("--chart-event-zero","#ef6070"),rollText:css("--chart-event-zero","#ef6070"),runwayPanel:css("--viz-bg","#091b27"),runwaySurface:css("--chart-runway","#34434c"),runwayEdge:css("--chart-runway-edge","#9aadb7"),runwayCenter:css("--chart-runway-center","#f4f7f8"),threshold:css("--chart-runway-center","#f4f7f8"),thresholdGuide:css("--viz-accent","#53b7df"),touchdown:css("--chart-event-50","#f0b54e"),touchdownText:css("--chart-event-50","#f0b54e"),timelineText:css("--viz-ink","#dce9ef"),ground:css("--chart-ground","rgba(240,181,78,.08)"),cursor:css("--viz-ink","#eef5f7")}}
-function drawFlare(data,compareData=[],report=null,comparisonReport=null){
+function drawFlare(data,compareData=[],report=null){
   const chartBox=$("chartBox"),empty=$("chartEmpty"),validCompare=compareData.length>=2?compareData:[];
   const metrics=selectedMetricDefs();
-  const series=buildMetricSeries(metrics,data,validCompare,report,comparisonReport);
-  if(!series.length){
-    chartBox.hidden=true;empty.hidden=false;empty.textContent=tr("所选数据源在当前记录中没有足够样本。","The selected data sources do not have enough samples in this record.");
+  const series=metrics.map(metric=>({
+    metric,
+    main:data.filter(point=>Number.isFinite(point.t)&&Number.isFinite(point[metric.key])),
+    compare:validCompare.filter(point=>Number.isFinite(point.t)&&Number.isFinite(point[metric.key]))
+  })).filter(item=>item.main.length>=2||item.compare.length>=2);
+  if(data.length<2||!series.length){
+    chartBox.hidden=true;empty.hidden=false;empty.textContent=data.length<2?tr("该日志没有可绘制的聚合轨迹。","This log has no drawable aggregated trajectory."):tr("所选数据源在当前记录中没有足够样本。","The selected data sources do not have enough samples in this record.");
     ui.canvas._plot=null;ui.chartLegend.hidden=true;return
   }
   chartBox.hidden=false;empty.hidden=true;
-  const scales=buildMetricScales(series);renderChartLegend(series,scales);
+  const scales=buildMetricScales(series.map(item=>item.metric),data,validCompare);renderChartLegend(series,scales);
   const canvas=ui.canvas,box=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
   canvas.width=Math.max(1,Math.floor(box.width*dpr));canvas.height=Math.max(1,Math.floor(box.height*dpr));
   const c=canvas.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);
-  const palette=chartPalette(),showDetents=state.chartMode==="fused"&&(detentHasValues(report?.controlTrace||[])||detentHasValues(comparisonReport?.controlTrace||[])),detentRows=showDetents?(comparisonReport?2:1):0,detentOffset=detentRows===2?30:detentRows===1?16:0;
-  const groupKeys=Object.keys(scales),singleScale=groupKeys.length===1,W=box.width,H=box.height,horizontal=synchronizedHorizontalPadding(W),p={l:horizontal.l,r:horizontal.r,t:24,b:122+detentOffset},pw=W-p.l-p.r,ph=H-p.t-p.b;
-  const {xmin,xmax}=synchronizedTimeDomain(report,comparisonReport,data,validCompare),runwayTimeline=estimateRunwayTimeline(data,report);
+  const palette=currentTheme==="light"?{grid:"#B5C8D2",gridStrong:"#9EB8C5",text:"#3E5D6B",zero:"#24566E",minor:"#54798B",minorText:"#34596A",td:"#315665",tdText:"#294C5C",fifty:"#A96100",fiftyText:"#7D4A00",rollZero:"#B02E49",rollText:"#8F2640",runwayPanel:"#E5EDF1",runwaySurface:"#59676E",runwayEdge:"#243C47",runwayCenter:"#F7FAFB",threshold:"#F7FAFB",thresholdGuide:"#1D718F",touchdown:"#B76800",touchdownText:"#804800",timelineText:"#294D5D"}:{grid:"#294657",gridStrong:"#223D4F",text:"#91A7B3",zero:"#D7F3FF",minor:"#91AFBF",minorText:"#A9BFCA",td:"#D7E6ED",tdText:"#E2EEF3",fifty:"#FFCA58",fiftyText:"#FFDC8A",rollZero:"#FF7894",rollText:"#FF9CAF",runwayPanel:"#0A1A24",runwaySurface:"#34434B",runwayEdge:"#91A4AE",runwayCenter:"#F4F7F8",threshold:"#F4F7F8",thresholdGuide:"#53B7DF",touchdown:"#FFCA58",touchdownText:"#FFD978",timelineText:"#B8CBD4"};
+  const groupKeys=Object.keys(scales),singleScale=groupKeys.length===1,p={l:singleScale?78:58,r:26,t:24,b:122},W=box.width,H=box.height,pw=W-p.l-p.r,ph=H-p.t-p.b;
+  const timeline=[...data,...validCompare].map(point=>point.t).filter(Number.isFinite),xmin=Math.min(...timeline),xmax=Math.max(...timeline),runwayTimeline=estimateRunwayTimeline(data,report);
   const X=x=>p.l+(x-xmin)/(xmax-xmin||1)*pw;
   const Y=(metric,value)=>{
     const scale=scales[metric.group];
     return p.t+(scale.max-value)/(scale.max-scale.min||1)*ph
   };
-  c.clearRect(0,0,W,H);drawGroundBands(c,data,X,p.t,p.t+ph,palette.ground);c.font="13px Microsoft YaHei";c.lineWidth=1;
+  c.clearRect(0,0,W,H);c.font="13px Microsoft YaHei";c.lineWidth=1;
   for(let i=0;i<=4;i++){
     const y=p.t+ph*i/4;c.strokeStyle=palette.grid;c.beginPath();c.moveTo(p.l,y);c.lineTo(W-p.r,y);c.stroke();
     c.fillStyle=palette.text;c.textAlign="right";
@@ -1534,10 +1160,10 @@ function drawFlare(data,compareData=[],report=null,comparisonReport=null){
     const zeroY=Y(fpmMetric,0);c.save();c.setLineDash([8,6]);c.strokeStyle=palette.zero;c.globalAlpha=.75;c.lineWidth=1.5;c.beginPath();c.moveTo(p.l,zeroY);c.lineTo(W-p.r,zeroY);c.stroke();
     c.setLineDash([]);c.fillStyle=palette.zero;c.textAlign="left";c.font="700 12px Microsoft YaHei";c.fillText("0 fpm",p.l+7,Math.max(p.t+11,zeroY-6));c.restore()
   }
-  const rollMetric=series.find(item=>item.metric.key==="roll"||item.metric.key==="rollInput")?.metric,attitudeScale=rollMetric?scales[rollMetric.group]:null;
+  const rollMetric=series.find(item=>item.metric.key==="roll")?.metric,attitudeScale=scales.attitude;
   if(rollMetric&&attitudeScale&&attitudeScale.min<=0&&attitudeScale.max>=0){
     const zeroY=Y(rollMetric,0);c.save();c.setLineDash([7,6]);c.strokeStyle=palette.rollZero;c.globalAlpha=.58;c.lineWidth=1.25;c.beginPath();c.moveTo(p.l,zeroY);c.lineTo(W-p.r,zeroY);c.stroke();
-    c.setLineDash([]);c.fillStyle=palette.rollText;c.textAlign="right";c.font="700 12px Microsoft YaHei";c.fillText(rollMetric.key==="rollInput"?tr("Roll（操纵） 0%","Roll (control) 0%"):"Roll 0°",W-p.r-6,Math.max(p.t+11,zeroY-6));c.restore()
+    c.setLineDash([]);c.fillStyle=palette.rollText;c.textAlign="right";c.font="700 12px Microsoft YaHei";c.fillText("Roll 0°",W-p.r-6,Math.max(p.t+11,zeroY-6));c.restore()
   }
   const compareFifty=findRaTime(validCompare,50);
   if(compareFifty!==null){
@@ -1547,126 +1173,32 @@ function drawFlare(data,compareData=[],report=null,comparisonReport=null){
   for(const item of series)drawMetricLine(c,item.compare,item.metric,X,Y,true);
   const minorRaMarkers=[40,30,20,10,0];
   for(const [index,ra] of minorRaMarkers.entries()){
-    const markerTime=ra===0&&Number.isFinite(report?.firstTouchTime)?report.firstTouchTime:findRaTime(data,ra);if(markerTime===null)continue;
+    const markerTime=findRaTime(data,ra);if(markerTime===null)continue;
     const x=X(markerTime);c.save();c.globalAlpha=ra===0?.68:.46;c.setLineDash(ra===0?[3,4]:[3,6]);c.strokeStyle=ra===0?palette.td:palette.minor;c.lineWidth=ra===0?1.5:1.2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+ph);c.stroke();
     c.setLineDash([]);c.fillStyle=ra===0?palette.tdText:palette.minorText;c.font="700 11px Microsoft YaHei";c.textAlign=x>p.l+pw*.93?"right":"left";c.fillText(ra===0?tr("接地","TD"):`RA ${ra}`,x+(x>p.l+pw*.93?-4:4),p.t+28+(index%2)*11);c.restore()
   }
   for(const item of series)drawMetricLine(c,item.main,item.metric,X,Y,false);
   const fifty=findRaTime(data,50);
   if(fifty!==null){
-    const x=X(fifty),right=x<p.l+pw*.78;c.save();c.setLineDash([5,5]);c.strokeStyle=palette.fifty;c.lineWidth=2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,runwayTimeline?H-p.b+67+detentOffset:p.t+ph);c.stroke();
+    const x=X(fifty),right=x<p.l+pw*.78;c.save();c.setLineDash([5,5]);c.strokeStyle=palette.fifty;c.lineWidth=2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,runwayTimeline?H-p.b+67:p.t+ph);c.stroke();
     c.setLineDash([]);c.fillStyle=palette.fiftyText;c.font="700 13px Microsoft YaHei";c.textAlign=right?"left":"right";c.fillText(tr("RA 50 ft 主要","RA 50 ft primary"),x+(right?7:-7),p.t+14);c.restore()
   }
-  if(showDetents){const chartBottom=H-p.b;if(comparisonReport){drawDetentRibbon(c,report?.controlTrace||[],X,p.l,pw,chartBottom+30,11,false,tr("主","P"));drawDetentRibbon(c,comparisonReport.controlTrace||[],X,p.l,pw,chartBottom+43,11,true,tr("对比","C"))}else drawDetentRibbon(c,report?.controlTrace||[],X,p.l,pw,chartBottom+30,11,false,tr("主","P"))}
-  if(runwayTimeline)drawRunwayTimeline(c,runwayTimeline,X,p,W,H,palette,detentOffset);
-  if(Number.isFinite(sharedHoverTime)){
-    const cursorX=X(clamp(sharedHoverTime,xmin,xmax));c.save();c.strokeStyle=palette.cursor;c.globalAlpha=.8;c.lineWidth=1.4;c.setLineDash([4,4]);c.beginPath();c.moveTo(cursorX,p.t);c.lineTo(cursorX,p.t+ph);c.stroke();c.restore()
-  }
-  canvas._plot={X,Y,p,pw,xmin,xmax,data,compareData:validCompare,metrics:series.map(item=>item.metric),series,scales,runwayTimeline,report,comparisonReport}
-}
-const CONTROL_LANES=[
-  {id:"pitch",label:"Pitch",input:"pitchInput",surfaces:["elevator1","elevator2"],surfaceLabels:["Elevator 1","Elevator 2"]},
-  {id:"roll",label:"Roll",input:"rollInput",surfaces:["aileron1","aileron2"],surfaceLabels:["Aileron 1","Aileron 2"]},
-  {id:"yaw",label:"Yaw",input:"yawInput",surfaces:["rudder1","rudder2"],surfaceLabels:["Rudder 1","Rudder 2"]}
-];
-const DETENT_HUES={REV:352,IDLE:210,MANUAL:198,CL:147,"FLX/MCT":39,TOGA:286};
-function activeDetentColor(label){const hue=DETENT_HUES[label]??rgbToHsl(hexToRgb(themeSeed)).h+90,background=generatedThemePalette?.vizBg||hexToRgb("#091B27"),preferred=70-39*(generatedThemePalette?.ease??themeTone);return rgbColor(accessibleHslRgb(hue,label==="IDLE"?22:76,preferred,background,3.6))}
-function thrustHasValues(data){return data.some(point=>[1,2,3,4,5,6,7,8].some(index=>Number.isFinite(point[`throttle${index}`])||Number.isFinite(point[`power${index}`])||Number.isFinite(point[`n1_${index}`])))}
-function controlHasValues(data){return thrustHasValues(data)||data.some(point=>CONTROL_LANES.some(lane=>Number.isFinite(point[lane.input])||lane.surfaces.some(key=>Number.isFinite(point[key]))))}
-function drawControlSeries(c,data,key,X,Y,color,width,comparison=false,dash=[]){
-  let drawing=false;c.save();c.strokeStyle=color;c.lineWidth=width;c.lineJoin="round";c.lineCap="round";c.globalAlpha=comparison?.74:1;c.setLineDash(comparison?[8,7]:dash);c.beginPath();
-  for(const point of data){if(!Number.isFinite(point.t)||!Number.isFinite(point[key])){drawing=false;continue}const x=X(point.t),y=Y(point[key]);if(!drawing){c.moveTo(x,y);drawing=true}else c.lineTo(x,y)}
-  c.stroke();c.restore()
-}
-function detentSummary(point){
-  const entries=[];for(let index=1;index<=4;index++){const value=point?.[`detent${index}`];if(value)entries.push({index,value})}
-  if(!entries.length)return"";const unique=[...new Set(entries.map(item=>item.value))];if(unique.length===1)return unique[0];return entries.map(item=>`E${item.index} ${item.value}`).join(" / ")
-}
-function detentHasValues(data){return data.some(point=>Boolean(detentSummary(point)))}
-function drawDetentRibbon(c,data,X,left,width,top,height,comparison=false,rowLabel=""){
-  const style=getComputedStyle(document.documentElement),primaryInk=style.getPropertyValue("--muted").trim()||"#9fb2bd",compareInk=style.getPropertyValue("--compare").trim()||"#91a7b3",fillInk=style.getPropertyValue("--text").trim()||"#eef5f7";c.save();c.fillStyle=fillInk;c.globalAlpha=.045;c.fillRect(left,top,width,height);c.globalAlpha=comparison?.72:.82;c.strokeStyle=comparison?compareInk:primaryInk;c.lineWidth=1;c.setLineDash(comparison?[4,3]:[]);c.strokeRect(left+.5,top+.5,Math.max(0,width-1),Math.max(0,height-1));c.setLineDash([]);c.globalAlpha=1;if(rowLabel){c.fillStyle=comparison?compareInk:primaryInk;c.font="700 8px Microsoft YaHei";c.textAlign="right";c.fillText(rowLabel,left-6,top+height-2)}c.restore();
-  let index=0;c.save();c.beginPath();c.rect(left,top,width,height);c.clip();
-  while(index<data.length){const label=detentSummary(data[index]);if(!label){index++;continue}let end=index+1;while(end<data.length&&detentSummary(data[end])===label)end++;
-    const x1=Math.max(left,X(data[index].t)),x2=Math.min(left+width,X(end<data.length?data[end].t:data[index].t+.1));if(x2>x1){const color=activeDetentColor(label);c.fillStyle=color;c.globalAlpha=comparison?.20:.31;c.fillRect(x1,top,x2-x1,height);if(comparison){c.strokeStyle=color;c.globalAlpha=.78;c.setLineDash([3,2]);c.strokeRect(x1+.5,top+.5,Math.max(0,x2-x1-1),Math.max(0,height-1));c.setLineDash([])}if(x2-x1>34){c.globalAlpha=comparison?.82:1;c.fillStyle=color;c.font="700 8px Microsoft YaHei";c.textAlign="left";c.fillText(label,x1+4,top+height-2)}}index=end
-  }
-  c.restore()
-}
-function drawControlChart(data,compareData=[],report=null,comparisonReport=null){
-  if(state.chartMode==="fused"){ui.controlSection.hidden=true;ui.controlCanvas._plot=null;return}
-  const hasTable=report&&(/0\.10秒操纵响应表/.test(report.raw)||/0\.10\s*s\s*control\s+response\s+table/i.test(report.raw));
-  ui.controlSection.hidden=!hasTable&&!data.length;if(ui.controlSection.hidden){ui.controlCanvas._plot=null;return}
-  const box=$("controlChartBox"),empty=$("controlEmpty"),validMain=controlHasValues(data),validCompare=controlHasValues(compareData),hasThrust=thrustHasValues(data)||thrustHasValues(compareData);
-  ui.controlStatus.textContent=translateValue(report?.controlCapture)||(`${data.length} ${tr("个样本","samples")}`);
-  if(!validMain&&!validCompare){box.hidden=true;empty.hidden=false;ui.controlCanvas._plot=null;return}
-  box.hidden=false;empty.hidden=true;box.style.height=hasThrust?"890px":"735px";
-  const canvas=ui.controlCanvas,rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));
-  const c=canvas.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);const W=rect.width,H=rect.height,horizontal=synchronizedHorizontalPadding(W),p={l:horizontal.l,r:horizontal.r,t:28,b:122},pw=W-p.l-p.r,innerH=H-p.t-p.b,laneGap=14,laneCount=1+CONTROL_LANES.length+(hasThrust?1:0),laneH=(innerH-laneGap*(laneCount-1))/laneCount;
-  const {xmin,xmax}=synchronizedTimeDomain(report,comparisonReport,data,compareData),X=value=>p.l+(value-xmin)/(xmax-xmin||1)*pw;
-  const palette=chartPalette(),runwayTimeline=estimateRunwayTimeline(report?.trajectory||[],report);
-  c.clearRect(0,0,W,H);drawGroundBands(c,report?.trajectory||[],X,p.t,p.t+innerH,palette.ground);c.font="11px Microsoft YaHei";
-  for(let tick=0;tick<=5;tick++){const x=p.l+pw*tick/5,time=xmin+(xmax-xmin)*tick/5;c.strokeStyle=palette.gridStrong;c.globalAlpha=.78;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+innerH);c.stroke();c.globalAlpha=1;c.fillStyle=palette.text;c.textAlign="center";c.fillText(`${time.toFixed(1)}s`,x,p.t+innerH+20)}
-  const lanePlots=[];
-  const trajectoryTop=p.t,trajectoryMetrics=state.separatedMetrics.map(key=>metricByKey[key]).filter(metric=>metric&&metric.source!=="control"),trajectorySeries=buildMetricSeries(trajectoryMetrics,report?.trajectory||[],comparisonReport?.trajectory||[],report,comparisonReport),trajectoryScales=buildMetricScales(trajectorySeries),trajectoryY=(metric,value)=>{const scale=trajectoryScales[metric.group];return trajectoryTop+24+(scale.max-value)/(scale.max-scale.min||1)*Math.max(20,laneH-38)};
-  c.save();c.fillStyle=palette.text;c.globalAlpha=.045;c.fillRect(p.l,trajectoryTop,pw,laneH);c.globalAlpha=1;for(let tick=1;tick<4;tick++){const y=trajectoryTop+laneH*tick/4;c.strokeStyle=palette.grid;c.globalAlpha=.72;c.beginPath();c.moveTo(p.l,y);c.lineTo(W-p.r,y);c.stroke()}c.restore();
-  c.fillStyle=palette.text;c.textAlign="left";c.font="700 12px Microsoft YaHei";c.fillText(tr("100 ft 参数","100 ft metrics"),12,trajectoryTop+18);for(const item of trajectorySeries)drawMetricLine(c,item.compare,item.metric,X,trajectoryY,true);for(const item of trajectorySeries)drawMetricLine(c,item.main,item.metric,X,trajectoryY,false);c.font="600 9px Microsoft YaHei";let legendX=p.l+7;for(const item of trajectorySeries){c.fillStyle=activeMetricColor(item.metric);const label=metricLabel(item.metric);c.fillText(label,legendX,trajectoryTop+13);legendX+=Math.min(105,c.measureText(label).width+14)}
-  CONTROL_LANES.forEach((lane,index)=>{
-    const top=p.t+(index+1)*(laneH+laneGap),center=top+laneH/2,amplitude=Math.max(24,laneH*.38),surfaceValues=[];
-    const laneColors=[activeMetricColor(metricByKey[lane.input]),...lane.surfaces.map(key=>activeMetricColor(metricByKey[key]))];
-    for(const point of [...data,...compareData])for(const key of lane.surfaces)if(Number.isFinite(point[key]))surfaceValues.push(Math.abs(point[key]));
-    const surfaceMax=Math.max(5,...surfaceValues),inputY=value=>center-clamp(value,-1,1)*amplitude,surfaceY=value=>center-clamp(value,-surfaceMax,surfaceMax)/surfaceMax*amplitude;
-    c.save();c.fillStyle=palette.text;c.globalAlpha=.025;c.fillRect(p.l,top,pw,laneH);c.globalAlpha=.8;c.strokeStyle=palette.zero;c.beginPath();c.moveTo(p.l,center);c.lineTo(W-p.r,center);c.stroke();c.restore();
-    c.fillStyle=palette.text;c.textAlign="left";c.font="700 13px Microsoft YaHei";c.fillText(lane.label,12,top+18);c.font="10px Microsoft YaHei";c.fillText("+100%",12,top+35);c.fillText("0",12,center+4);c.fillText("-100%",12,top+laneH-8);c.textAlign="right";c.fillText(`+${surfaceMax.toFixed(1)}°`,W-10,top+13);c.fillText("0°",W-10,center+4);c.fillText(`-${surfaceMax.toFixed(1)}°`,W-10,top+laneH-5);
-    drawControlSeries(c,compareData,lane.input,X,inputY,laneColors[0],3.4,true);lane.surfaces.forEach((key,surfaceIndex)=>drawControlSeries(c,compareData,key,X,surfaceY,laneColors[surfaceIndex+1],2,true));
-    drawControlSeries(c,data,lane.input,X,inputY,laneColors[0],3.1,false);lane.surfaces.forEach((key,surfaceIndex)=>drawControlSeries(c,data,key,X,surfaceY,laneColors[surfaceIndex+1],1.8,false));
-    c.fillStyle=laneColors[0];c.textAlign="left";c.font="600 10px Microsoft YaHei";const available=[Number.isFinite(data.find(point=>Number.isFinite(point[lane.input]))?.[lane.input])?`${lane.label} In`:null,...lane.surfaces.map((key,i)=>data.some(point=>Number.isFinite(point[key]))?lane.surfaceLabels[i]:null)].filter(Boolean);c.fillText(available.join(" · ")||tr("通道不可用","Channels unavailable"),p.l+7,top+13);
-    lanePlots.push({lane,top,center,inputY,surfaceY,surfaceMax})
-  });
-  if(hasThrust){
-    const top=p.t+(CONTROL_LANES.length+1)*(laneH+laneGap),hasComparison=Boolean(comparisonReport),curveTop=top+24,curveBottom=top+laneH-(hasComparison?42:27),all=[...data,...compareData],throttleValues=[],powerValues=[],powerSpec=powerGaugeSpec(report,comparisonReport),engineLimit=engineCountFor(report,comparisonReport);
-    for(const point of all)for(let index=1;index<=engineLimit;index++){if(Number.isFinite(point[`throttle${index}`]))throttleValues.push(point[`throttle${index}`]);if(Number.isFinite(point[`power${index}`]))powerValues.push(point[`power${index}`])}
-    const throttleMin=throttleValues.some(value=>value<-1.01)?-2:throttleValues.some(value=>value<-.001)?-1:0,powerMax=powerSpec.max,throttleY=value=>curveBottom-clamp((value-throttleMin)/(1-throttleMin||1),0,1)*(curveBottom-curveTop),powerY=value=>curveBottom-clamp(value/powerMax,0,1)*(curveBottom-curveTop),zeroY=throttleY(0);
-    c.save();c.fillStyle=palette.text;c.globalAlpha=.025;c.fillRect(p.l,top,pw,laneH);c.globalAlpha=.8;c.strokeStyle=palette.zero;c.beginPath();c.moveTo(p.l,zeroY);c.lineTo(W-p.r,zeroY);c.stroke();c.restore();
-    c.fillStyle=palette.text;c.textAlign="left";c.font="700 13px Microsoft YaHei";c.fillText("Thrust",12,top+18);c.font="10px Microsoft YaHei";c.fillText("+100%",12,curveTop+4);c.fillText("0",12,zeroY+4);c.fillText(throttleMin===-2?"-200% β/REV":throttleMin===-1?"-100% REV":"0",12,curveBottom+4);c.textAlign="right";c.fillText(`${powerText(powerMax,powerSpec)} ${powerSpec.label}`,W-10,curveTop+4);c.fillText(`0 ${powerSpec.label}`,W-10,curveBottom+4);
-    for(let engine=1;engine<=engineLimit;engine++){const color=activeMetricColor(metricByKey[`throttle${Math.min(engine,4)}`]||CONTROL_METRICS[9]);drawControlSeries(c,compareData,`throttle${engine}`,X,throttleY,color,3.1,true);drawControlSeries(c,compareData,`power${engine}`,X,powerY,color,1.7,true,[3,4]);drawControlSeries(c,data,`throttle${engine}`,X,throttleY,color,2.8,false);drawControlSeries(c,data,`power${engine}`,X,powerY,color,1.6,false,[3,4])}
-    if(hasComparison){drawDetentRibbon(c,data,X,p.l,pw,top+laneH-27,11,false,tr("主","P"));drawDetentRibbon(c,compareData,X,p.l,pw,top+laneH-14,11,true,tr("对比","C"))}else drawDetentRibbon(c,data,X,p.l,pw,top+laneH-14,11,false,tr("主","P"));
-    const engines=[];for(let engine=1;engine<=engineLimit;engine++)if(data.some(point=>Number.isFinite(point[`throttle${engine}`])||Number.isFinite(point[`power${engine}`])))engines.push(`E${engine}`);c.fillStyle=activeMetricColor(CONTROL_METRICS[9]);c.textAlign="left";c.font="600 10px Microsoft YaHei";c.fillText(engines.length?`${tr("油门","Throttle")} / ${powerSpec.label} · ${engines.join(" ")}`:tr("动力通道不可用","Power channels unavailable"),p.l+7,top+13);
-    lanePlots.push({lane:{id:"thrust",label:"Thrust"},top,throttleY,powerY,throttleMin,powerMax})
-  }
-  const compareFifty=findRaTime(comparisonReport?.trajectory||[],50);if(compareFifty!==null){const x=X(compareFifty);c.save();c.globalAlpha=.38;c.setLineDash([2,6]);c.strokeStyle=palette.minor;c.lineWidth=1.5;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+innerH);c.stroke();c.setLineDash([]);c.fillStyle=palette.minorText;c.font="700 11px Microsoft YaHei";c.textAlign="left";c.fillText(tr("RA 50 ft 对比","RA 50 ft comparison"),x+6,p.t+30);c.restore()}
-  for(const [index,ra] of[40,30,20,10,0].entries()){const markerTime=ra===0&&Number.isFinite(report?.firstTouchTime)?report.firstTouchTime:findRaTime(report?.trajectory||[],ra);if(markerTime===null)continue;const x=X(markerTime);c.save();c.globalAlpha=ra===0?.68:.46;c.setLineDash(ra===0?[3,4]:[3,6]);c.strokeStyle=ra===0?palette.td:palette.minor;c.lineWidth=ra===0?1.5:1.2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+innerH);c.stroke();c.setLineDash([]);c.fillStyle=ra===0?palette.tdText:palette.minorText;c.font="700 10px Microsoft YaHei";c.textAlign=x>p.l+pw*.93?"right":"left";c.fillText(ra===0?tr("接地","TD"):`RA ${ra}`,x+(x>p.l+pw*.93?-4:4),p.t+48+(index%2)*10);c.restore()}
-  const fifty=findRaTime(report?.trajectory||[],50);if(fifty!==null){const x=X(fifty),right=x<p.l+pw*.78;c.save();c.setLineDash([5,5]);c.strokeStyle=palette.fifty;c.lineWidth=2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,H-p.b+67);c.stroke();c.setLineDash([]);c.fillStyle=palette.fiftyText;c.font="700 12px Microsoft YaHei";c.textAlign=right?"left":"right";c.fillText(tr("RA 50 ft 主要","RA 50 ft primary"),x+(right?7:-7),p.t+14);c.restore()}
   if(runwayTimeline)drawRunwayTimeline(c,runwayTimeline,X,p,W,H,palette);
-  if(Number.isFinite(sharedHoverTime)){const cursorX=X(clamp(sharedHoverTime,xmin,xmax));c.save();c.strokeStyle=palette.cursor;c.globalAlpha=.85;c.setLineDash([4,4]);c.lineWidth=1.4;c.beginPath();c.moveTo(cursorX,p.t);c.lineTo(cursorX,p.t+innerH);c.stroke();c.restore()}
-  canvas._plot={X,p,pw,xmin,xmax,data,compareData,lanePlots,trajectorySeries,report,comparisonReport}
-}
-function controlPointSummary(point){
-  if(!point)return"";const parts=[];for(const lane of CONTROL_LANES){const values=[];if(Number.isFinite(point[lane.input]))values.push(`${lane.label} ${(point[lane.input]*100).toFixed(1)}%`);lane.surfaces.forEach((key,index)=>{if(Number.isFinite(point[key]))values.push(`${lane.surfaceLabels[index]} ${point[key].toFixed(2)}°`)});if(values.length)parts.push(values.join(" · "))}
-  const power=[];for(let engine=1;engine<=8;engine++){if(Number.isFinite(point[`throttle${engine}`]))power.push(`${tr("油门","Throttle")} E${engine} ${(point[`throttle${engine}`]*100).toFixed(1)}%`);if(Number.isFinite(point[`power${engine}`]))power.push(`${point.energyType||"N1"} E${engine} ${point[`power${engine}`].toFixed(point.energyType==="EPR"?2:1)}${point.energyType==="EPR"?"":"%"}`)}if(power.length)parts.push(power.join(" · "));
-  const detents=[];for(let engine=1;engine<=4;engine++)if(point[`detent${engine}`])detents.push(`E${engine} ${point[`detent${engine}`]}`);if(detents.length)parts.push(`${tr("空客卡位","Airbus detent")} ${detents.join(" · ")}${Number.isFinite(point.detentMode)?` · Raw mode ${point.detentMode}`:""}`);return parts.join("\n")
+  canvas._plot={X,Y,p,pw,xmin,xmax,data,compareData:validCompare,metrics:series.map(item=>item.metric),scales,runwayTimeline}
 }
 function pointMetricSummary(point,metrics){
-  return metrics.map(metric=>[metric,metricPointValue(metric,point)]).filter(([,value])=>Number.isFinite(value)).map(([metric,value])=>`${metricLabel(metric)} ${metricValueText(metric,value)}`).join(" · ")
+  return metrics.filter(metric=>Number.isFinite(point?.[metric.key])).map(metric=>`${metricLabel(metric)} ${metricValueText(metric,point[metric.key])}`).join(" · ")
 }
-function seriesMetricSummary(series,targetTime,kind){return series.map(item=>{const point=nearestPoint(item[kind]||[],targetTime),value=metricPointValue(item.metric,point);return Number.isFinite(value)?`${metricLabel(item.metric)} ${metricValueText(item.metric,value)}`:null}).filter(Boolean).join(" · ")}
 function hoverChart(event){
   const plot=ui.canvas._plot;if(!plot)return;
   const rect=ui.canvas.getBoundingClientRect(),mx=event.clientX-rect.left;
   const ratio=clamp((mx-plot.p.l)/(plot.pw||1),0,1),targetTime=plot.xmin+(plot.xmax-plot.xmin)*ratio;
-  setPlaybackTime(targetTime,true);
-  const main=nearestPoint(plot.data,targetTime),reference=nearestPoint(plot.compareData,targetTime),lines=[];if(!main&&!plot.series.some(item=>item.main.length))return;
-  lines.push(`${tr("主要","Primary")} T+${(main?.t??targetTime).toFixed(2)} s · RA ${Number.isFinite(main?.ra)?main.ra.toFixed(1):"--"} ft`,seriesMetricSummary(plot.series,targetTime,"main"));
-  if(state.chartMode!=="fused"){const control=nearestPoint(plot.report?.controlTrace||[],targetTime);if(control)lines.push(controlPointSummary(control))}
-  if(reference||plot.series.some(item=>item.compare.length))lines.push(`${tr("对比","Compare")} T+${(reference?.t??targetTime).toFixed(2)} s · RA ${Number.isFinite(reference?.ra)?reference.ra.toFixed(1):"--"} ft`,seriesMetricSummary(plot.series,targetTime,"compare"));
-  const anchorItem=plot.series.find(item=>item.main.length),anchorPoint=anchorItem?nearestPoint(anchorItem.main,targetTime):null,anchorValue=anchorItem?metricPointValue(anchorItem.metric,anchorPoint):null;
-  ui.tip.style.display="block";ui.tip.style.left=`${Math.min(rect.width-330,Math.max(8,plot.X(main?.t??targetTime)+14))}px`;
-  ui.tip.style.top=`${Math.max(8,anchorItem&&Number.isFinite(anchorValue)?plot.Y(anchorItem.metric,anchorValue)-70:20)}px`;ui.tip.textContent=lines.filter(Boolean).join("\n")
-}
-function hoverControlChart(event){
-  const plot=ui.controlCanvas._plot;if(!plot)return;const rect=ui.controlCanvas.getBoundingClientRect(),mx=event.clientX-rect.left,ratio=clamp((mx-plot.p.l)/(plot.pw||1),0,1),targetTime=plot.xmin+(plot.xmax-plot.xmin)*ratio;
-  setPlaybackTime(targetTime,true);const main=nearestPoint(plot.data,targetTime),reference=nearestPoint(plot.compareData,targetTime),trajectoryPoint=nearestPoint(plot.report?.trajectory||[],targetTime),lines=[];
-  if(main)lines.push(`${tr("主要","Primary")} T+${main.t.toFixed(2)} s · RA ${Number.isFinite(trajectoryPoint?.ra)?trajectoryPoint.ra.toFixed(1):"--"} ft`,pointMetricSummary(trajectoryPoint,plot.trajectorySeries.map(item=>item.metric)),controlPointSummary(main));
-  if(reference){const comparisonTrajectory=nearestPoint(plot.comparisonReport?.trajectory||[],targetTime);lines.push(`${tr("对比","Compare")} T+${reference.t.toFixed(2)} s`,pointMetricSummary(comparisonTrajectory,plot.trajectorySeries.map(item=>item.metric)),controlPointSummary(reference))}
-  ui.controlTip.style.display="block";ui.controlTip.style.left=`${Math.min(rect.width-360,Math.max(8,plot.X(main?.t??targetTime)+14))}px`;ui.controlTip.style.top="12px";ui.controlTip.textContent=lines.filter(Boolean).join("\n")
+  const main=nearestPoint(plot.data,targetTime),reference=nearestPoint(plot.compareData,targetTime);if(!main)return;
+  const lines=[`${tr("主要","Primary")} T+${main.t.toFixed(2)} s · RA ${Number.isFinite(main.ra)?main.ra.toFixed(1):"--"} ft`,pointMetricSummary(main,plot.metrics)];
+  if(reference)lines.push(`${tr("对比","Compare")} T+${reference.t.toFixed(2)} s · RA ${Number.isFinite(reference.ra)?reference.ra.toFixed(1):"--"} ft`,pointMetricSummary(reference,plot.metrics));
+  const anchor=plot.metrics.find(metric=>Number.isFinite(main[metric.key]));
+  ui.tip.style.display="block";ui.tip.style.left=`${Math.min(rect.width-330,Math.max(8,plot.X(main.t)+14))}px`;
+  ui.tip.style.top=`${Math.max(8,anchor?plot.Y(anchor,main[anchor.key])-70:20)}px`;ui.tip.textContent=lines.filter(Boolean).join("\n")
 }
 function activeRecord(){return state.records.find(item=>item.id===state.activeId)}
 function comparisonRecord(){return state.records.find(item=>item.id===state.compareId)}
@@ -1677,8 +1209,8 @@ function downloadActive(){
   document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
 }
 function clearRecords(){
-  pausePlayback();state.records=[];state.activeId=null;state.compareId=null;state.importMode="main";state.playback.recordId=null;state.playback.time=null;state.playback.touched=false;sharedHoverTime=null;
-  renderInstrumentPanels(null,null);updateInstrumentPanels(null);renderRecordList();ui.report.hidden=true;ui.drop.hidden=false;showError("")
+  state.records=[];state.activeId=null;state.compareId=null;state.importMode="main";
+  renderRecordList();ui.report.hidden=true;ui.drop.hidden=false;showError("")
 }
 function openPicker(mode="main"){
   state.importMode=mode;ui.fileInput.multiple=mode!=="compare";ui.fileInput.click()
@@ -1698,28 +1230,12 @@ ui.fileInput.addEventListener("change",event=>{importFiles(event.target.files,st
 document.addEventListener("drop",event=>importFiles(event.dataTransfer.files,"main"));
 function redrawTrajectoryChart(){
   const primary=activeRecord(),comparison=comparisonRecord();
-  if(primary){drawFlare(primary.report.trajectory,comparison?.report.trajectory||[],primary.report,comparison?.report||null);drawControlChart(primary.report.controlTrace,comparison?.report.controlTrace||[],primary.report,comparison?.report||null)}
+  if(primary){drawFlare(primary.report.trajectory,comparison?.report.trajectory||[],primary.report);renderRunway(primary.report)}
 }
-function clearSharedHover(){ui.tip.style.display="none";ui.controlTip.style.display="none";if(!state.playback.touched){sharedHoverTime=null;updateInstrumentPanels(null);redrawTrajectoryChart()}}
-ui.canvas.addEventListener("mousemove",hoverChart);ui.canvas.addEventListener("mouseleave",clearSharedHover);
-ui.controlCanvas.addEventListener("mousemove",hoverControlChart);ui.controlCanvas.addEventListener("mouseleave",clearSharedHover);
-ui.chartModeToggle.addEventListener("click",()=>setChartMode(state.chartMode==="fused"?"separated":"fused"));
-ui.layoutToggle.addEventListener("click",()=>setLayoutMode(state.layoutMode==="horizontal"?"vertical":"horizontal"));
-ui.playToggle.addEventListener("click",togglePlayback);
-ui.playSpeed.addEventListener("change",event=>{state.playback.speed=clamp(Number(event.target.value)||1,.25,4)});
-ui.playProgress.addEventListener("input",event=>{const {xmin,xmax}=playbackDomain();setPlaybackTime(xmin+(xmax-xmin)*(Number(event.target.value)/1000),true)});
-ui.zoomSlider.addEventListener("input",event=>applyReaderZoom(event.target.value));
-$("readerZoomReset").addEventListener("click",()=>applyReaderZoom(100));
-$("themeColor").addEventListener("input",event=>setThemeSeed(event.target.value));
-for(const key of["R","G","B"])$(`theme${key}`).addEventListener("input",()=>setThemeSeed(rgbToHex($("themeR").value,$("themeG").value,$("themeB").value)));
-$("themeRandom").addEventListener("click",()=>{let rgb;do{rgb={r:Math.floor(24+Math.random()*208),g:Math.floor(24+Math.random()*208),b:Math.floor(24+Math.random()*208)}}while(Math.max(rgb.r,rgb.g,rgb.b)-Math.min(rgb.r,rgb.g,rgb.b)<68);setThemeSeed(rgbToHex(rgb.r,rgb.g,rgb.b))});
-$("presetSelect").addEventListener("change",event=>{setActivePresetId(event.target.value);const preset=userPresets.find(item=>item.id===activePresetId);$("presetName").value=preset?.name||"";presetStatusState={message:preset?tr(`已选择：${preset.name}，点击“应用”切换设置。`,`Selected: ${preset.name}. Choose Apply to switch settings.`):tr("输入名称后保存当前设置。","Enter a name to save the current settings."),kind:""};renderPresetControls()});
-$("presetName").addEventListener("input",()=>{if(activePresetId)setPresetStatus(tr("预设名称或当前设置已修改，保存后生效。","Preset name or current settings changed; save to keep them."),"dirty")});
-$("presetName").addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();saveCurrentPreset()}});
-$("presetNew").addEventListener("click",startNewPreset);$("presetSave").addEventListener("click",saveCurrentPreset);$("presetApply").addEventListener("click",applyUserPreset);$("presetDelete").addEventListener("click",deleteUserPreset);
-const themeLabElement=$("themeLab"),presetLabElement=$("presetLab");themeLabElement.addEventListener("toggle",()=>{if(themeLabElement.open)presetLabElement.open=false});presetLabElement.addEventListener("toggle",()=>{if(presetLabElement.open)themeLabElement.open=false});
-arrangeDashboardLayout(state.layoutMode);syncThemeToneFromSeed();applyGeneratedPalette();renderThemeControls();applyStaticTranslations();renderChartMode();renderLayoutMode();renderMetricPicker();applyReaderZoom(state.zoom,false);renderPlayback();
+ui.canvas.addEventListener("mousemove",hoverChart);ui.canvas.addEventListener("mouseleave",()=>ui.tip.style.display="none");
+applyTheme(currentTheme);renderMetricPicker();
 $("languageToggle").addEventListener("click",()=>setLanguage(currentLanguage==="zh"?"en":"zh"));
+$("themeToggle").addEventListener("click",()=>setTheme(currentTheme==="dark"?"light":"dark"));
 window.addEventListener("resize",redrawTrajectoryChart);
 
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>StarLux LMM 分析器</title>
+<title>StarLux Analyzer · 落地分析器</title>
 <script type="application/json" id="lmm-bundled-presets">{
   "schemaVersion": 1,
   "items": [
@@ -478,9 +478,9 @@ const STATIC_TEXT={
 let storedLanguage="";
 try{storedLanguage=localStorage.getItem(LANGUAGE_PREFERENCE_KEY)||""}catch{}
 let currentLanguage=(window.LMM_DEFAULT_LANGUAGE==="zh"||window.LMM_DEFAULT_LANGUAGE==="en")?window.LMM_DEFAULT_LANGUAGE:(storedLanguage==="zh"||storedLanguage==="en")?storedLanguage:(navigator.language||"").toLowerCase().startsWith("zh")?"zh":"en";
-const THEME_COLOR_PREFERENCE_KEY="starlux-lmm-reader-theme-color-v116";
-const USER_PRESET_STORAGE_KEY="starlux-lmm-reader-presets-v1";
-const ACTIVE_PRESET_STORAGE_KEY="starlux-lmm-reader-active-preset-v1";
+const THEME_COLOR_PREFERENCE_KEY="starlux-lmm-standalone-reader-theme-color-v116";
+const USER_PRESET_STORAGE_KEY="starlux-lmm-standalone-reader-presets-v1";
+const ACTIVE_PRESET_STORAGE_KEY="starlux-lmm-standalone-reader-active-preset-v1";
 const USER_PRESET_SCHEMA_VERSION=1;
 let themeSeed="#2F8DCC";try{const saved=localStorage.getItem(THEME_COLOR_PREFERENCE_KEY);if(/^#[0-9a-f]{6}$/i.test(saved||""))themeSeed=saved.toUpperCase()}catch{}
 let themeTone=themeToneFromSeed(themeSeed);
@@ -652,7 +652,7 @@ function setLanguage(language){
 const METRIC_PREFERENCE_KEY="starlux-lmm-trajectory-metrics";
 const FUSED_METRIC_PREFERENCE_KEY="starlux-lmm-fused-metrics";
 const CHART_MODE_PREFERENCE_KEY="starlux-lmm-chart-mode";
-const ZOOM_PREFERENCE_KEY="starlux-lmm-reader-zoom";
+const ZOOM_PREFERENCE_KEY="starlux-lmm-standalone-reader-zoom";
 const LAYOUT_MODE_PREFERENCE_KEY="starlux-lmm-layout-mode-v116";
 const TRAJECTORY_METRICS=[
   {key:"fpm",label:"轨迹 FPM",labelEn:"Trajectory FPM",unit:"fpm",group:"verticalSpeed",decimals:0},

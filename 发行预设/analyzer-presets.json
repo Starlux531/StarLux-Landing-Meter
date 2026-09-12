@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    {"id":"starlux-bundled-default","name":"默认","schemaVersion":1,"settings":{"theme":{"seed":"#2F8DCC"},"layout":{"pageZoom":115,"chartMode":"separated","viewMode":"vertical"},"charts":{"separatedMetrics":["fpm","ra","g"],"fusedMetrics":["n1_1","pitchInput","vvi","ra","throttle1"]}}},
+    {"id":"starlux-bundled-rose","name":"黑暗玫瑰","schemaVersion":1,"settings":{"theme":{"seed":"#030408"},"layout":{"pageZoom":100,"chartMode":"separated","viewMode":"horizontal"},"charts":{"separatedMetrics":["fpm","ra","g"],"fusedMetrics":["n1_1","pitchInput","vvi","ra","throttle1"]}}},
+    {"id":"starlux-bundled-grape","name":"巨峰葡萄","schemaVersion":1,"settings":{"theme":{"seed":"#010309"},"layout":{"pageZoom":75,"chartMode":"separated","viewMode":"vertical"},"charts":{"separatedMetrics":["fpm","ra","g"],"fusedMetrics":["n1_1","pitchInput","vvi","ra","throttle1"]}}},
+    {"id":"starlux-bundled-future","name":"未来展厅","schemaVersion":1,"settings":{"theme":{"seed":"#030F11"},"layout":{"pageZoom":100,"chartMode":"separated","viewMode":"horizontal"},"charts":{"separatedMetrics":["fpm","ra","g"],"fusedMetrics":["n1_1","pitchInput","vvi","ra","throttle1"]}}},
+    {"id":"starlux-bundled-violet","name":"水晶紫罗兰","schemaVersion":1,"settings":{"theme":{"seed":"#26103C"},"layout":{"pageZoom":100,"chartMode":"separated","viewMode":"horizontal"},"charts":{"separatedMetrics":["fpm","ra","g"],"fusedMetrics":["n1_1","pitchInput","vvi","ra","throttle1"]}}}
+  ]
+}

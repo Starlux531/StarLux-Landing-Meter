@@ -1,0 +1,27 @@
+{
+  "upstream": "https://github.com/notofonts/noto-cjk/tree/main/Sans",
+  "license": "SIL Open Font License 1.1",
+  "fonts": [
+    {
+      "file": "LMMUI-Regular.otf",
+      "source_sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+      "sha256": "ec9ec87a2edaad8a16e77f0a6e107fa78d112df6202b57964204a6c5b88c6f0a",
+      "bytes": 333064,
+      "glyphs": 893
+    },
+    {
+      "file": "LMMUI-Medium.otf",
+      "source_sha256": "ca094f6b0001fb048ca39ddd797a0cdb0179e1e55c6561e111c49c3e6a61d7b7",
+      "sha256": "cc5f3c4edd584aeeb5dacc227176ec8e0f4cb08c98df22bba156d380c5dff511",
+      "bytes": 332120,
+      "glyphs": 893
+    },
+    {
+      "file": "LMMUI-Bold.otf",
+      "source_sha256": "b5f0d1a190a7f9b43c310a8850630af12553df32c4c050543f9059732d9b4c0a",
+      "sha256": "fc00893f4f5f64d552ffd930e5d4affbcc30db6fc7c15404a489851a5a064aa9",
+      "bytes": 341528,
+      "glyphs": 893
+    }
+  ]
+}
