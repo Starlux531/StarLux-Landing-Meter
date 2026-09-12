@@ -70,8 +70,6 @@ Separate Settings and Landing records menus, grouped settings, visible slider ha
     <td valign="top"><a href="docs/images/4bf29d926c0911c3946c5de9234a522b.png"><img src="docs/images/4bf29d926c0911c3946c5de9234a522b.png" alt="Landing record browser with separate report and delete actions" width="100%"></a></td>
   </tr>
 </table>
-
-<details>
   
 ## 完整图集：配色、英文界面和原始数据 / Full gallery: themes, English UI and raw data
 
@@ -98,8 +96,6 @@ The original aggregated TXT trace remains available for checking recorded sample
 <p align="center">
   <a href="docs/images/389431ad037fa71f20b03bb7768d3164.png"><img src="docs/images/389431ad037fa71f20b03bb7768d3164.png" alt="Original TXT trajectory table with 0.25-second aggregated samples" width="760"></a>
 </p>
-
-</details>
 
 ## 当前能力 / Features
 
