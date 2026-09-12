@@ -4,9 +4,11 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![X-Plane](https://img.shields.io/badge/X--Plane-12-orange.svg)](https://www.x-plane.com/)
 
-StarLux Landing Meter 是一款适用于 X-Plane 12 与 FlyWithLua NG+ 的落地分析插件。记录垂直速度、载荷、姿态、风况、拉平轨迹、操纵输入与动力输出，在游戏内给出结果，并生成可复盘、可对比、可复核的本地报告。我们重视数据来源的准确性与透明度，而不只是一个经过美化的落地数字。
+StarLux Landing Meter 是一款适用于 X-Plane 12 与 FlyWithLua NG+ 的落地分析插件。记录垂直速度、载荷、姿态、风况、拉平轨迹、操纵输入与动力输出，在游戏内给出结果，并生成可复盘、可对比、可复核的本地报告。
+# 我们重视数据来源的准确性与透明度，很多情况下，模拟器是如何得到这个数据的，比数据本身更加有价值。
 
 A local landing-analysis plugin for X-Plane 12 and FlyWithLua NG+. Review touchdown measurements, control inputs, engine output and runway position with synchronized charts and transparent source data. Flight records stay on your computer.
+# We care about data accuracy and transparency. In many cases, how the simulator generates the data matters more than the actual numbers.
 
 **[下载 1.1.8 / Download](https://github.com/Starlux531/StarLux-Landing-Meter/releases/tag/v1.1.8)** · [安装说明 / Installation guide](README_1.1.8.md) · [更新记录 / Changelog](CHANGELOG.md) · [问题反馈 / Issues](https://github.com/Starlux531/StarLux-Landing-Meter/issues)
 
