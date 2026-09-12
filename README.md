@@ -72,7 +72,8 @@ Separate Settings and Landing records menus, grouped settings, visible slider ha
 </table>
 
 <details>
-<summary>展开完整图集：配色、英文界面和原始数据 / Full gallery: themes, English UI and raw data</summary>
+  
+## 完整图集：配色、英文界面和原始数据 / Full gallery: themes, English UI and raw data
 
 ### 完整复盘页面 / Complete dashboards
 
