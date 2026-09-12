@@ -31,6 +31,10 @@ Latest means the highest version in the loaded catalog, not automatic simulator 
 
 For analysis only, open the standalone HTML. It requires no simulator and uses preferences isolated from the plugin's bundled analyzer.
 
+GitHub 会去掉直接附件名称中的中文。需要保留完整名称时，请下载 `Starlux_Analyzer_1.1.8.zip` 或 `StarLux_LMM_Installer_Only_1.1.8.zip`，解压即可；完整安装包内的文件名也完整保留。直接下载入口带有双语标签，文件内容相同。
+
+GitHub strips Chinese characters from direct asset filenames. The analyzer-only and installer-only ZIPs preserve the requested names inside, as does the complete bundle. Direct HTML/EXE downloads have bilingual labels and identical contents.
+
 ## 动态演示 / Interactive charts in motion
 
 100 ft 轨迹、操纵输入、舵面响应和动力输出共用时间轴，鼠标指向可同步读数；支持播放、拖动进度与融合／分离视图。

@@ -2,6 +2,8 @@
 
 ## 中文
 
+**文件名提示：**GitHub 会去掉直接上传的 HTML／EXE 文件名中的中文。下载 `Starlux_Analyzer_1.1.8.zip` 可得到完整名称的 `Starlux_Analyzer_落地分析器.html`；下载 `StarLux_LMM_Installer_Only_1.1.8.zip` 可得到 `StarLux_LMM_installer_安装器.exe`。完整安装包内的名称也保留。直接下载入口显示双语标签，内容一致；校验清单中的中文名称对应解压后／原始名称。
+
 1.1.8 正式发布：标准版适配 X-Plane 12.4.4+ 的原生中文字库与 UI；新增面向 12.4.4 之前 XP 12 的旧 UI 兼容包。保留现有落地算法，不改变已有飞行日志。
 
 - 恢复独立的设置、落地记录菜单；设置功能分区、滑块辨识度、记录列表与删除确认同步优化。
@@ -16,6 +18,8 @@
 **兼容注意：**Standard 面向 XP 12.4.4+。Compatibility 面向旧 XP 12，跳过 SDK 440 字体接口，设置与记录使用传统英文控件，中文报告及标准字号中文弹窗保留。CN／International 只影响无配置时的默认语言；已有配置始终优先。兼容版不能提供新的连续中文字号能力。
 
 ## English
+
+**Filename note:** GitHub strips Chinese characters from direct HTML/EXE asset names. `Starlux_Analyzer_1.1.8.zip` preserves `Starlux_Analyzer_落地分析器.html`; `StarLux_LMM_Installer_Only_1.1.8.zip` preserves `StarLux_LMM_installer_安装器.exe`. The complete bundle also preserves these names. Direct downloads carry bilingual labels and identical bytes. Chinese names in the checksum list refer to the extracted/original filenames.
 
 Version 1.1.8 is the stable release of the tested native UI for X-Plane 12.4.4+, with an explicit legacy UI edition for older X-Plane 12 installations. Landing algorithms and existing reports are preserved.
 
