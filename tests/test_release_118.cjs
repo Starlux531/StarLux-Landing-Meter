@@ -23,7 +23,10 @@ for(const file of ['LMM_Report_Reader.html','Starlux_Analyzer_落地分析器.ht
 }
 const readme=fs.readFileSync(path.join(root,'README.md'),'utf8');
 const images=[...readme.matchAll(/<img src="([^"]+)"/g)].map(m=>m[1]);
-assert.equal(images.length,7);assert.equal(images.filter(x=>x.endsWith('.gif')).length,1);
+assert.equal(images.length,9);assert.equal(images.filter(x=>x.endsWith('.gif')).length,2);
+for(const image of ['QQ20260914-105006.png','QQ20260914-111931-HD.gif','QQ20260914-104414-3MB.gif'])assert(images.includes(`docs/images/${image}`),image);
+assert(readme.includes('href="docs/images/QQ20260914-104414-HD.gif"'),'full original GIF remains accessible');
+assert(!images.includes('docs/images/316f279efdc4f5dd509f893750489b25.gif'),'old demo no longer featured');
 for(const image of images)assert(fs.existsSync(path.join(root,image)),image);
 assert(!readme.includes('src="docs/images/report-reader-v1.1.4-'));
-console.log('Release analyzer: syntax, 5 sanitized presets, existing-data preservation, independent storage, 7 gallery assets passed.');
+console.log('Release analyzer: syntax, 5 sanitized presets, existing-data preservation, independent storage, 9 gallery assets passed.');

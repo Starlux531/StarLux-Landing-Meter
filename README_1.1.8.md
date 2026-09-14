@@ -1,10 +1,16 @@
 # StarLux LMM 1.1.8 正式版 / Stable release
 
+[技术手册 1.0：中英文 PDF 与 Markdown / Technical Manual 1.0](docs/technical-manual/README.md)
+
 适用于 Windows 64 位 X-Plane 12，依赖 FlyWithLua NG+。本版仍为 Lua 插件，不是独立的 C++ XPL 插件。1.1.8 沿用 1.1.7 的落地采集、评分与机场索引算法。
 
 For Windows x64 and X-Plane 12 with FlyWithLua NG+. This is a Lua plugin, not a standalone C++ XPL plugin. Version 1.1.8 retains the landing capture, scoring and airport-index algorithms from 1.1.7.
 
 ## 下载选择 / Choose a download
+
+<p align="center"><a href="docs/images/QQ20260914-105006.png"><img src="docs/images/QQ20260914-105006.png" alt="Author-provided StarLux installer and updater interface" width="900"></a></p>
+
+作者提供的最新安装/更新界面。安装器与插件版本号独立；功能以实际下载版本为准。 / Latest author-provided install/update UI. Installer and plugin versions are independent; features depend on the downloaded build.
 
 | 文件 / File | 用途 / Purpose |
 | --- | --- |

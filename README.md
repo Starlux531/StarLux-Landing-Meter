@@ -10,7 +10,7 @@ StarLux Landing Meter 是一款适用于 X-Plane 12 与 FlyWithLua NG+ 的落地
 A local landing-analysis plugin for X-Plane 12 and FlyWithLua NG+. Review touchdown measurements, control inputs, engine output and runway position with synchronized charts and transparent source data. Flight records stay on your computer.
 # We care about data accuracy and transparency. In many cases, how the simulator generates the data matters more than the actual numbers.
 
-**[下载 1.1.8 / Download](https://github.com/Starlux531/StarLux-Landing-Meter/releases/tag/v1.1.8)** · [安装说明 / Installation guide](README_1.1.8.md) · [更新记录 / Changelog](CHANGELOG.md) · [问题反馈 / Issues](https://github.com/Starlux531/StarLux-Landing-Meter/issues)
+**[下载 1.1.8 / Download](https://github.com/Starlux531/StarLux-Landing-Meter/releases/tag/v1.1.8)** · [安装说明 / Installation guide](README_1.1.8.md) · [技术手册 1.0 / Technical manual](docs/technical-manual/README.md) · [更新记录 / Changelog](CHANGELOG.md) · [问题反馈 / Issues](https://github.com/Starlux531/StarLux-Landing-Meter/issues)
 
 本项目持续更新，欢迎提供测试反馈与建议。赞助支持与先行测试：[爱发电 / Support development](https://afdian.com/a/StarluxLMM)。
 
@@ -37,6 +37,16 @@ GitHub 会去掉直接附件名称中的中文。需要保留完整名称时，�
 
 GitHub strips Chinese characters from direct asset filenames. The analyzer-only and installer-only ZIPs preserve the requested names inside, as does the complete bundle. Direct HTML/EXE downloads have bilingual labels and identical contents.
 
+### 安装与更新界面 / Install and update
+
+选择模拟器目录、查看插件与依赖状态，再选择要安装的版本。下图为作者提供的最新安装器界面；安装器与插件采用独立版本号，具体能力以下载版本及安装说明为准。
+
+Choose the simulator folder, check plugin/dependency status and select a version. This author-provided screenshot shows the latest installer UI. Installer and plugin version numbers are independent; consult your downloaded build and installation guide for available features.
+
+<p align="center">
+  <a href="docs/images/QQ20260914-105006.png"><img src="docs/images/QQ20260914-105006.png" alt="StarLux installer: simulator detection, version selection, update and maintenance controls" width="980"></a>
+</p>
+
 ## 动态演示 / Interactive charts in motion
 
 100 ft 轨迹、操纵输入、舵面响应和动力输出共用时间轴，鼠标指向可同步读数；支持播放、拖动进度与融合／分离视图。
@@ -44,10 +54,20 @@ GitHub strips Chinese characters from direct asset filenames. The analyzer-only 
 Trajectory, controls, surfaces and power output share one timeline, with synchronized hover readouts, playback, scrubbing and fused/separated views.
 
 <p align="center">
-  <a href="docs/images/316f279efdc4f5dd509f893750489b25.gif"><img src="docs/images/316f279efdc4f5dd509f893750489b25.gif" alt="StarLux LMM synchronized trajectory and control-chart demonstration" width="820"></a>
+  <a href="docs/images/QQ20260914-111931-HD.gif"><img src="docs/images/QQ20260914-111931-HD.gif" alt="English analyzer playback with synchronized throttle, XYZ inputs and comparison curves" width="920"></a>
 </p>
 
-<p align="center"><sub>作者提供的原始 GIF，约 10 MB。点击查看原图。 / Original author-provided GIF, about 10 MB; click to view.</sub></p>
+<p align="center"><sub>英文分析器播放演示，原始 GIF 约 0.94 MB。 / English analyzer playback; original GIF approximately 0.94 MB.</sub></p>
+
+### 模拟器内的落地过程 / Touchdown in the simulator
+
+从驾驶舱内观察落地过程与 LMM 的显示。主页使用约 2.77 MB 的压缩预览；点击可查看约 24.60 MB 的原始 GIF，原始时长保留。
+
+Watch the touchdown and LMM display from the cockpit. The page uses a roughly 2.77 MB preview; click for the approximately 24.60 MB original GIF. The full duration is retained.
+
+<p align="center">
+  <a href="docs/images/QQ20260914-104414-HD.gif"><img src="docs/images/QQ20260914-104414-3MB.gif" alt="Cockpit touchdown sequence with the StarLux LMM landing display" width="920"></a>
+</p>
 
 ## 报告总览 / Landing report overview
 
@@ -131,6 +151,7 @@ Reports/settings/cache stay local. Only the installer contacts official release 
 
 ## 文档与反馈 / Documentation and feedback
 
+- [技术手册 1.0 正式版：中英文 PDF 与 Markdown / Technical Manual 1.0 Final](docs/technical-manual/README.md)
 - [1.1.8 中英文安装与兼容说明 / Installation and compatibility](README_1.1.8.md)
 - [安装器开发与构建 / Installer development](installer/README.md)
 - [更新记录 / Changelog](CHANGELOG.md)
