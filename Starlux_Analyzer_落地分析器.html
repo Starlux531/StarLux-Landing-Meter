@@ -238,12 +238,30 @@ html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-co
 @media(max-width:980px){.live-panels{grid-template-columns:1fr}.xy-stage{grid-template-columns:minmax(220px,1fr) minmax(132px,.45fr)}}
 @media(max-width:760px){.app{padding:8px 70px 46px 13px}.layout,.hero-grid{grid-template-columns:1fr}.status{min-width:0}.facts{grid-template-columns:1fr}.pose-grid{grid-template-columns:1fr}.drop{min-height:520px}.topbar{align-items:flex-start;flex-direction:column;margin:0 -5px 18px;padding:10px 11px}.top-actions{position:relative;width:100%;justify-content:flex-start;flex-wrap:wrap}.theme-lab,.preset-lab{position:static}.theme-popover,.preset-popover{left:0;right:0;top:calc(100% + 9px);width:auto}.compare-head,.telemetry-heading{flex-direction:column}.telemetry-actions{width:100%;justify-content:space-between}.chart-mode-toggle{min-width:150px}.compare-grid{grid-template-columns:1fr}.reader-zoom{right:7px}.reader-zoom-track{height:142px}.reader-zoom-slider{width:126px}.playback-bar{grid-template-columns:auto auto 1fr}.play-time{grid-column:1/-1;text-align:center}.xy-stage{grid-template-columns:1fr}.input-readouts{grid-template-columns:repeat(3,1fr)}.yaw-wrap{grid-column:1/-1}}
 @media(max-width:470px){.grid{grid-template-columns:1fr}h1,.drop h1{font-size:27px}.hero{padding:24px}.privacy{display:none}.attitude-card{padding:14px 12px}.attitude-series strong{font-size:28px}.preset-fields{grid-template-columns:1fr}.preset-btn{flex:1 1 calc(50% - 7px)}}
+.time-window-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:10px 0 16px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.time-window-tools button{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer}.time-window-tools label{display:flex;gap:5px;align-items:center;font-size:12px}.time-window-tools output{margin-left:auto;font-size:12px;font-variant-numeric:tabular-nums}.time-window-tools input[type=range]{width:100%;accent-color:var(--accent)}
+.geometry-empty{color:var(--viz-ink)}.live-panels{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.xy-stage{grid-template-columns:minmax(100px,1fr) minmax(90px,.5fr)}
+.approach-plan-svg{width:100%;display:block;background:var(--viz-bg);color:var(--viz-ink);border-radius:12px;cursor:crosshair}#approachPlan{margin:10px 0;min-height:30px}#approachNow{font-variant-numeric:tabular-nums}
+#planViews{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}#planViews.with-wind{grid-template-columns:minmax(0,1fr) minmax(220px,28%)}#approachPlan svg{display:block;width:100%;height:auto;background:var(--viz-bg2);border-radius:12px}#windProfile svg{display:block;width:100%;color:var(--viz-ink);background:var(--viz-bg2);border-radius:12px}.input-wind{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.input-readout small{display:block;font-size:9px;color:var(--muted);line-height:1.4;margin-top:4px}#planHelp,#timeZoomHelp{font-size:11px;text-align:left;margin:9px 0}#windProfile[hidden]{display:none}@media(max-width:650px){#planViews.with-wind{grid-template-columns:minmax(0,1fr)}#windProfile svg{max-height:430px}}
+.time-window-tools{gap:9px}.time-window-tools button,.time-window-tools label.metric-chip,.time-window-tools #planZoomLabel{--metric:var(--series-1,var(--accent));border:1px solid var(--line-strong);border-radius:999px;padding:8px 11px;background:var(--interactive);color:var(--soft);font:inherit;font-size:11px;min-height:34px;transition:background .15s,border-color .15s,box-shadow .15s;display:inline-flex;align-items:center;gap:6px;cursor:pointer}.time-window-tools button:hover,.time-window-tools #planZoomLabel:focus-within{border-color:var(--metric);box-shadow:0 0 12px color-mix(in srgb,var(--metric) 22%,transparent);color:var(--text)}.time-window-tools button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}.time-window-tools button.selected,.time-window-tools label.metric-chip:has(input:checked){border-color:var(--metric);color:var(--text);background:color-mix(in srgb,var(--metric) 14%,var(--panel2));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--metric) 24%,transparent),0 0 10px color-mix(in srgb,var(--metric) 12%,transparent)}#planWindLabel{--metric:var(--series-4,var(--accent))}#windProfileLabel{--metric:var(--series-1,var(--accent))}#windMetricButtons button[data-wind-metric=direction]{--metric:var(--series-2,var(--accent))}#windMetricButtons button[data-wind-metric=cross]{--metric:var(--series-4,var(--accent))}#windMetricButtons button[data-wind-metric=head]{--metric:var(--series-5,var(--accent))}.time-window-tools label.metric-chip:has(input:not(:checked)) .metric-dot{opacity:.35;box-shadow:none}#planZoomLabel{cursor:default!important}#planZoom{appearance:none;color:var(--text);border:0;border-radius:999px;background:var(--panel2);padding:3px 18px 3px 8px;cursor:pointer;font:inherit;background-image:linear-gradient(45deg,transparent 50%,var(--soft) 50%),linear-gradient(135deg,var(--soft) 50%,transparent 50%);background-position:calc(100% - 9px) 50%,calc(100% - 5px) 50%;background-size:4px 4px;background-repeat:no-repeat}#windMetricButtons{gap:7px}#windProfileMetric[hidden]{display:none}#windProfileHelp{font-size:11px;text-align:left;line-height:1.6}#windProfileHelp[hidden]{display:none}
+.time-window-tools>button::before,#planZoomLabel::before{content:"";width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:var(--metric,var(--accent));box-shadow:0 0 8px color-mix(in srgb,var(--metric,var(--accent)) 55%,transparent)}
+.ils-reference-label{font:700 10px Consolas,monospace;color:var(--muted);padding:0 8px}
+.xy-stage{display:flex;flex-wrap:wrap}.xy-stage>.input-readouts{flex:1 1 100px}.xy-stage>.yaw-wrap,.xy-stage>#inputIlsNote{flex:0 0 100%;width:100%}
+.input-flight-reference{flex:0 0 236px;width:236px;height:232px;margin:auto;position:relative;padding:0 36px 32px 0}
+.input-flight-reference .xy-pad{width:200px;height:200px}
+.ils-gauge{position:absolute;color:var(--viz-ink);overflow:visible}.ils-gauge[hidden]{display:none}
+#inputLoc{left:0;bottom:0;width:200px;height:28px}#inputGs{right:0;top:0;width:32px;height:200px}
+.ils-inop{fill:var(--viz-ink);font:700 10px Consolas,monospace;paint-order:stroke;stroke:var(--viz-bg2);stroke-width:4px}.ils-gauge[data-inop="true"]>path:not(.ils-diamond),.ils-gauge[data-inop="true"]>circle{opacity:.25}
+.ils-gauge .ils-diamond{fill:#dda6f5;stroke:var(--viz-bg2);stroke-width:1}
+#inputIlsNote{grid-column:1/-1;color:var(--muted);font-size:10px;line-height:1.5}#inputIlsNote[hidden]{display:none}
+
+.chart-time-cursor{position:absolute;width:0;border-left:1.4px dashed var(--viz-ink);opacity:.82;pointer-events:none;z-index:2;will-change:transform}.chart-time-cursor[hidden]{display:none}
 </style>
 </head>
 <body>
 <div class="app">
   <header class="topbar">
-    <div class="brand">STARLUX LANDING METRICS MONITOR · 分析器</div>
+    <div class="brand">STARLUX LANDING METRICS MONITOR · 分析器 <small id="analyzerBuild" style="font-size:10px;opacity:.75;margin-left:8px">1.1.9</small></div>
     <div class="top-actions">
       <div class="privacy">完全本地读取 · 数据不会上传</div>
       <details class="theme-lab" id="themeLab"><summary class="theme-panel-toggle">RGB 配色</summary><div class="theme-popover">
@@ -360,8 +378,11 @@ html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-co
         </section>
 
         <section class="section runway-section">
-          <h2 class="viz-title runway-title">跑道与准确触地点</h2><div class="viz-sub">跑道使用固定可读视角；入口、接地点和剩余距离仍按 apt.dat 实距比例定位，跑道长度通过中心线与接地区标线密度表达；阅读器不再解析或绘制进近灯。</div>
+          <h2 class="viz-title runway-title">触地俯视图</h2><div class="viz-sub">跑道使用固定可读视角；入口、接地点和剩余距离仍按 apt.dat 实距比例定位，跑道长度通过中心线与接地区标线密度表达；阅读器不再解析或绘制进近灯。</div>
           <div id="runwayGraphic"></div><div class="viz-caption" id="runwayCaption">--</div><div class="runway-legend" id="runwayLegend"></div>
+          <h2 id="approachTitle" class="viz-title" style="margin-top:24px">落地俯视图</h2>
+          <div class="time-window-tools plan-tools"><button id="planOverview" type="button">全程俯视</button><label id="planZoomLabel">俯视缩放 <select id="planZoom"><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option><option value="16">16×</option><option value="32">32×</option><option value="64">64×</option></select></label><button id="planZoomOut" type="button" aria-label="Zoom out">−</button><button id="planZoomIn" type="button" aria-label="Zoom in">+</button><label id="planWindLabel" class="metric-chip"><input id="planWind" type="checkbox" checked><i class="metric-dot"></i><span>路径风向</span></label><label id="windProfileLabel" class="metric-chip"><input id="showWindProfile" type="checkbox" checked><i class="metric-dot"></i><span>竖向细节</span></label><div id="profileModes" class="metric-picker"><button id="profileModeLoc" class="metric-chip selected" data-profile-mode="loc" aria-pressed="true" type="button"><i class="metric-dot"></i><span>LOC / 中线偏差</span></button><button id="profileModeWind" class="metric-chip" data-profile-mode="wind" aria-pressed="false" type="button"><i class="metric-dot"></i><span>风向</span></button></div><button id="profileZoomIn" type="button">区间 +</button><button id="profileZoomOut" type="button">区间 −</button></div>
+          <div id="planHelp" class="viz-caption"></div><div id="approachNow" class="viz-caption"></div><div id="planViews"><div id="approachPlan"></div><div id="windProfile"></div></div><div id="windProfileHelp" class="viz-caption"></div><div id="approachCaption" class="viz-caption"></div>
         </section>
 
         <section class="section telemetry-section">
@@ -377,9 +398,9 @@ html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-co
               <article class="live-panel">
                 <div class="live-panel-head"><div><h3>XYZ 操纵输入</h3><p>横滚 X、俯仰 Y；Yaw / Z 轴位于下方。</p></div><span class="live-state" id="inputState">中立</span></div>
                 <div class="xy-stage">
-                  <div class="xy-pad" aria-label="俯仰横滚输入"><i class="xy-ring"></i><span class="axis-name pitch">PITCH / Y</span><span class="axis-name roll">ROLL / X</span><i class="xy-dot" id="xyDot"></i><i class="xy-dot compare" id="xyCompareDot" hidden></i></div>
-                  <div class="input-readouts"><div class="input-readout"><span>Pitch / Y</span><b id="pitchInputValue">0.0%</b></div><div class="input-readout"><span>Roll / X</span><b id="rollInputValue">0.0%</b></div><div class="input-readout"><span>Yaw / Z</span><b id="yawInputValue">0.0%</b></div></div>
-                  <div class="yaw-wrap"><div class="yaw-label"><span>-100% LEFT</span><b id="yawCompareValue"></b><span>RIGHT +100%</span></div><div class="yaw-track"><i class="yaw-marker" id="yawMarker"></i><i class="yaw-marker compare" id="yawCompareMarker" hidden></i></div></div>
+                  <div class="input-flight-reference"><div class="xy-pad" aria-label="俯仰横滚输入"><i class="xy-ring"></i><span class="axis-name pitch">PITCH / Y</span><span class="axis-name roll">ROLL / X</span><svg class="input-wind" viewBox="0 0 100 100" aria-hidden="true"><path id="inputWindArrow" fill="none" stroke="var(--viz-compare)" stroke-opacity=".38" stroke-width="2" stroke-linecap="round" visibility="hidden"/></svg><i class="xy-dot" id="xyDot"></i><i class="xy-dot compare" id="xyCompareDot" hidden></i></div><svg id="inputLoc" class="ils-gauge" viewBox="0 0 200 28" preserveAspectRatio="xMidYMid meet" data-inop="true" role="img" aria-label="LOC INOP"><text x="0" y="10" fill="currentColor" font-size="8">LOC REF</text><path d="M100,3V24" stroke="currentColor" stroke-width="1.5"/><circle data-ils-dot="true" cx="30" cy="16" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="65" cy="16" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="135" cy="16" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="170" cy="16" r="2" fill="none" stroke="currentColor"/><path id="inputLocDiamond" visibility="hidden" class="ils-diamond" d="M0,-5L4,0L0,5L-4,0Z"/><text id="inputLocInop" class="ils-inop" x="100" y="19" text-anchor="middle">INOP</text></svg><svg id="inputGs" class="ils-gauge" viewBox="0 0 32 200" preserveAspectRatio="xMidYMid meet" data-inop="true" role="img" aria-label="GS INOP"><text x="1" y="9" fill="currentColor" font-size="8">GS</text><path d="M2,100H22" stroke="currentColor" stroke-width="1.5"/><circle data-ils-dot="true" cx="12" cy="30" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="12" cy="65" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="12" cy="135" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="12" cy="170" r="2" fill="none" stroke="currentColor"/><path id="inputGsDiamond" visibility="hidden" class="ils-diamond" d="M0,-5L4,0L0,5L-4,0Z"/><text id="inputGsInop" class="ils-inop" x="16" y="103" text-anchor="middle">INOP</text></svg></div>
+                  <div class="input-readouts"><div class="input-readout"><span>Pitch / Y</span><b id="pitchInputValue">0.0%</b></div><div class="input-readout"><span>Roll / X</span><b id="rollInputValue">0.0%</b></div><div class="input-readout"><span>Yaw / Z</span><b id="yawInputValue">0.0%</b></div><div class="input-readout"><span id="inputWindLabel">风来自 / 风速</span><b id="inputWindValue">N/A</b><small id="inputWindNote"></small></div></div>
+                  <div id="inputIlsNote" hidden></div><div class="yaw-wrap"><div class="yaw-label"><span>-100% LEFT</span><b id="yawCompareValue"></b><span>RIGHT +100%</span></div><div class="yaw-track"><i class="yaw-marker" id="yawMarker"></i><i class="yaw-marker compare" id="yawCompareMarker" hidden></i></div></div>
                 </div>
               </article>
             </div>
@@ -389,7 +410,13 @@ html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-co
               <input class="timeline-slider" id="playProgress" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度">
               <output class="play-time" id="playTime">--:-- / --:--</output>
             </div>
-            <div class="chart-tools">
+            <div class="time-window-tools" id="timeWindowTools">
+              <button id="timeZoomOut" type="button">− 缩小</button><button id="timeZoomIn" type="button">+ 放大</button>
+              <button id="time100" type="button">100 ft</button><button id="timeFull" type="button">全程</button>
+              <label id="timeFollowLabel" class="metric-chip"><input id="timeFollow" type="checkbox" checked><i class="metric-dot"></i><span>播放跟随</span></label>
+              <output id="timeWindowLabel"></output><input id="timePan" type="range" min="0" max="1000" step="1" value="0" aria-label="横向浏览时间窗">
+            </div>
+            <div id="timeZoomHelp" class="viz-caption"></div><div class="chart-tools">
               <div class="metric-picker" id="metricPicker" role="group" aria-label="选择图表数据源"></div>
               <div class="chart-style-key">
                 <span class="style-key"><i class="style-line"></i>主要日志</span>
@@ -461,7 +488,7 @@ const STATIC_TEXT={
   "下降率严重度":"Vertical-speed severity","接地载荷严重度":"Touchdown-load severity","着陆上下文":"Landing context","快速还原接地环境和机体状态；相对风、接地姿态和触地点默认展开。":"Review touchdown conditions and aircraft state at a glance; relative wind, touchdown attitude and touchdown point are always visible.",
   "相对风向":"Relative wind","飞机固定朝上；蓝色实线为主要记录，紫色虚线为对比记录，箭头表示气流来向。":"Aircraft points up; the solid blue arrow is the primary record and the dashed purple arrow is the comparison, both showing where airflow comes from.",
   "接地姿态":"Touchdown attitude","姿态仪用移动地平线联合显示横滚与俯仰；迎角侧视图仅保留机翼、气流和 7.5° 通用尾擦俯仰参考；对比时用紫色虚线叠加参考姿态。":"The attitude display combines roll and pitch with a moving horizon. The AoA side view keeps only the wing, airflow and a general 7.5° tail-strike pitch reference; comparison attitude is overlaid in dashed purple.","姿态仪彩色地平线属于主要记录，紫色虚线属于对比记录；尾擦红线是通用俯仰参考，不是机型限制或 AoA 限制。":"The coloured horizon is the primary record and dashed purple is the comparison. The red tail-strike line is a general pitch reference, not an aircraft-specific or AoA limit.",
-  "跑道与准确触地点":"Runway and exact touchdown point","跑道使用固定可读视角；入口、接地点和剩余距离仍按 apt.dat 实距比例定位，跑道长度通过中心线与接地区标线密度表达；阅读器不再解析或绘制进近灯。":"The runway uses a fixed readable view. Threshold, touchdown and remaining distance retain apt.dat longitudinal proportions; runway length is expressed through centreline and touchdown-zone marking density. Approach lights are no longer parsed or drawn.",
+  "触地俯视图":"Runway and exact touchdown point","跑道使用固定可读视角；入口、接地点和剩余距离仍按 apt.dat 实距比例定位，跑道长度通过中心线与接地区标线密度表达；阅读器不再解析或绘制进近灯。":"The runway uses a fixed readable view. Threshold, touchdown and remaining distance retain apt.dat longitudinal proportions; runway length is expressed through centreline and touchdown-zone marking density. Approach lights are no longer parsed or drawn.",
   "100 ft 后多参数轨迹":"Multi-parameter trajectory below 100 ft","T+ 秒固定为横轴，可同时选择多个聚合参数；新日志使用 0.25 秒显示点和跑道相对高度，底部跑道事件带与同一时间轴对齐。":"T+ seconds stays on the horizontal axis. New logs use 0.25-second display points and runway-relative altitude, while the runway event band stays aligned to the same timeline.",
   "同步绘图区":"Synchronized plots","融合":"Fuse","分离":"Separate","横向布局":"Horizontal layout","竖向布局":"Vertical layout","缩放":"Zoom","重置":"Reset","RGB 配色":"RGB theme","保存预设":"Save presets","自定义主题色":"Custom theme colour","随机颜色":"Random colour","界面明暗连续跟随 RGB 感知亮度；文字和图表曲线会按实际背景独立校正对比度，评分与安全标线保留固定语义色。":"Interface brightness follows RGB perceptual luminance continuously. Text and chart series are contrast-corrected against their actual backgrounds; ratings and safety markers retain fixed semantic colours.",
   "用户预设":"User presets","0 个预设":"0 presets","新建预设…":"New preset…","预设名称":"Preset name","新建":"New","保存当前":"Save current","应用":"Apply","删除":"Delete","当前保存 RGB、横向／竖向布局、网页缩放、图表模式与曲线选择；预设结构可继续扩展。":"Presets now store RGB, horizontal/vertical layout, page zoom, chart mode and curve selections; the schema remains extensible.",
@@ -506,7 +533,7 @@ function themeHsl(offset=0,saturation=null,lightness=null){const base=rgbToHsl(h
 function themeRgbChannels(){return hexToRgb(themeSeed)}
 function themeSeriesColor(offset=0,variant=0){const palette=generatedThemePalette,base=palette?.base||rgbToHsl(hexToRgb(themeSeed)),backgrounds=palette?[palette.vizBg,palette.vizBg2]:[hslToRgb(base.h,26,10),hslToRgb(base.h+3,22,14)],saturation=clamp(base.s+34-(variant%3)*4,72,94),preferred=68+(variant%2)*4;return rgbColor(accessibleHslRgb(base.h+offset,saturation,preferred,backgrounds,4.58))}
 function tr(zh,en){return currentLanguage==="en"?en:zh}
-function metricLabel(metric){return currentLanguage==="en"?(metric.labelEn||metric.label):metric.label}
+function metricLabel(metric){if(metric.key==="ra"&&activeRecord()?.report.fullTimeline)return tr("AGL 高度","AGL altitude");return currentLanguage==="en"?(metric.labelEn||metric.label):metric.label}
 function translateValue(value){
   let output=String(value??"");
   const exact={"无":"None","未提供":"Not provided","高":"High","中":"Medium","低":"Low","是":"Yes","否":"No"};
@@ -655,6 +682,7 @@ const CHART_MODE_PREFERENCE_KEY="starlux-lmm-chart-mode";
 const ZOOM_PREFERENCE_KEY="starlux-lmm-standalone-reader-zoom";
 const LAYOUT_MODE_PREFERENCE_KEY="starlux-lmm-layout-mode-v116";
 const TRAJECTORY_METRICS=[
+  {key:"windSpeed",label:"风速",labelEn:"Wind speed",unit:"kt",group:"windSpeed",decimals:1},
   {key:"fpm",label:"轨迹 FPM",labelEn:"Trajectory FPM",unit:"fpm",group:"verticalSpeed",decimals:0},
   {key:"vvi",label:"VVI",labelEn:"VVI",unit:"fpm",group:"verticalSpeed",decimals:0},
   {key:"physicalFpm",label:"物理 FPM",labelEn:"Physical FPM",unit:"fpm",group:"verticalSpeed",decimals:0},
@@ -822,9 +850,471 @@ function filenameIdentity(name){
   const match=name.match(/^LMM_([^_]+)_([^_]+)_RWY([^_]+)_/);
   return match?{airport:match[1],aircraft:match[2],runway:match[3]}:{airport:"",aircraft:"",runway:""}
 }
+// Full recording schema 1 is independent of the legacy 100 ft excerpt.
+function parseFullRecording(content){
+  const marker=content.search(/^LMM_RECORDING_BEGIN\t/m);
+  if(marker<0)return null;
+  const result={version:null,meta:Object.create(null),trajectory:[],wind:[],events:[],issues:[],complete:false};
+  const schemas=Object.create(null),last={T:-Infinity,W:-Infinity};let ended=false;
+  for(const line of content.slice(marker).split(/\r?\n/)){
+    if(!line)continue;
+    const [kind,...cells]=line.split('\t');
+    if(ended){result.issues.push('trailing_data');break}
+    if(kind==='LMM_RECORDING_BEGIN'){
+      if(result.version!==null){result.issues.push('duplicate_section');break}
+      result.version=Number(cells[0]);if(result.version!==1){result.issues.push('unsupported_version');break}
+    }else if(kind==='FIELDS'){
+      const [type,...names]=cells;
+      if(!['T','W'].includes(type)||schemas[type]||new Set(names).size!==names.length||names[0]!=='t')result.issues.push('invalid_fields');
+      else schemas[type]=names;
+    }else if(kind==='META'){
+      if(cells.length===2)result.meta[cells[0]]=cells[1];else result.issues.push('invalid_metadata');
+    }else if(kind==='T'||kind==='W'){
+      const names=schemas[kind];
+      if(!names||names.length!==cells.length){result.issues.push('truncated_row');continue}
+      const point=Object.create(null);let valid=true;
+      names.forEach((key,index)=>{
+        const raw=cells[index];
+        if(key==='source'||key.endsWith('_source')||/^detent[1-4]$/.test(key))point[key]=raw||null;
+        else{point[key]=raw===''?null:Number(raw);if(raw!==''&&!Number.isFinite(point[key]))valid=false}
+      });
+      if(!Number.isFinite(point.t)||point.t<=last[kind]||!valid){result.issues.push('invalid_time_or_value');continue}
+      last[kind]=point.t;(kind==='T'?result.trajectory:result.wind).push(point);
+    }else if(kind==='E'){
+      const t=Number(cells[0]);if(cells[0]!==''&&Number.isFinite(t))result.events.push({t,kind:cells[1],details:cells.slice(2)});
+      else result.issues.push('invalid_event');
+    }else if(kind==='LMM_RECORDING_END'){
+      ended=true;
+      if(cells.length!==2||cells[0]!=='1'||Number(cells[1])!==result.trajectory.length)result.issues.push('sample_count');
+    }else result.issues.push('unknown_row');
+  }
+  if(!ended)result.issues.push('missing_end');
+  result.issues=[...new Set(result.issues)];result.complete=ended&&result.issues.length===0;
+  return result;
+}
+function recordingPointAt(points,time){
+  // The last actual sample at or before the cursor; never blend source changes or gaps.
+  let lo=0,hi=points.length;
+  while(lo<hi){const mid=(lo+hi)>>1;if(points[mid].t<=time)lo=mid+1;else hi=mid}
+  return lo?points[lo-1]:null;
+}
+function recordedBounceEvidence(recording){
+  const raw=recording?.meta?.touch_time,touch=raw==null||raw===''?NaN:Number(raw);
+  if(!Number.isFinite(touch))return null;
+  let previous=null,base=null,air=null,peak=0,up=0;
+  for(const p of recording.trajectory){
+    if(p.t<touch)continue;
+    if(previous&&(p.t-previous.t>1||![0,1].includes(p.ground)))return null;
+    if(base===null&&p.ground===1&&Number.isFinite(p.agl))base=p.agl;
+    if(base!==null&&previous?.ground===1&&p.ground===0){air=p.t;peak=base;up=0}
+    if(air!==null&&p.ground===0){
+      if(Number.isFinite(p.agl))peak=Math.max(peak,p.agl);
+      if(Number.isFinite(p.physical_fpm))up=Math.max(up,p.physical_fpm/196.850394);
+    }
+    if(air!==null&&p.ground===1){
+      if(p.t-air>=.12&&(peak-base>=.5||up>=.15))return {touch,secondTouch:p.t,airborneSeconds:p.t-air};
+      air=null;
+    }
+    previous=p;
+  }
+  return null;
+}
+function recordingEnvelope(points,key,width=900){
+  if(points.length<=width*4&&points.every((p,i)=>!i||p.t-points[i-1].t<=1.1))return points;
+  const output=[],start=points[0].t,span=Math.max(.001,points.at(-1).t-start);let bucket=-1,group=[];
+  const flush=()=>{
+    if(!group.length)return;
+    let min=group[0],max=min;
+    for(const p of group){if(p[key]<min[key])min=p;if(p[key]>max[key])max=p}
+    output.push(...[...new Set([group[0],min,max,group.at(-1)])].sort((a,b)=>a.t-b.t));group=[];
+  };
+  let prev=null;
+  for(const p of points){
+    const next=Math.floor((p.t-start)/span*width);
+    if(!Number.isFinite(p[key])||(prev&&p.t-prev.t>1.1)){flush();output.push({t:p.t,[key]:null})}
+    if(next!==bucket){flush();bucket=next}
+    if(Number.isFinite(p[key]))group.push(p);prev=p;
+  }
+  flush();return output;
+}
+// Unified recording adapter. Legacy touchdown statistics remain unchanged.
+function integrateRecording(report){
+  const r=report.recording;if(!r||r.version!==1||!r.trajectory.length)return report;
+  report.recordedBounce=recordedBounceEvidence(r);
+  const numeric=v=>v!==''&&v!=null&&Number.isFinite(Number(v))?Number(v):null;
+  const start=numeric(r.meta.start_time)??r.trajectory[0].t,touch=numeric(r.meta.touch_time);
+  const shortTouch=report.firstTouchTime,offset=touch!==null&&Number.isFinite(shortTouch)?touch-start-shortTouch:null;
+  report.excerptTrajectory=report.trajectory;report.excerptControlTrace=report.controlTrace;
+  const near=(rows,t)=>{const p=recordingPointAt(rows,t+.051);return p&&Math.abs(p.t-t)<=.26?p:null};
+  const interval=Math.max(.1,numeric(r.meta.wind_interval_s)??1);
+  report.trajectory=r.trajectory.map(p=>{
+    const t=p.t-start,old=offset===null?null:near(report.excerptTrajectory,t-offset),w=recordingPointAt(r.wind,p.t);
+    const fresh=w&&p.t-w.t<=interval*1.5;
+    return {...p,t,ra:p.agl,physicalFpm:p.physical_fpm??old?.physicalFpm??null,vvi:p.vvi??old?.vvi??null,
+      fpm:p.trace_fpm??old?.fpm??p.physical_fpm??p.vvi??null,fpmSource:p.trace_fpm_source??(old?.fpm!=null?'excerpt':p.physical_fpm!=null?'physical_velocity':p.vvi!=null?'vvi':null),aoa:p.aoa??old?.aoa??null,
+      windSpeed:fresh?w.speed_kt:null,windFrom:fresh?w.from_deg_mag:null,
+      headwind:fresh?w.headwind_kt:null,crosswind:fresh?w.crosswind_from_right_kt:null};
+  });
+  report.controlTrace=r.trajectory.map(p=>{
+    const t=p.t-start,old=offset===null?null:near(report.excerptControlTrace,t-offset),v={...old,...p,t,
+      pitchInput:p.pitch_input,rollInput:p.roll_input,yawInput:p.yaw_input,detentMode:p.detent_mode??old?.detentMode,energyType:report.energyType||'N1'};
+    for(let e=1;e<=4;e++)v[`power${e}`]=v.energyType==='N1'?p[`n1_${e}`]:old?.[`power${e}`]??null;
+    for(const key of ['elevator1','elevator2','aileron1','aileron2','rudder1','rudder2','lever1','lever2','lever3','lever4','detent1','detent2','detent3','detent4'])v[key]=p[key]??old?.[key]??null;
+    return v;
+  });
+  report.firstTouchTime=touch===null?null:touch-start;report.recordingStart=start;report.fullTimeline=true;
+  const row=report.raw.match(/^LMM_RUNWAY\t1\t([^\r\n]+)/m),coords=row?row[1].split('\t').map(numeric):[];
+  if(coords.length===7&&coords.every(Number.isFinite)&&Math.abs(coords[0])<=90&&Math.abs(coords[2])<=90&&Math.abs(coords[1])<=180&&Math.abs(coords[3])<=180&&coords[4]>0){
+    const [lat1,lon1,lat2,lon2,width,touchLat,touchLon]=coords,cos=Math.cos(lat1*Math.PI/180);
+    const dx=longitudeDelta(lon2-lon1)*111195*cos,dy=(lat2-lat1)*111195,length=Math.hypot(dx,dy);
+    if(length>100)report.runwayGeometry={lat1,lon1,lat2,lon2,width,touchLat,touchLon,cos,length,ux:dx/length,uy:dy/length};
+  }
+  // Earlier 1.1.9 logs already contain a true heading and projected ground samples.
+  // Recover that recorded reference; never infer true heading from a runway number.
+  if(!report.runwayGeometry){
+    const heading=numeric(r.meta.runway_heading_true),length=report.runwayLengthM,width=report.runwayWidthM;
+    const anchor=r.trajectory.find(p=>['lat','lon','along','cross'].every(k=>Number.isFinite(p[k])));
+    if(heading!==null&&anchor&&length>100&&width>0){
+      const a=heading*Math.PI/180,ux=Math.sin(a),uy=Math.cos(a),lat1=anchor.lat-(uy*anchor.along+ux*anchor.cross)/111195,cos=Math.cos(lat1*Math.PI/180);
+      if(Math.abs(cos)>.001&&Math.abs(lat1)<=90){
+        const lon1=longitudeDelta(anchor.lon-(ux*anchor.along-uy*anchor.cross)/(111195*cos)),td=(report.displacedThresholdM||0)+report.touchdownFromThresholdM,cross=report.centerlineSignedM;
+        report.runwayGeometry={lat1,lon1,lat2:lat1+uy*length/111195,lon2:longitudeDelta(lon1+ux*length/(111195*cos)),width,cos,length,ux,uy,derived:true,
+          touchLat:Number.isFinite(td)&&Number.isFinite(cross)?lat1+(uy*td+ux*cross)/111195:null,
+          touchLon:Number.isFinite(td)&&Number.isFinite(cross)?longitudeDelta(lon1+(ux*td-uy*cross)/(111195*cos)):null};
+      }
+    }
+  }
+  report.planPoints=report.trajectory.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon)&&Math.abs(p.lat)<=90&&Math.abs(p.lon)<=180).map(p=>({...p,...projectRunway(report.runwayGeometry,p.lat,p.lon)}));
+  report.ilsReference=parseIlsReference(r.meta);
+  report.ilsPoints=report.trajectory.map(p=>{const v=ilsDeviation(report.ilsReference,p);return {t:p.t,loc_aircraft_dots:v.loc_valid?-v.loc_dots:null}});
+  report.ilsExtent=2.5;for(const p of report.ilsPoints)if(Number.isFinite(p.loc_aircraft_dots))report.ilsExtent=Math.max(report.ilsExtent,Math.ceil(Math.abs(p.loc_aircraft_dots)*2)/2);
+  return report;
+}
+function longitudeDelta(deg){return ((deg+540)%360)-180}
+function projectRunway(g,lat,lon){
+  if(!g)return {};
+  const east=longitudeDelta(lon-g.lon1)*111195*g.cos,north=(lat-g.lat1)*111195;
+  return {along:east*g.ux+north*g.uy,cross:g.ux*north-g.uy*east};
+}
+// Geometry only. No receiver state is inferred from these reference values.
+function parseIlsReference(meta){
+  if(meta?.ils_version!=='1')return null;
+  const n=key=>meta[key]!=null&&meta[key]!==''&&Number.isFinite(Number(meta[key]))?Number(meta[key]):null;
+  const lat=n('ils_loc_lat'),lon=n('ils_loc_lon'),course=n('ils_loc_course_true');
+  if(lat===null||lon===null||course===null||Math.abs(lat)>89.9||Math.abs(lon)>180||course<0||course>=360)return null;
+  const r={lat,lon,course,id:meta.ils_loc_id||'',source:meta.ils_source||'',airport:meta.ils_airport||'',runway:meta.ils_runway||'',locDegPerDot:n('ils_loc_deg_per_dot')??1.25,gsDegPerDot:n('ils_gs_deg_per_dot')??.35};
+  if(!(r.locDegPerDot>0&&r.locDegPerDot<10&&r.gsDegPerDot>0&&r.gsDegPerDot<5))return null;
+  const glat=n('ils_gs_lat'),glon=n('ils_gs_lon'),elevation=n('ils_gs_elevation_m'),angle=n('ils_gs_angle_deg');
+  if(glat!==null&&glon!==null&&Math.abs(glat)<89.9&&Math.abs(glon)<=180&&elevation!==null&&angle>0&&angle<=10)r.gs={lat:glat,lon:glon,elevation,angle};
+  return r;
+}
+function ilsDeviation(r,p){
+  const invalid={loc_valid:false,gs_valid:false};if(!r||!p||!Number.isFinite(p.lat)||!Number.isFinite(p.lon)||Math.abs(p.lat)>90||Math.abs(p.lon)>180||p.ground!==0)return invalid;
+  const a=r.course*Math.PI/180,ux=Math.sin(a),uy=Math.cos(a),east=longitudeDelta(p.lon-r.lon)*111195*Math.cos(r.lat*Math.PI/180),north=(p.lat-r.lat)*111195;
+  const forward=-(east*ux+north*uy),right=east*uy-north*ux,deg=Math.atan2(right,forward)*180/Math.PI,range=Math.hypot(east,north);
+  if(forward<=0||range<=1||range>18*1852||Math.abs(deg)>35)return invalid;
+  const out={loc_valid:true,gs_valid:false,loc_dots:-deg/r.locDegPerDot,loc_right_m:right,loc_error_deg:deg};
+  if(r.gs&&Number.isFinite(p.msl)){
+    const g=r.gs,dx=longitudeDelta(p.lon-g.lon)*111195*Math.cos(g.lat*Math.PI/180),dy=(p.lat-g.lat)*111195,along=-(dx*ux+dy*uy);
+    const distance=Math.hypot(dx,dy);if(along>0&&distance>1&&distance<=18*1852){const actual=Math.atan2(p.msl*.3048-g.elevation,distance)*180/Math.PI;
+      out.gs_valid=true;out.gs_dots=(g.angle-actual)/r.gsDegPerDot;out.gs_error_deg=g.angle-actual}
+  }
+  return out;
+}
+function timeWindowPoints(points,domain){
+  if(!points?.length)return [];
+  const bound=(t,upper)=>{let lo=0,hi=points.length;while(lo<hi){const mid=(lo+hi)>>1;if(points[mid].t<t||(upper&&points[mid].t===t))lo=mid+1;else hi=mid}return lo};
+  return points.slice(bound(domain.xmin,false),bound(domain.xmax,true));
+}
+function chartTimeDomain(report,comparison,...sets){
+  const full=synchronizedTimeDomain(report,comparison,...sets),v=state.timeView;
+  if(!v||!Number.isFinite(v.span))return full;
+  const span=Math.min(Math.max(.2,v.span),Math.max(.2,full.xmax-full.xmin));
+  const xmin=clamp(v.start,full.xmin,Math.max(full.xmin,full.xmax-span));return{xmin,xmax:xmin+span};
+}
+function setTimeView(start,span){
+  cancelHover();
+  const full=playbackDomain(),total=Math.max(.2,full.xmax-full.xmin);
+  span=clamp(span,Math.min(2,total),total);state.timeView={start:clamp(start,full.xmin,Math.max(full.xmin,full.xmax-span)),span};
+  renderTimeView();redrawTrajectoryChart();updatePlanViews(sharedHoverTime);
+}
+function focusTimeView(kind){
+  const report=activeRecord()?.report;if(!report)return;
+  const full=playbackDomain();if(kind==='full'){setTimeView(full.xmin,full.xmax-full.xmin);return}
+  const touch=report.firstTouchTime??full.xmax,first=findRaTime(report.trajectory,100)??Math.max(full.xmin,touch-20);
+  setTimeView(Math.max(full.xmin,first-1),Math.max(5,Math.min(full.xmax,touch+3)-first+1));
+}
+function zoomTimeView(factor){
+  const report=activeRecord()?.report;if(!report)return;
+  const d=chartTimeDomain(report,comparisonRecord()?.report),span=(d.xmax-d.xmin)*factor,center=Number.isFinite(state.playback.time)?clamp(state.playback.time,d.xmin,d.xmax):(d.xmin+d.xmax)/2;
+  setTimeView(center-span/2,span);
+}
+function renderTimeView(){
+  const report=activeRecord()?.report,bar=$('timeWindowTools');if(!bar||!report)return;
+  const full=playbackDomain(),d=chartTimeDomain(report,comparisonRecord()?.report),span=d.xmax-d.xmin,range=full.xmax-full.xmin-span;
+  $('timePan').value=range>0?String((d.xmin-full.xmin)/range*1000):'0';$('timePan').disabled=range<=.01;
+  $('timeWindowLabel').textContent=`${timeLabel(d.xmin)} — ${timeLabel(d.xmax)}`;
+  $('timeZoomHelp').textContent=tr('Ctrl + 鼠标滚轮或 + / − 按钮：缩放时间轴；拖动下方滑条：横向浏览。','Ctrl + mouse wheel or + / − buttons: zoom timeline; drag the slider below to pan.');
+  $('timeZoomOut').textContent=tr('− 缩小','− Zoom out');$('timeZoomIn').textContent=tr('+ 放大','+ Zoom in');$('timeFull').textContent=tr('全程','Full');
+  $('timeFollowLabel').querySelector('span').textContent=tr('播放跟随','Follow playback');$('timePan').setAttribute('aria-label',tr('横向浏览时间窗','Pan timeline'));
+}
+function followPlayback(time){
+  const report=activeRecord()?.report;if(!report||!state.timeView||!$('timeFollow').checked)return;
+  const d=chartTimeDomain(report,comparisonRecord()?.report),span=d.xmax-d.xmin;
+  if(time<d.xmin||time>d.xmax-span*.12){state.timeView.start=clamp(time-span*.25,playbackDomain().xmin,Math.max(playbackDomain().xmin,playbackDomain().xmax-span));renderTimeView()}
+}
+function recordingStatusText(report){
+  const r=report.recording;if(!r)return '';
+  const status=r.complete&&r.meta.phase==='COMPLETE'?tr('录制完成','Recording complete'):tr('录制片段 / 未完成','Partial / incomplete');
+  return `${status} · ${r.trajectory.length} ${tr('个样本','samples')}${r.meta.front_missing==='1'?tr(' · 前段缺失',' · Missing beginning'):''}${Number(r.meta.gaps)>0||r.issues.length?tr(' · 存在数据间隙或格式问题',' · Gaps or format issues'):''}`;
+}
+// Spatial paths are cached and decimated only for display; all recorded rows are retained.
+function planPath(points,X,Y,until=Infinity){
+  let d='',previous=null;const stride=Math.max(1,Math.ceil(points.length/4000));
+  for(let i=0;i<points.length;i++){
+    const p=points[i];if(p.t>until)break;
+    const gap=!previous||p.t-previous.t>1.1,finite=Number.isFinite(X(p))&&Number.isFinite(Y(p));
+    if(finite&&(gap||i%stride===0||i===points.length-1||points[i+1]?.t>until))d+=`${gap?'M':'L'}${X(p).toFixed(2)},${Y(p).toFixed(2)} `;
+    previous=finite?p:null;
+  }
+  return d;
+}
+// A bounded-leaf spatial tree built once. Hover never scans the full flight.
+function planPickTree(items){
+  let minx=Infinity,maxx=-Infinity,miny=Infinity,maxy=-Infinity;
+  for(const q of items){minx=Math.min(minx,q.x);maxx=Math.max(maxx,q.x);miny=Math.min(miny,q.y);maxy=Math.max(maxy,q.y)}
+  const node={minx,maxx,miny,maxy};if(items.length<=16){node.items=items;return node}
+  const axis=maxx-minx>maxy-miny?'x':'y';items.sort((a,b)=>a[axis]-b[axis]);const half=items.length>>1;
+  node.left=planPickTree(items.slice(0,half));node.right=planPickTree(items.slice(half));return node;
+}
+function nearestPlanPoint(view,x,y){
+  if(!view.pickTree)view.pickTree=planPickTree(view.points.map(p=>({x:view.X(p),y:view.Y(p),p})));
+  const zoom=view.zoom||1,cx=view.center.x,cy=view.center.y,qx=cx+(x-450)/zoom,qy=cy+(y-270)/zoom;
+  const bounds={left:cx-450/zoom,right:cx+450/zoom,top:cy-270/zoom,bottom:cy+270/zoom};let best=null,distance=Infinity;
+  const lower=node=>Math.max(node.minx-qx,0,qx-node.maxx)**2+Math.max(node.miny-qy,0,qy-node.maxy)**2;
+  const visit=node=>{if(!node||node.maxx<bounds.left||node.minx>bounds.right||node.maxy<bounds.top||node.miny>bounds.bottom||lower(node)>distance)return;
+    if(node.items){for(const q of node.items){if(q.x<bounds.left||q.x>bounds.right||q.y<bounds.top||q.y>bounds.bottom)continue;const d=(q.x-qx)**2+(q.y-qy)**2;if(d<distance){distance=d;best=q.p}}return}
+    const first=lower(node.left)<lower(node.right)?node.left:node.right;visit(first);visit(first===node.left?node.right:node.left);
+  };visit(view.pickTree);return best;
+}
+function updatePastPath(view,time){
+  if(!view._pathCache){
+    const entries=[],parts=[],stride=Math.max(1,Math.ceil(view.points.length/4000));let previous=null,length=0;
+    for(let i=0;i<view.points.length;i++){const p=view.points[i],gap=!previous||p.t-previous.t>1.1;
+      if(gap||i%stride===0||i===view.points.length-1){const part=`${gap?'M':'L'}${view.X(p).toFixed(2)},${view.Y(p).toFixed(2)} `;parts.push(part);length+=part.length;entries.push({t:p.t,end:length})}previous=p;
+    }
+    view._pathCache={text:parts.join(''),entries};
+  }
+  const p=recordingPointAt(view.points,time);if(view.lastPathTime===p?.t)return;
+  const cache=view._pathCache,entry=recordingPointAt(cache.entries,time);let d=entry?cache.text.slice(0,entry.end):'';
+  if(p&&entry&&p.t>entry.t)d+=`L${view.X(p).toFixed(2)},${view.Y(p).toFixed(2)}`;
+  view.past.setAttribute('d',d);view.lastPathTime=p?.t;
+}
+function addRolloutToRunway(svg,report,X,Y){
+  const points=(report.planPoints||[]).filter(p=>Number.isFinite(report.firstTouchTime)&&p.t>=report.firstTouchTime&&Number.isFinite(p.along)&&Number.isFinite(p.cross));
+  report.rolloutDisplay=null;if(!points.length)return;
+  const group=svgNode('g',{'aria-label':tr('接地后滑跑轨迹','Recorded rollout')}),past=svgNode('path',{fill:'none',stroke:'#55d3ed','stroke-width':2.5}),cursor=svgNode('circle',{r:5,fill:'#ffca73',stroke:'#142333','stroke-width':2});
+  group.append(svgNode('path',{d:planPath(points,p=>X(p.along),p=>Y(p.cross)),fill:'none',stroke:'#55d3ed','stroke-opacity':.28,'stroke-width':2.5}),past,cursor);svg.append(group);
+  report.rolloutDisplay={points,X:p=>X(p.along),Y:p=>Y(p.cross),past,cursor};
+}
+function windAtTime(report,time){
+  const r=report?.recording;if(!r||!Number.isFinite(time))return null;
+  const w=recordingPointAt(r.wind,time+report.recordingStart),age=w?time+report.recordingStart-w.t:Infinity;
+  return age>=0&&age<=Math.max(.1,Number(r.meta.wind_interval_s)||1)*1.5?w:null;
+}
+function windVector(w,g){
+  if(!Number.isFinite(w?.from_deg_true))return null;
+  const a=w.from_deg_true*Math.PI/180,e=-Math.sin(a),n=-Math.cos(a);
+  return {x:g?-(g.ux*n-g.uy*e):e,y:-(g?g.ux*e+g.uy*n:n)};
+}
+function windArrowPath(x,y,dx,dy,speed){
+  const len=32,sx=x-dx*len*.4,sy=y-dy*len*.4,ex=sx+dx*len,ey=sy+dy*len;
+  return `M${sx},${sy}L${ex},${ey}M${ex-dx*10-dy*6},${ey-dy*10+dx*6}L${ex},${ey}L${ex-dx*10+dy*6},${ey-dy*10-dx*6}`;
+}
+function windColor(speed){return speed>20?'#ef7b82':speed>10?'#ffe7b8':'#82c99a'}
+function windDirectionText(w){return Number.isFinite(w?.from_deg_true)?`${Math.round(w.from_deg_true)}°T`:Number.isFinite(w?.from_deg_mag)?`${Math.round(w.from_deg_mag)}°M`:'--'}
+function updateInputWind(report,time){
+  const w=windAtTime(report,time),p=recordingPointAt(report?.trajectory||[],time),arrow=$('inputWindArrow');
+  const fresh=p&&time-p.t<=1.1,angle=fresh&&w&&Number.isFinite(w.from_deg_mag)&&Number.isFinite(p.heading)?(w.from_deg_mag-p.heading)*Math.PI/180:null;
+  arrow.setAttribute('visibility',angle!==null&&w.speed_kt>0?'visible':'hidden');
+  if(angle!==null){arrow.setAttribute('d',windArrowPath(50,50,-Math.sin(angle),Math.cos(angle),w.speed_kt));arrow.setAttribute('stroke',windColor(w.speed_kt))}
+  $('inputWindLabel').textContent=tr('风来自 / 风速','Wind from / speed');
+  $('inputWindValue').textContent=w?`${Number.isFinite(w.from_deg_mag)?Math.round(w.from_deg_mag)+'°M':'--'} / ${Number.isFinite(w.speed_kt)?w.speed_kt.toFixed(1):'--'} kt`:'N/A';
+  $('inputWindNote').textContent=tr('箭头为机头相对风吹向','Arrow: wind blowing toward, nose up');
+}
+function renderApproachPlan(report){
+  const previousView=report.planDisplay,root=$('approachPlan');root.replaceChildren();report.planDisplay=null;
+  if(!previousView)$('planZoom').value='1';
+  $('approachNow').textContent='';$('approachCaption').textContent='';
+  $('planOverview').textContent=tr('全程俯视','Plan overview');$('planZoomLabel').firstChild.textContent=tr('俯视缩放 ','Plan zoom ');
+  $('planWindLabel').querySelector('span').textContent=tr('路径风向','Wind along track');$('windProfileLabel').querySelector('span').textContent=tr('竖向细节','Vertical detail');
+  $('planHelp').textContent=tr('Ctrl + 鼠标滚轮：放大 / 缩小；按钮或倍率也可调整。悬停只定位时间，不改变视区。跑道设有最小显示宽度，路线坐标保持等比例。','Ctrl + mouse wheel: zoom in / out; use buttons or magnification too. Hover only seeks time; it does not move the view. Runway has a minimum display width; track coordinates keep equal scale.');
+  const points=report.planPoints||[],g=report.runwayGeometry;
+  if(!points.length){root.textContent=tr('此记录没有完整经纬度轨迹。','This record has no full geographic track.');renderWindProfile(report,null);return}
+  const origin=points[0],cos=Math.cos(origin.lat*Math.PI/180),px=p=>g?p.cross:longitudeDelta(p.lon-origin.lon)*111195*cos,py=p=>g?p.along:(p.lat-origin.lat)*111195;
+  let minx=Infinity,maxx=-Infinity,miny=Infinity,maxy=-Infinity;
+  for(const p of points){minx=Math.min(minx,px(p));maxx=Math.max(maxx,px(p));miny=Math.min(miny,py(p));maxy=Math.max(maxy,py(p))}
+  if(g){minx=Math.min(minx,-g.width/2);maxx=Math.max(maxx,g.width/2);miny=Math.min(miny,0);maxy=Math.max(maxy,g.length)}
+  const width=900,height=540,scale=Math.min(790/Math.max(200,maxx-minx),430/Math.max(200,maxy-miny)),cx=(minx+maxx)/2,cy=(miny+maxy)/2;
+  const X=p=>450+(g?-1:1)*(px(p)-cx)*scale,Y=p=>270-(py(p)-cy)*scale;
+  const svg=svgNode('svg',{viewBox:`0 0 ${width} ${height}`,role:'img','aria-label':tr('落地俯视图，点击轨迹定位时间','Landing plan view; select track to seek'),class:'approach-plan-svg'}),geometry=svgNode('g'),runwayLayer=svgNode('g');svg.append(runwayLayer,geometry);
+  const past=svgNode('path',{fill:'none',stroke:'#6ce1ea','stroke-width':4.2,'stroke-linecap':'round'}),cursor=svgNode('circle',{r:9,fill:'#fff1ce',stroke:'#348fa9','stroke-width':3}),windNow=svgNode('path',{fill:'none',stroke:'#ffe2a8','stroke-opacity':.38,'stroke-width':3,'stroke-linecap':'round'});
+  geometry.append(svgNode('path',{d:planPath(points,X,Y),fill:'none',stroke:'#8fe2e8','stroke-opacity':.4,'stroke-width':3.5}),past);
+  const windBackground=svgNode('g'),timeGuide=svgNode('line',{x1:18,x2:882,stroke:'#ffdf9d','stroke-opacity':.65,'stroke-width':1.2,'stroke-dasharray':'5 5',visibility:'hidden','data-plan-time':'true'});svg.append(windBackground,windNow,timeGuide,cursor);
+  svg.append(svgNode('text',{x:22,y:30,fill:'currentColor','font-size':18,'font-weight':600},g?tr('跑道方向朝上','Runway up'):tr('北向朝上 · 无跑道几何','North up · runway geometry unavailable')),
+    svgNode('text',{id:'planScale',x:22,y:508,fill:'currentColor','font-size':17},''),svgNode('line',{x1:22,y1:521,x2:122,y2:521,stroke:'currentColor','stroke-width':3}));
+  const seek=event=>{const view=report.planDisplay;if(!view)return;const b=svg.getBoundingClientRect(),x=(event.clientX-b.left)/b.width*width,y=(event.clientY-b.top)/b.height*height;
+    const best=nearestPlanPoint(view,x,y);if(best){pausePlayback();if(sharedHoverTime!==best.t)setPlaybackTime(best.t,true,false)}};
+  svg.addEventListener('mousemove',event=>queueHover(seek,event));svg.addEventListener('mouseleave',cancelHover);svg.addEventListener('click',event=>{cancelHover();seek(event)});
+  svg.addEventListener('wheel',event=>{if(!event.ctrlKey)return;event.preventDefault();zoomPlan(event.deltaY>0?.5:2)},{passive:false});
+  for(const node of geometry.querySelectorAll('path'))node.setAttribute('vector-effect','non-scaling-stroke');
+  root.append(svg);report.planDisplay={points,X,Y,screenX:X,screenY:Y,past,cursor,windNow,timeGuide,geometry,windBackground,runwayLayer,scale,g,center:previousView?.center??{x:450,y:270},zoom:previousView?.zoom??1};
+  report.planDisplay.pickTree=planPickTree(points.map(p=>({x:X(p),y:Y(p),p})));
+  $('approachCaption').textContent=tr('青色为实际航迹；紫色为已记录的 LOC 几何参考，灰色虚线为跑道中线。风箭头位于当前时间窗的实际飞机位置：≤10 kt 绿色，>10–20 kt 浅金色，>20 kt 红色。悬停定位时间，Ctrl + 滚轮缩放。','Cyan: actual track; purple: recorded LOC geometric reference; gray dashed: runway centerline. Wind arrows use aircraft positions in the current time window: ≤10 kt green, >10–20 kt gold, >20 kt red. Hover to seek; Ctrl + wheel to zoom.');
+  renderWindProfile(report,null);
+}
+function zoomPlan(factor,absolute=false){
+  cancelHover();
+  const report=activeRecord()?.report,view=report?.planDisplay;if(!view)return;
+  const zoom=clamp(absolute?factor:(Number($('planZoom').value)||1)*factor,1,64);
+  $('planZoom').value=String(zoom);
+  const p=recordingPointAt(view.points,Number.isFinite(sharedHoverTime)?sharedHoverTime:report.firstTouchTime??0);
+  view.center=zoom===1?{x:450,y:270}:p?{x:view.X(p),y:view.Y(p)}:view.center;
+  view.zoom=zoom;view.backgroundKey=null;updatePlanViews(sharedHoverTime);
+}
+function paintPlanBackground(report,view){
+  const {g,scale,zoom}=view;view.runwayLayer.replaceChildren();view.windBackground.replaceChildren();
+  if(g){
+    const x=view.screenX({cross:0}),top=view.screenY({along:g.length}),bottom=view.screenY({along:0}),width=Math.max(14,g.width*scale*zoom);
+    view.runwayLayer.append(svgNode('rect',{x:x-width/2,y:top,width,height:bottom-top,fill:'#7d9db2','fill-opacity':.55,stroke:'#d0dfe9','stroke-width':2.5}),svgNode('line',{x1:x,y1:Math.min(20,top),x2:x,y2:540,stroke:'#bdd6e2','stroke-dasharray':'9 7','stroke-width':1.8}));
+    if(Number.isFinite(g.touchLat)&&Number.isFinite(g.touchLon)){const td=projectRunway(g,g.touchLat,g.touchLon);view.runwayLayer.append(svgNode('circle',{cx:view.screenX(td),cy:view.screenY(td),r:7,fill:'#ffd08a'}))}
+  }
+  drawPlanIls(report,view);
+  if(!$('planWind').checked)return;
+  const domain=chartTimeDomain(report,comparisonRecord()?.report);
+  let last=null,count=0;
+  // Re-select visible samples at each magnification, rather than hiding the wind layer.
+  for(const w of report.recording.wind){
+    if(w.t-report.recordingStart<domain.xmin||w.t-report.recordingStart>domain.xmax)continue;
+    const p=recordingPointAt(view.points,w.t-report.recordingStart),v=windVector(w,g);
+    if(!p||w.t-report.recordingStart-p.t>1.1||!v||!(w.speed_kt>0))continue;
+    const x=view.screenX(p),y=view.screenY(p);if(x<20||x>880||y<45||y>490)continue;
+    if(last&&Math.hypot(x-last.x,y-last.y)<25)continue;last={x,y};
+    view.windBackground.append(svgNode('path',{d:windArrowPath(x,y,v.x,v.y,w.speed_kt),fill:'none',stroke:windColor(w.speed_kt),'stroke-opacity':.26,'stroke-width':2.5,'stroke-linecap':'round'}));
+    if(++count>=90)break;
+  }
+}
+function updatePlanViews(time){
+  const report=activeRecord()?.report;if(!report)return;
+  if(!Number.isFinite(time))time=report.firstTouchTime??report.trajectory.at(-1)?.t??0;
+  for(const view of [report.rolloutDisplay,report.planDisplay]){
+    if(!view)continue;const p=recordingPointAt(view.points,time),valid=p&&time-p.t<=1.1;
+    updatePastPath(view,time);view.cursor.setAttribute('visibility',valid?'visible':'hidden');
+    if(view.geometry){
+      const zoom=Number($('planZoom').value)||1;view.zoom=zoom;
+      // Only active playback may follow position. Hover never changes map center or zoom.
+      if(zoom>1&&valid&&state.playback.playing&&$('timeFollow').checked)view.center={x:view.X(p),y:view.Y(p)};
+      const {x:cx,y:cy}=view.center;
+      const transform=`translate(450 270) scale(${zoom}) translate(${-cx} ${-cy})`;
+      if(view.transformKey!==transform){view.geometry.setAttribute('transform',transform);view.transformKey=transform;
+        view.screenX=q=>450+(view.X(q)-cx)*zoom;view.screenY=q=>270+(view.Y(q)-cy)*zoom;
+        $('planScale').textContent=`${Math.round(100/(view.scale*zoom))} m`;
+      }
+      const domain=chartTimeDomain(report,comparisonRecord()?.report);const key=`${zoom}/${cx}/${cy}/${$('planWind').checked}/${domain.xmin}/${domain.xmax}`;if(view.backgroundKey!==key){paintPlanBackground(report,view);view.backgroundKey=key}
+    }
+    if(valid){view.cursor.setAttribute('cx',view.screenX?view.screenX(p):view.X(p));view.cursor.setAttribute('cy',view.screenY?view.screenY(p):view.Y(p))}
+    if(view.timeGuide){view.timeGuide.setAttribute('visibility',valid?'visible':'hidden');if(valid){view.timeGuide.setAttribute('y1',view.screenY(p));view.timeGuide.setAttribute('y2',view.screenY(p))}}
+    if(view.windNow){const w=windAtTime(report,time),v=windVector(w,view.g);view.windNow.setAttribute('stroke',windColor(w?.speed_kt));
+      view.windNow.setAttribute('d',$('planWind').checked&&valid&&v&&w.speed_kt>0?windArrowPath(view.screenX(p),view.screenY(p),v.x,v.y,w.speed_kt):'');
+      $('approachNow').textContent=`T+ ${time.toFixed(2)} s · ${valid&&Number.isFinite(p.cross)?tr('中线左向','Left of centerline')+' '+p.cross.toFixed(1)+' m':tr('位置不可用','Position unavailable')} · ${w?`${tr('风来自','Wind from')} ${windDirectionText(w)} / ${Number.isFinite(w.speed_kt)?w.speed_kt.toFixed(1):'--'} kt`:tr('风数据不可用','Wind unavailable')}`;
+    }
+  }
+  renderWindProfile(report,time);
+}
+function updateInputIls(report,time){
+  const point=Number.isFinite(time)?recordingPointAt(report?.trajectory||[],time):null,v=point&&time-point.t<=1.1?ilsDeviation(report?.ilsReference,point):{};
+  for(const axis of ['Loc','Gs']){
+    const valid=Boolean(v[axis.toLowerCase()+'_valid']),gauge=$('input'+axis);
+    gauge.removeAttribute('hidden');gauge.dataset.inop=String(!valid);
+    gauge.setAttribute('aria-label',axis.toUpperCase()+(valid?' ILS reference':' INOP'));
+    $('input'+axis+'Diamond').setAttribute('visibility',valid?'visible':'hidden');
+    $('input'+axis+'Inop').setAttribute('visibility',valid?'hidden':'visible');
+  }
+  if(v.loc_valid)$('inputLocDiamond').setAttribute('transform',`translate(${100+clamp(v.loc_dots,-2.2,2.2)*35} 16)`);
+  if(v.gs_valid)$('inputGsDiamond').setAttribute('transform',`translate(12 ${100-clamp(v.gs_dots,-2.2,2.2)*35})`);
+  const note=$('inputIlsNote');note.hidden=false;
+  note.textContent=tr('ILS 几何参考 · 菱形指向修正方向；点距为参考刻度，非接收机信号。','ILS geometric reference · diamonds show correction direction; dots are a reference scale, not received signals.')+
+    (v.loc_valid?` LOC ${v.loc_dots.toFixed(2)}`:' LOC INOP')+(v.gs_valid?` GS ${v.gs_dots.toFixed(2)}`:' GS INOP');
+}
+function drawPlanIls(report,view){
+  const r=report.ilsReference;if(!r)return;
+  const a=r.course*Math.PI/180,ux=Math.sin(a),uy=Math.cos(a),cos=Math.cos(r.lat*Math.PI/180);
+  const at=distance=>{const lat=r.lat-uy*distance/111195,lon=longitudeDelta(r.lon-ux*distance/(111195*cos));return {lat,lon,...projectRunway(view.g,lat,lon)}};
+  const start=at(0),end=at(18*1852);
+  view.runwayLayer.append(svgNode('line',{x1:view.screenX(start),y1:view.screenY(start),x2:view.screenX(end),y2:view.screenY(end),stroke:'#d6a2ef','stroke-opacity':.85,'stroke-width':2.5,'stroke-dasharray':'12 5','data-loc-reference':'true'}));
+}
+const emptyProfileSamples=[];
+function profileSeries(report,mode){
+  const kind=mode==='wind'?'wind':report.ilsReference?'loc':report.runwayGeometry?'center':'none';
+  const source=kind==='wind'?report.recording?.wind||emptyProfileSamples:kind==='loc'?report.ilsPoints||emptyProfileSamples:report.planPoints||emptyProfileSamples;
+  const cache=report._profileSeries??={};
+  if(cache[kind]?.source===source)return cache[kind];
+  const all=source.map(p=>({t:kind==='wind'?p.t-report.recordingStart:p.t,v:kind==='wind'?profileWindAngle(p,report.runwayGeometry):kind==='loc'?p.loc_aircraft_dots:kind==='center'&&Number.isFinite(p.cross)?-p.cross:null}));
+  return cache[kind]={kind,source,all};
+}
+function profileWindAngle(w,g){const v=windVector(w,g);return v&&w.speed_kt>0?Math.atan2(v.x,Math.abs(v.y))*180/Math.PI:null}
+function profileExtent(points,kind){
+  if(kind==='wind')return 90;
+  let max=kind==='loc'?.05:5;for(const p of points)if(Number.isFinite(p.v))max=Math.max(max,Math.abs(p.v)*1.1);
+  const power=10**Math.floor(Math.log10(max)),fraction=max/power;
+  return (fraction<=1?1:fraction<=2?2:fraction<=5?5:10)*power;
+}
+function renderWindProfile(report,time){
+  const root=$('windProfile'),r=report.ilsReference,shown=$('showWindProfile').checked,mode=state.profileMode||'loc';
+  const domain=chartTimeDomain(report,comparisonRecord()?.report),series=profileSeries(report,mode),{all,kind}=series;
+  const cache=`${state.activeId}/${domain.xmin}/${domain.xmax}/${$('planWind').checked}/${currentLanguage}/${mode}/${shown}`;
+  if(root._key!==cache||root._series!==series){
+    root._key=cache;root._series=series;root._all=all;root._kind=kind;root._cursor=null;root.replaceChildren();
+    root.hidden=!shown;$('planViews').classList.toggle('with-wind',shown);$('windProfileHelp').hidden=!shown;
+    $('profileModeLoc').querySelector('span').textContent=tr('LOC / 中线偏差','LOC / centerline');$('profileModeWind').querySelector('span').textContent=tr('风向','Wind direction');
+    $('profileZoomIn').textContent=tr('区间 +','Interval +');$('profileZoomOut').textContent=tr('区间 −','Interval −');
+    for(const button of $('profileModes').querySelectorAll('button')){const selected=button.dataset.profileMode===mode;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected))}
+    const description=kind==='wind'?tr('风吹向的横向偏角：左负右正，沿跑道轴为 0°；顶风与顺风由箭头区分。','Wind lateral angle: negative left, positive right, 0° along the runway axis; arrows distinguish headwind and tailwind.'):
+      kind==='loc'?tr('LOC 几何参考：蓝线为飞机偏差，左负右正；0 为航向道，点距为参考刻度，并非接收机信号。','LOC geometric reference: blue shows aircraft deviation, negative left and positive right; zero is the localizer. Dots are a reference scale, not receiver signals.'):
+      kind==='center'?tr('无已记录的 ILS 参考：蓝线显示飞机相对跑道中线的米制偏差，左负右正；不冒充 LOC 信号。','No recorded ILS reference: blue shows aircraft deviation in metres from the runway centerline, negative left and positive right; this is not a LOC signal.'):
+      tr('此记录没有跑道几何参考，可切换到风向；保留时间窗口，不虚构中线偏差。','No runway geometry in this record. Switch to wind direction; the time window is retained without inventing centerline deviation.');
+    $('windProfileHelp').textContent=(r?.source==='offline_demo_current_navdata'?tr('演示副本：ILS 参考来自当前导航资料。','DEMO COPY: ILS reference added from current navdata. '):'')+description+tr(' 竖向图独立放大当前时间区间，时间由下向上。Ctrl + 滚轮或“区间 + / −”缩放，横向量程随所选区间确定，悬停不改变比例；空白表示没有有效样本。',' The vertical detail magnifies the selected time interval, with time upward. Ctrl + wheel or Interval + / − zooms; the lateral scale fits the selected interval and stays fixed while hovering. Blank means no valid samples.');
+    if(!shown)return;
+    const points=timeWindowPoints(all,domain),extent=profileExtent(points,kind),X=v=>140+v/extent*88,Y=t=>477-(t-domain.xmin)/Math.max(.1,domain.xmax-domain.xmin)*425;
+    const svg=svgNode('svg',{viewBox:'0 0 290 540',role:'img','aria-label':tr('当前时间区间的竖向细节','Vertical detail of selected time interval'),class:'wind-profile-svg'});
+    const label=kind==='loc'?tr('飞机 / LOC · 参考点','Aircraft / LOC · ref dots'):kind==='center'?tr('飞机 / 跑道中线 · m','Aircraft / centerline · m'):kind==='wind'?tr('风吹向 · 横向偏角 °','Wind toward · lateral angle °'):tr('竖向细节 · 无中线参考','Vertical detail · no reference');
+    svg.append(svgNode('text',{x:14,y:22,fill:'currentColor','font-size':14},label),svgNode('text',{x:140,y:41,'text-anchor':'middle',fill:'currentColor','font-size':11},kind==='wind'?tr('← 向左吹       向右吹 →','← Blows left     Blows right →'):tr('← 飞机偏左      飞机偏右 →','← Aircraft left     Aircraft right →')));
+    for(let i=0;i<=4;i++){const t=domain.xmin+(domain.xmax-domain.xmin)*i/4,y=Y(t);svg.append(svgNode('line',{x1:52,x2:235,y1:y,y2:y,stroke:'currentColor','stroke-opacity':.16}),svgNode('text',{x:5,y:y+4,fill:'currentColor','font-size':11},domain.xmax-domain.xmin<10?timeLabel(t):timeLabel(t).slice(0,5)))}
+    svg.append(svgNode('line',{x1:140,x2:140,y1:52,y2:477,stroke:'#d6a2ef','stroke-opacity':.75,'stroke-width':1.7,'stroke-dasharray':'5 5','data-profile-zero':'true',...(kind==='loc'?{'data-ils-zero':'true'}:{})}));
+    const line=kind==='wind'?points:recordingEnvelope(points,'v',450),d=[];let prev=null;
+    for(const p of line){if(!Number.isFinite(p.v)){prev=null;continue}const gap=!prev||(kind==='wind'&&p.t-prev.t>Math.max(1.1,(Number(report.recording?.meta.wind_interval_s)||1)*1.5));d.push(`${gap?'M':'L'}${X(p.v)},${Y(p.t)}`);prev=p}
+    if($('planWind').checked){let lastY=Infinity;for(const w of report.recording?.wind||[]){const t=w.t-report.recordingStart;if(t<domain.xmin||t>domain.xmax)continue;const p=recordingPointAt(all,t),v=windVector(w,report.runwayGeometry);
+      if(!p||t-p.t>Math.max(1.1,kind==='wind'?(Number(report.recording.meta.wind_interval_s)||1)*1.5:1.1)||!Number.isFinite(p.v)||!v||!(w.speed_kt>0)||lastY-Y(t)<27)continue;lastY=Y(t);const x=kind==='wind'?250:X(p.v);
+      svg.append(svgNode('path',{d:windArrowPath(x,Y(t),v.x,v.y,w.speed_kt),fill:'none',stroke:windColor(w.speed_kt),'stroke-opacity':.30,'stroke-width':2,'data-profile-wind':'true','data-wind-x':x,'data-wind-time':t}));
+    }}
+    const curveKind=kind==='loc'?'data-ils-curve':kind==='wind'?'data-wind-curve':'data-centerline-curve',digits=extent<1?2:extent<10?1:0;
+    svg.append(svgNode('path',{[curveKind]:'true','data-profile-curve':'true',d:d.join(' '),fill:'none',stroke:'#82dee6','stroke-width':2.8}),svgNode('text',{x:52,y:505,fill:'currentColor','font-size':12},(-extent).toFixed(digits)),svgNode('text',{x:228,y:505,'text-anchor':'end',fill:'currentColor','font-size':12},extent.toFixed(digits)),svgNode('text',{x:140,y:505,'text-anchor':'middle',fill:'currentColor','font-size':13,'font-weight':700},kind==='loc'?'0 LOC':kind==='center'?'0 m':kind==='wind'?'0°':'—'));
+    if(!points.some(p=>Number.isFinite(p.v)))svg.append(svgNode('text',{x:140,y:260,'text-anchor':'middle',fill:'currentColor','font-size':12},tr('此区间暂无有效样本','No valid samples in this interval')));
+    svg.append(svgNode('text',{x:140,y:528,'text-anchor':'middle',fill:'currentColor','font-size':11},`${timeLabel(domain.xmin)} — ${timeLabel(domain.xmax)}`));
+    const cursor=svgNode('line',{x1:48,x2:270,y1:0,y2:0,stroke:'#ffdf9d','stroke-width':1.5}),plane=svgNode('circle',{r:5,fill:'#fff1ce',stroke:'#348fa9','stroke-width':2});svg.append(cursor,plane);root._cursor=cursor;root._plane=plane;root._Y=Y;root._X=X;root._extent=extent;root.append(svg);
+    const seek=e=>{const rect=svg.getBoundingClientRect(),t=domain.xmin+clamp((477-(e.clientY-rect.top)/rect.height*540)/425,0,1)*(domain.xmax-domain.xmin);pausePlayback();setPlaybackTime(t,true,false)};
+    svg.addEventListener('mousemove',e=>queueHover(seek,e));svg.addEventListener('mouseleave',cancelHover);
+    svg.addEventListener('wheel',e=>{if(!e.ctrlKey)return;e.preventDefault();zoomTimeView(e.deltaY>0?1.25:.8)},{passive:false});
+  }
+  if(root._cursor){const valid=Number.isFinite(time)&&time>=domain.xmin&&time<=domain.xmax;root._cursor.setAttribute('visibility',valid?'visible':'hidden');const p=valid?recordingPointAt(all,time):null,age=kind==='wind'?Math.max(.1,Number(report.recording?.meta.wind_interval_s)||1)*1.5:1.1,available=p&&time-p.t<=age&&Number.isFinite(p.v);root._plane.setAttribute('visibility',available?'visible':'hidden');
+    if(valid){root._cursor.setAttribute('y1',root._Y(time));root._cursor.setAttribute('y2',root._Y(time))}if(available){root._plane.setAttribute('cx',root._X(p.v));root._plane.setAttribute('cy',root._Y(p.t))}}
+}
+
 function parseReport(fileName,content){
   content=content.replace(/^\uFEFF/,"");
-  const fields=fieldMap(content),identity=filenameIdentity(fileName);
+  const recording=parseFullRecording(content);
+  const summary=content.split(/^LMM_RECORDING_BEGIN\t/m)[0];
+  const fields=fieldMap(summary),identity=filenameIdentity(fileName);
   const evaluation=firstField(fields,["最终评价","落地评价","Final rating","Landing rating"]);
   const fpmText=firstField(fields,["触地垂直速度","触地下降率","Touchdown vertical speed"]);
   const gText=firstField(fields,["最终过载","最终显示和评分值","Final load","Final displayed and rated G"]);
@@ -843,10 +1333,10 @@ function parseReport(fileName,content){
   const windSourceText=firstField(fields,["风向和风速","Wind direction and speed"]);
   const windMatch=windSourceText.match(/来自\s*([+-]?\d+(?:\.\d+)?)\s*deg[^\d]+([+-]?\d+(?:\.\d+)?)\s*kt/i)||windSourceText.match(/(?:from\s*)?([+-]?\d+(?:\.\d+)?)\s*deg[^\d]+([+-]?\d+(?:\.\d+)?)\s*kt/i);
   const aoaText=firstField(fields,["迎角","Angle of attack"]),rollText=firstField(fields,["横滚角","Roll angle"]),pitchText=firstField(fields,["俯仰角","Pitch angle"]);
-  const trajectory=parseTrajectory(content),controlTrace=parseControlTrace(content),trajectoryCalibrationText=firstField(fields,["轨迹接地基准校准","Trajectory touchdown-reference calibration"]),trajectoryCalibrationFieldFt=parseNumber(trajectoryCalibrationText),explicitPitch=parseNumber(pitchText),endpointPitch=trajectory.length?trajectory[trajectory.length-1].pitch:null,pitchDeg=Number.isFinite(explicitPitch)?explicitPitch:(Number.isFinite(endpointPitch)?endpointPitch:null);
-  const version=(content.match(/StarLux[^\r\n]*?v(\d+\.\d+(?:\.\d+)?)/)||[])[1]||"Legacy";
-  return{
-    fileName,raw:content,fields,version,legacy:version==="Legacy",
+  const trajectory=parseTrajectory(summary),controlTrace=parseControlTrace(summary),trajectoryCalibrationText=firstField(fields,["轨迹接地基准校准","Trajectory touchdown-reference calibration"]),trajectoryCalibrationFieldFt=parseNumber(trajectoryCalibrationText),explicitPitch=parseNumber(pitchText),endpointPitch=trajectory.length?trajectory[trajectory.length-1].pitch:null,pitchDeg=Number.isFinite(explicitPitch)?explicitPitch:(Number.isFinite(endpointPitch)?endpointPitch:null);
+  const version=(content.match(/StarLux[^\r\n]*?v(\d+\.\d+(?:\.\d+)?(?:[-.]?(?:alpha|beta|rc)\d*)?)/i)||[])[1]||"Legacy";
+  const report={
+    fileName,raw:content,recording,fields,version,legacy:version==="Legacy",
     timestamp:firstField(fields,["落地时间（本地时间）","Landing time (local)"]),
     evaluation:evaluation||"未提供",explanation:firstField(fields,["评价说明","Rating explanation"]),status:statusCode(evaluation),
     fpm:parseNumber(fpmText),fpmText:fpmText||"无数据",g:parseNumber(gText),gText:gText||"无数据",
@@ -872,6 +1362,10 @@ function parseReport(fileName,content){
     runwayWidthM:parseNumber(firstField(fields,["跑道宽度","Runway width"])),
     touchdownFromThresholdM:parseNumber(firstField(fields,["触地点距跑道入口","触地点距入口","Touchdown distance from runway threshold","Touchdown distance from threshold"])),
     runwayRemainingM:parseNumber(firstField(fields,["触地点距跑道末端","剩余跑道长度","Touchdown distance from runway end","Runway remaining"])),
+    rolloutAssessment:firstField(fields,["滑跑评价","Rollout assessment"]),
+    rolloutAssessmentEn:firstField(fields,["Rollout assessment (EN)"]),
+    rolloutTriggered:firstField(fields,["滑跑已触发降级","Rollout penalty triggered"]),
+    rolloutPhase:firstField(fields,["滑跑考核状态","Rollout grading phase"]),
     centerlineOffsetM:parseNumber(firstField(fields,["触地点距跑道中心线","Touchdown distance from runway centerline"])),
     runwaySurfaceText:firstField(fields,["跑道路面","Runway surface"]),runwaySurfaceCode:parseNumber(firstField(fields,["跑道路面代码","Runway surface code"])),runwayMatchSource:firstField(fields,["跑道识别来源","Runway identification source"]),
     oppositeRunway:(firstField(fields,["反向跑道方向","Opposite runway direction"]).match(/RWY([\w]+)/i)||[])[1]||"",
@@ -908,6 +1402,7 @@ function parseReport(fileName,content){
     analysisMs:firstField(fields,["落地分析耗时","最终评分耗时","冲量分析耗时","Landing analysis time","Final rating time","Impulse analysis time"]),
     trajectory
   }
+  return integrateRecording(report);
 }
 function decodeLog(buffer){
   const utf8=new TextDecoder("utf-8",{fatal:false}).decode(buffer);
@@ -927,8 +1422,11 @@ function recordSortKey(record){
   return parsed>0?parsed:record.file.lastModified
 }
 async function importFiles(fileList,mode=state.importMode){
-  const files=[...fileList].filter(file=>file.name.toLowerCase().endsWith(".txt"));
-  if(!files.length){showError(tr("没有找到 TXT 文件。请选择 StarLux LMM 生成的 LMM_*.txt。","No TXT files found. Select an LMM_*.txt generated by StarLux LMM."));return}
+  const selected=Array.from(fileList||[]);
+  // Empty picker changes mean no file was delivered, not an invalid log format.
+  if(!selected.length)return;
+  const files=selected.filter(file=>typeof file.name==="string"&&file.name.toLowerCase().endsWith(".txt"));
+  if(!files.length){showError(tr("所选文件不是 TXT：","The selected files are not TXT: ")+selected.slice(0,3).map(file=>file.name||"?").join(", ")+tr("。请选择落地记录的 .txt 文件。",". Select the landing record’s .txt file."));return}
   showError("");
   const importedIds=[];
   for(const file of files){
@@ -976,6 +1474,7 @@ function renderRecordList(){
   }
 }
 function renderCurrent(){
+  cancelHover();
   const primary=activeRecord();
   renderRecordList();
   if(!primary){ui.report.hidden=true;ui.drop.hidden=false;return}
@@ -1008,6 +1507,7 @@ function severityG(value){
   if(!Number.isFinite(value))return 0;return value<=1.2?1:value<=1.5?2:value<=1.8?3:4
 }
 function dominantText(report){
+  if(report.rolloutTriggered==='1')return `${tr('已按报告应用滑跑降级','Rollout penalty applied as recorded')}: ${currentLanguage==='en'?(report.rolloutAssessmentEn||report.rolloutAssessment):report.rolloutAssessment}`;
   if(report.legacy)return tr("旧版记录保留当时的评分结论，不使用新版阈值重新评级。","Legacy records retain their original rating and are not re-rated with current thresholds.");
   if(Number.isFinite(report.centerlineOffsetM)&&report.centerlineOffsetM>15)return currentLanguage==="en"?`Centerline deviation ${report.centerlineOffsetM.toFixed(1)} m exceeds 15 m and directly sets the adverse rating.`:`偏离中心线 ${report.centerlineOffsetM.toFixed(1)} 米，超过 15 米，直接进入红色不良落地。`;
   if(Number.isFinite(report.centerlineOffsetM)&&report.centerlineOffsetM>7)return currentLanguage==="en"?`Centerline deviation ${report.centerlineOffsetM.toFixed(1)} m exceeds 7 m and applies a non-red downgrade.`:`偏离中心线 ${report.centerlineOffsetM.toFixed(1)} 米，超过 7 米，已应用非红降级。`;
@@ -1074,7 +1574,7 @@ function renderFacts(report){
   for(const [label,value] of facts){const div=document.createElement("div");div.className="fact";const span=document.createElement("span");span.textContent=label;const strong=document.createElement("b");strong.textContent=value||"--";div.append(span,strong);root.append(div)}
 }
 function renderDiagnostics(report){
-  const versionParts=String(report.version||"").split(".").map(Number),isV114Plus=versionParts.length>=3&&(versionParts[0]>1||(versionParts[0]===1&&(versionParts[1]>1||(versionParts[1]===1&&versionParts[2]>=4))));
+  const versionParts=(String(report.version||"").match(/^\d+\.\d+(?:\.\d+)?/)?.[0]||"").split(".").map(Number),isV114Plus=versionParts.length>=3&&(versionParts[0]>1||(versionParts[0]===1&&(versionParts[1]>1||(versionParts[1]===1&&versionParts[2]>=4))));
   const trajectoryCalibration=Number.isFinite(report.trajectoryEndpointCalibrationFt)
     ?(report.trajectoryEndpointCalibrationLegacy
       ?(currentLanguage==="en"?`Legacy log auto-corrected by ${report.trajectoryEndpointCalibrationFt.toFixed(1)} ft (height trace only)`:`旧日志自动校准 ${report.trajectoryEndpointCalibrationFt.toFixed(1)} ft（仅修正高度轨迹）`)
@@ -1196,6 +1696,13 @@ function pointGroundSpeedMps(point,report){
   return Number.isFinite(knots)?knots*KNOT_TO_MPS:null
 }
 function estimateRunwayTimeline(data,report){
+  if(report?.fullTimeline){
+    if(!Number.isFinite(report.firstTouchTime))return null;
+    const pts=report.planPoints||[],threshold=report.displacedThresholdM||0;let thresholdTime=null;
+    for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];if(b.t>report.firstTouchTime)break;if(b.t-a.t<=1.1&&a.along<=threshold&&b.along>=threshold&&b.along>a.along){thresholdTime=a.t+(b.t-a.t)*(threshold-a.along)/(b.along-a.along);break}}
+    if(thresholdTime===null)return null;
+    return {thresholdTime,touchdownTime:report.firstTouchTime,runwayEndTime:null,fiftyTime:null,touchdownDistanceM:report.touchdownFromThresholdM||0,remainingM:report.runwayRemainingM,extrapolated:false};
+  }
   const target=report?.touchdownFromThresholdM;if(!Number.isFinite(target)||target<0)return null;
   const points=data.filter(point=>Number.isFinite(point.t)).slice().sort((a,b)=>a.t-b.t);if(points.length<2)return null;const trajectoryGsSamples=points.filter(point=>Number.isFinite(point.gs)&&point.gs>1).length;
   const touchdownTime=Number.isFinite(report?.firstTouchTime)?report.firstTouchTime:(findRaTime(points,0)??points[points.length-1].t);let laterTime=touchdownTime,laterSpeed=pointGroundSpeedMps(nearestPoint(points,touchdownTime),report),accumulated=0,measuredSegments=0,thresholdTime=null;
@@ -1225,6 +1732,8 @@ function drawRunwayTimeline(c,timeline,X,p,W,H,palette,verticalOffset=0){
   c.restore()
 }
 function renderRunway(report){
+  document.querySelector('.runway-title').textContent=tr('触地俯视图','Touchdown plan view');
+  document.querySelector('.runway-section .viz-sub').textContent=tr('按真实跑道位置显示触地点与接地后的滑跑路线；横向比例放大以便观察偏差。亮线与光标随时间轴播放，淡线保留全程参考。','Real runway geometry with touchdown and rollout. Lateral scale is enlarged to reveal deviation. Bright track and cursor follow playback; the faint track shows the full rollout.');
   const root=$("runwayGraphic"),legend=$("runwayLegend");root.replaceChildren();legend.replaceChildren();legend.hidden=false;const board=document.createElement("div");board.className="runway-board";
   if(Number.isFinite(report.runwayLengthM)&&report.runwayLengthM>0&&Number.isFinite(report.runwayWidthM)&&report.runwayWidthM>0&&Number.isFinite(report.touchdownFromThresholdM)){
     const length=report.runwayLengthM,width=report.runwayWidthM,leftDisplaced=clamp(Math.max(0,report.displacedThresholdM||0),0,length),rightDisplaced=clamp(Math.max(0,report.oppositeDisplacedThresholdM||0),0,length),leftThreshold=leftDisplaced,rightThreshold=length-rightDisplaced,leftBlast=Math.max(0,report.blastPadM||0),rightBlast=Math.max(0,report.oppositeBlastPadM||0),leftCode=Number.isFinite(report.markingCode)?report.markingCode:-1,rightCode=Number.isFinite(report.oppositeMarkingCode)?report.oppositeMarkingCode:-1,usable=Math.max(0,rightThreshold-leftThreshold);
@@ -1245,6 +1754,7 @@ function renderRunway(report){
     };drawEnd(leftThreshold,1,leftCode<0?1:leftCode,report.runway);drawEnd(rightThreshold,-1,rightCode<0?1:rightCode,report.oppositeRunway||"");
     for(let meters=500;meters<length;meters+=500){const x=mapX(meters);line(x,view.y-7,x,view.y,"distance-tick");svg.append(svgNode("text",{x,y:view.y-12,class:"distance-label"},`${meters} m`))}
     if((report.centerlineLights||0)>0)for(let meters=35;meters<length-20;meters+=50)svg.append(svgNode("circle",{cx:mapX(meters),cy:view.cy,r:1.45,class:"runway-light"}));if((report.edgeLights||0)>0)for(let meters=20;meters<length;meters+=90)for(const y of[view.y+2,view.y+view.h-2])svg.append(svgNode("circle",{cx:mapX(meters),cy:y,r:1.5,class:"runway-light"}));if(yes(report.tdzLights))for(let meters=leftThreshold+30;meters<Math.min(leftThreshold+900,length/2);meters+=30)for(const side of[-1,1])svg.append(svgNode("circle",{cx:mapX(meters),cy:view.cy+side*Math.min(18,width*.38)*metersToY,r:1.3,class:"tdz-light"}));if(yes(report.oppositeTdzLights))for(let meters=rightThreshold-30;meters>Math.max(rightThreshold-900,length/2);meters-=30)for(const side of[-1,1])svg.append(svgNode("circle",{cx:mapX(meters),cy:view.cy+side*Math.min(18,width*.38)*metersToY,r:1.3,class:"tdz-light"}));
+    addRolloutToRunway(svg,report,m=>view.x+m*metersToX,m=>view.cy-m*metersToY);
     const markerRadius=7;svg.append(svgNode("line",{x1:touchX-12,y1:touchY,x2:touchX+12,y2:touchY,class:"touchdown-cross"}),svgNode("line",{x1:touchX,y1:touchY-12,x2:touchX,y2:touchY+12,class:"touchdown-cross"}),svgNode("circle",{cx:touchX,cy:touchY,r:markerRadius,class:"touchdown-ring"}),svgNode("text",{x:touchX,y:touchY-18,class:"touchdown-label"},tr("接地点","TD")));svg.append(svgNode("text",{x:mapX(leftThreshold),y:205,class:"runway-label"},`RWY${report.runway} THR`),svgNode("text",{x:mapX(rightThreshold),y:205,class:"runway-label"},`RWY${report.oppositeRunway||"--"} THR`));board.append(svg);root.append(board);
     const side=report.centerlineSide?` ${report.centerlineSide}`:"",percentage=clamp(touchProgress*100,0,100).toFixed(1),warning=proportionError!==null&&proportionError>proportionTolerance?(currentLanguage==="en"?`reported distances differ by ${proportionError.toFixed(1)} m`:`报告距离相差 ${proportionError.toFixed(1)} m`):null,details=currentLanguage==="en"?[`RWY${report.runway}/${report.oppositeRunway||"--"}`,`${Math.round(length)} × ${Math.round(width)} m`,`${lengthClass} · fixed readable view`,`${markingName(leftCode)} / ${markingName(rightCode)}`,`TD ${report.touchdownFromThresholdM.toFixed(1)} m after threshold (${percentage}% of physical runway)`,`${Math.abs(report.centerlineOffsetM||0).toFixed(1)} m from centerline${side}`,`${Math.max(0,report.runwayRemainingM||0).toFixed(1)} m remaining`]:[`RWY${report.runway}/${report.oppositeRunway||"--"}`,`${Math.round(length)} × ${Math.round(width)} m`,`${lengthClass} · 固定可读视角`,`标线 ${markingName(leftCode)} / ${markingName(rightCode)}`,`入口后 ${report.touchdownFromThresholdM.toFixed(1)} m（物理跑道 ${percentage}%）`,`偏离中心线 ${Math.abs(report.centerlineOffsetM||0).toFixed(1)} m${side}`,`剩余 ${Math.max(0,report.runwayRemainingM||0).toFixed(1)} m`];if(warning)details.push(`⚠ ${warning}`);setText("runwayCaption",details.join(" · "));
     const chips=[{label:tr("标线","Markings"),value:`${markingName(leftCode)} / ${markingName(rightCode)}`,kind:"marking"},{label:tr("长度等级","Length class"),value:`${lengthClass} · ${Math.round(length)} m`,kind:"length"},{label:tr("入口内移","Displaced"),value:`${leftDisplaced.toFixed(1)} / ${rightDisplaced.toFixed(1)} m`,kind:"displaced"},{label:tr("防吹坪","Blast pad"),value:`${leftBlast.toFixed(1)} / ${rightBlast.toFixed(1)} m`,kind:"blast"},{label:tr("中线灯","Centerline lights"),value:(report.centerlineLights||0)>0?tr("有","Yes"):tr("无","No"),kind:"lights"},{label:tr("边灯","Edge lights"),value:(report.edgeLights||0)>0?tr("有","Yes"):tr("无","No"),kind:"lights"}];for(const spec of chips){const chip=document.createElement("div");chip.className="runway-chip";chip.dataset.kind=spec.kind;const label=document.createElement("span");label.className="runway-chip-label";label.textContent=spec.label;const value=document.createElement("strong");value.textContent=spec.value;chip.append(label,value);legend.append(chip)}
@@ -1274,10 +1784,17 @@ function renderReport(report,comparison=null){
   setText("dominantInsight",dominantText(report));
   setText("flareInsight",`${tr("拉平分析","Flare analysis")}: ${translateValue(report.flareTrend)||tr("该记录未提供拉平轨迹结论","No flare-trajectory conclusion in this record")}`);
   const centerlineAssessment=translateValue(report.centerlineAssessment)||(Number.isFinite(report.centerlineOffsetM)?(currentLanguage==="en"?`Centerline deviation ${report.centerlineOffsetM.toFixed(1)} m`:`偏离中心线 ${report.centerlineOffsetM.toFixed(1)} 米`):tr("未提供","Not provided"));
-  setText("warningInsight",`${tr("中心线","Centerline")}: ${centerlineAssessment}; ${tr("弹跳状态","Bounce status")}: ${translateValue(report.bounceText)||tr("未提供","Not provided")}; ${tr("道面提示","Surface advisory")}: ${translateValue(report.surfaceText)||tr("无","None")}`);
+  const bounceReview=report.recordedBounce&&/未检测到弹跳|no bounce/i.test(report.bounceText)
+    ?tr(`完整记录显示弹跳（离地约 ${report.recordedBounce.airborneSeconds.toFixed(2)} 秒）；旧摘要漏判，原评分保留`,
+      `Bounce in full recording (~${report.recordedBounce.airborneSeconds.toFixed(2)} s airborne); missed by old summary, original rating retained`)
+    :translateValue(report.bounceText)||tr("未提供","Not provided");
+  setText("warningInsight",`${tr("中心线","Centerline")}: ${centerlineAssessment}; ${tr("弹跳状态","Bounce status")}: ${bounceReview}; ${tr("道面提示","Surface advisory")}: ${translateValue(report.surfaceText)||tr("无","None")}${report.rolloutAssessment?`; ${tr('滑跑考核','Rollout grading')} (${report.rolloutPhase||'--'}): ${currentLanguage==='en'?(report.rolloutAssessmentEn||report.rolloutAssessment):report.rolloutAssessment}`:''}`);
   renderComparison(report,comparison);renderFacts(report);renderDiagnostics(report);renderWind(report,comparison);renderPose(report,comparison);renderRunway(report);
-  $("rawText").textContent=report.raw;$("rawDetails").open=false;
-  preparePlayback(report);renderInstrumentPanels(report,comparison);updateInstrumentPanels(state.playback.touched?state.playback.time:null);renderPlayback();renderChartMode();renderMetricPicker();
+  renderApproachPlan(report);
+  $("approachTitle").textContent=tr("落地俯视图","Landing plan view");
+  $("rawText").textContent="";$("rawDetails").open=false;
+  $("rawDetails").ontoggle=()=>{if($("rawDetails").open)$("rawText").textContent=report.raw};
+  preparePlayback(report);renderTimeView();updatePlanViews(null);renderInstrumentPanels(report,comparison);updateInstrumentPanels(state.playback.touched?state.playback.time:null);renderPlayback();renderChartMode();renderMetricPicker();
   drawFlare(report.trajectory,comparison?.trajectory||[],report,comparison);drawControlChart(report.controlTrace,comparison?.controlTrace||[],report,comparison)
 }
 function findRaTime(data,targetRa){
@@ -1296,22 +1813,28 @@ function findRaTime(data,targetRa){
 }
 function nearestPoint(data,targetTime){
   if(!data.length)return null;
-  let best=data[0],distance=Math.abs(best.t-targetTime);
-  for(const point of data){const gap=Math.abs(point.t-targetTime);if(gap<distance){distance=gap;best=point}}
-  return best
+  let lo=0,hi=data.length;while(lo<hi){const m=(lo+hi)>>1;if(data[m].t<targetTime)lo=m+1;else hi=m}
+  const a=data[Math.max(0,lo-1)],b=data[Math.min(lo,data.length-1)],p=Math.abs(a.t-targetTime)<=Math.abs(b.t-targetTime)?a:b;
+  return Math.abs(p.t-targetTime)<=1.1?p:null;
 }
 const AIRBUS_DETENT_LEVELS={REV:0,IDLE:6,MANUAL:34,CL:62,"FLX/MCT":82,TOGA:100};
 function engineCountFor(report,comparison){
+  if(report?._engineCountForCache?.comparison===comparison)return report._engineCountForCache.value;
+  const compute=()=>{
   const detected=source=>{let max=0;for(const point of source||[])for(let engine=1;engine<=8;engine++)if(Number.isFinite(point[`throttle${engine}`])||Number.isFinite(point[`power${engine}`])||point[`detent${engine}`])max=Math.max(max,engine);return max};
   return clamp(Math.max(1,Number(report?.engineCount)||0,Number(comparison?.engineCount)||0,detected(report?.controlTrace),detected(comparison?.controlTrace)),1,8)
+};const value=compute();if(report)report._engineCountForCache={comparison,value};return value;
 }
 function powerGaugeSpec(report,comparison){
+  if(report?._powerGaugeSpecCache?.comparison===comparison)return report._powerGaugeSpecCache.value;
+  const compute=()=>{
   const type=report?.energyType||comparison?.energyType||"N1",values=[];for(const point of[...(report?.controlTrace||[]),...(comparison?.controlTrace||[])])for(let engine=1;engine<=8;engine++)if(Number.isFinite(point[`power${engine}`]))values.push(point[`power${engine}`]);
-  const observed=Math.max(0,...values),source=`${report?.energySource||""} ${comparison?.energySource||""}`;
+  const observed=values.reduce((a,b)=>Math.max(a,b),0),source=`${report?.energySource||""} ${comparison?.energySource||""}`;
   if(type==="EPR")return{type,label:"EPR",max:Math.max(2,Math.ceil(observed*10)/10),unit:"",decimals:2};
   if(type==="PROP"){const rpm=/RPM/i.test(source)||observed>150;return rpm?{type,label:"PROP RPM",max:Math.max(2500,Math.ceil(observed/100)*100),unit:" rpm",decimals:0}:{type,label:"PROP",max:observed<=1.5?1:Math.max(100,Math.ceil(observed/10)*10),unit:"%",decimals:observed<=1.5?0:1,factor:observed<=1.5?100:1}}
   if(type==="TORQUE")return{type,label:"TORQUE",max:observed<=1.5?1:Math.max(100,Math.ceil(observed/10)*10),unit:"%",decimals:1,factor:observed<=1.5?100:1};
   return{type:"N1",label:"N1",max:Math.max(110,Math.ceil(observed/10)*10),unit:"%",decimals:1}
+};const value=compute();if(report)report._powerGaugeSpecCache={comparison,value};return value;
 }
 function powerText(value,spec){if(!Number.isFinite(value))return"N/A";return`${(value*(spec.factor||1)).toFixed(spec.decimals)}${spec.unit}`}
 function throttleVisualLevel(point,engine){const detent=point?.[`detent${engine}`];if(detent&&Object.hasOwn(AIRBUS_DETENT_LEVELS,detent))return AIRBUS_DETENT_LEVELS[detent];const raw=point?.[`throttle${engine}`];return Number.isFinite(raw)?clamp(raw*100,0,100):0}
@@ -1345,7 +1868,9 @@ function signedPercent(value){return Number.isFinite(value)?`${value>=0?"+":""}$
 function setAxisDot(element,roll,pitch){element.style.setProperty("--x-pos",`${50+clamp(Number(roll)||0,-1,1)*42}%`);element.style.setProperty("--y-pos",`${50+clamp(Number(pitch)||0,-1,1)*42}%`)}
 function setYawMarker(element,yaw){element.style.setProperty("--yaw-pos",`${50+clamp(Number(yaw)||0,-1,1)*48}%`)}
 function updateInstrumentPanels(time){
+  updatePlanViews(time);
   const report=activeRecord()?.report,comparison=comparisonRecord()?.report||null,active=Number.isFinite(time)&&Boolean(report),main=active?nearestPoint(report.controlTrace||[],time):null,reference=active&&comparison?nearestPoint(comparison.controlTrace||[],time):null,spec=ui.throttleAxes?._powerSpec||powerGaugeSpec(report,comparison);
+  updateInputWind(report,time);updateInputIls(report,time);
   ui.throttleState.textContent=active?`T+ ${time.toFixed(2)} s`:tr("等待图表定位","Awaiting chart position");ui.inputState.textContent=active?`T+ ${time.toFixed(2)} s`:tr("中立","Neutral");
   const pitch=main?.pitchInput,roll=main?.rollInput,yaw=main?.yawInput,comparePitch=reference?.pitchInput,compareRoll=reference?.rollInput,compareYaw=reference?.yawInput;setAxisDot(ui.xyDot,roll,pitch);setYawMarker(ui.yawMarker,yaw);const comparing=Boolean(reference);ui.xyCompareDot.hidden=!comparing;ui.yawCompareMarker.hidden=!comparing;if(comparing){setAxisDot(ui.xyCompareDot,compareRoll,comparePitch);setYawMarker(ui.yawCompareMarker,compareYaw)}
   const value=(id,primary,secondary)=>{const node=$(id);node.textContent=Number.isFinite(secondary)?`P ${signedPercent(primary)} · C ${signedPercent(secondary)}`:signedPercent(primary)};value("pitchInputValue",pitch,comparePitch);value("rollInputValue",roll,compareRoll);value("yawInputValue",yaw,compareYaw);$("yawCompareValue").textContent=comparing?tr("实心：主 · 虚线：对比","Solid: primary · dashed: compare"):"";
@@ -1363,11 +1888,18 @@ function updateInstrumentPanels(time){
 function playbackDomain(){const report=activeRecord()?.report;return report?synchronizedTimeDomain(report,comparisonRecord()?.report||null):{xmin:0,xmax:1}}
 function timeLabel(seconds){if(!Number.isFinite(seconds))return"--:--";const minutes=Math.floor(Math.max(0,seconds)/60),rest=Math.max(0,seconds)-minutes*60;return`${String(minutes).padStart(2,"0")}:${rest.toFixed(2).padStart(5,"0")}`}
 function renderPlayback(){const {xmin,xmax}=playbackDomain(),time=Number.isFinite(state.playback.time)?state.playback.time:xmin,ratio=clamp((time-xmin)/(xmax-xmin||1),0,1);ui.playProgress.value=String(Math.round(ratio*1000));ui.playTime.value=`${timeLabel(time)} / ${timeLabel(xmax)}`;ui.playTime.textContent=ui.playTime.value;ui.playToggle.textContent=state.playback.playing?`❚❚ ${tr("暂停","Pause")}`:`▶ ${tr("播放","Play")}`;ui.playToggle.setAttribute("aria-pressed",String(state.playback.playing))}
-function pausePlayback(){state.playback.playing=false;state.playback.lastFrame=0;if(state.playback.frame)cancelAnimationFrame(state.playback.frame);state.playback.frame=0;renderPlayback()}
-function setPlaybackTime(time,touched=true){const {xmin,xmax}=playbackDomain();state.playback.time=clamp(Number(time)||xmin,xmin,xmax);state.playback.touched=touched;sharedHoverTime=state.playback.time;renderPlayback();updateInstrumentPanels(state.playback.time);redrawTrajectoryChart()}
-function playbackFrame(now){if(!state.playback.playing)return;const {xmin,xmax}=playbackDomain();if(!state.playback.lastFrame)state.playback.lastFrame=now;const elapsed=Math.min(.1,(now-state.playback.lastFrame)/1000);state.playback.lastFrame=now;const next=clamp((Number.isFinite(state.playback.time)?state.playback.time:xmin)+elapsed*state.playback.speed,xmin,xmax);setPlaybackTime(next,true);if(next>=xmax){pausePlayback();return}state.playback.frame=requestAnimationFrame(playbackFrame)}
+function pausePlayback(){if(!state.playback.playing&&!state.playback.frame)return;state.playback.playing=false;state.playback.lastFrame=0;if(state.playback.frame)cancelAnimationFrame(state.playback.frame);state.playback.frame=0;renderPlayback()}
+function setPlaybackTime(time,touched=true,follow=false){
+  const {xmin,xmax}=playbackDomain(),previous=state.timeView?`${state.timeView.start}/${state.timeView.span}`:'';
+  state.playback.time=clamp(Number(time)||xmin,xmin,xmax);state.playback.touched=touched;sharedHoverTime=state.playback.time;
+  if(follow&&state.playback.playing)followPlayback(state.playback.time);
+  renderPlayback();updateInstrumentPanels(state.playback.time);
+  const current=state.timeView?`${state.timeView.start}/${state.timeView.span}`:'';
+  if(previous!==current)redrawTrajectoryChart();else updateChartCursors();
+}
+function playbackFrame(now){if(!state.playback.playing)return;const {xmin,xmax}=playbackDomain();if(!state.playback.lastFrame)state.playback.lastFrame=now;const elapsed=Math.min(.1,(now-state.playback.lastFrame)/1000);state.playback.lastFrame=now;const next=clamp((Number.isFinite(state.playback.time)?state.playback.time:xmin)+elapsed*state.playback.speed,xmin,xmax);setPlaybackTime(next,true,true);if(next>=xmax){pausePlayback();return}state.playback.frame=requestAnimationFrame(playbackFrame)}
 function togglePlayback(){const {xmin,xmax}=playbackDomain();if(state.playback.playing){pausePlayback();return}if(!state.playback.touched||!Number.isFinite(state.playback.time)||state.playback.time>=xmax-.001)setPlaybackTime(xmin,true);state.playback.playing=true;state.playback.lastFrame=0;renderPlayback();state.playback.frame=requestAnimationFrame(playbackFrame)}
-function preparePlayback(report){if(state.playback.recordId===state.activeId){renderPlayback();return}pausePlayback();state.playback.recordId=state.activeId;state.playback.time=null;state.playback.touched=false;sharedHoverTime=null;renderInstrumentPanels(report,comparisonRecord()?.report||null);updateInstrumentPanels(null);renderPlayback()}
+function preparePlayback(report){if(state.playback.recordId===state.activeId){renderPlayback();return}cancelHover();pausePlayback();state.playback.recordId=state.activeId;state.timeView=null;state.playback.time=null;state.playback.touched=false;sharedHoverTime=null;if(report.fullTimeline)focusTimeView("100");renderInstrumentPanels(report,comparisonRecord()?.report||null);updateInstrumentPanels(null);renderPlayback()}
 function activeMetricKeys(){return state.chartMode==="fused"?state.fusedMetrics:state.separatedMetrics}
 function setActiveMetricKeys(keys){if(state.chartMode==="fused")state.fusedMetrics=keys;else state.separatedMetrics=keys}
 function availableMetricDefs(){
@@ -1406,6 +1938,8 @@ function renderChartMode(){
   const fused=state.chartMode==="fused";ui.chartModeToggle.dataset.mode=state.chartMode;ui.chartModeToggle.setAttribute("aria-pressed",String(fused));ui.chartModeToggle.textContent=fused?`▤ ${tr("切换为分离图表","Separate charts")}`:`⇄ ${tr("切换为融合图表","Fuse charts")}`;
   ui.telemetryTitle.textContent=fused?tr("100 ft 轨迹与操纵响应（融合）","100 ft trajectory and controls (fused)"):tr("100 ft 后多参数轨迹","Multi-parameter trajectory below 100 ft");
   ui.telemetryLead.textContent=fused?tr("聚合飞行参数与操纵、舵面、油门和 N1 共用同一时间轴；顶部按钮可逐项显示或隐藏，Pitch 与 Roll 使用操纵输入。","Flight, control, surface, throttle and N1 data share one timeline. Use the chips above to show individual series; Pitch and Roll use control inputs."):tr("T+ 秒固定为横轴，可同时选择多个聚合参数；新日志使用 0.25 秒显示点和跑道相对高度，底部跑道事件带与同一时间轴对齐。","T+ seconds stays on the horizontal axis. New logs use 0.25-second display points and runway-relative altitude, while the runway event band stays aligned to the same timeline.");
+  if(activeRecord()?.report.fullTimeline){ui.telemetryTitle.textContent=tr("进近与落地过程","Approach and landing");ui.telemetryLead.textContent=recordingStatusText(activeRecord().report)+tr(" · AGL 为离地高度；FPM、舵面等通道按完整记录显示。旧日志缺失通道仅由 100 ft 节选补充，空白表示未记录。风向与侧风详见落地俯视图。"," · AGL is height above terrain. FPM and surfaces use the full recording; older logs use available 100 ft excerpts, with unrecorded data left blank. Wind direction and crosswind are in the landing plan view.")}
+  renderTimeView();
   $("chartBox").style.height=fused?"620px":"480px"
 }
 function setChartMode(mode){
@@ -1439,17 +1973,26 @@ function metricValueText(metric,value){
 function metricRangeText(metric,scale){
   return`${scale.min.toFixed(metric.decimals)}–${scale.max.toFixed(metric.decimals)} ${metric.unit}`
 }
+function metricRange(report,metric,rows){
+  const cache=report?(report.metricRanges??={}):{};if(cache[metric.key])return cache[metric.key];
+  let min=Infinity,max=-Infinity;for(const p of rows||[]){const v=metricPointValue(metric,p);if(Number.isFinite(v)){min=Math.min(min,v);max=Math.max(max,v)}}
+  return cache[metric.key]=[min,max].filter(Number.isFinite);
+}
 function buildMetricSeries(metrics,data,compareData,report,comparisonReport){
-  return metrics.map(metric=>{const mainSource=metric.source==="control"?(report?.controlTrace||[]):data,compareSource=metric.source==="control"?(comparisonReport?.controlTrace||[]):compareData;return{metric,main:mainSource.filter(point=>Number.isFinite(point.t)&&Number.isFinite(metricPointValue(metric,point))),compare:compareSource.filter(point=>Number.isFinite(point.t)&&Number.isFinite(metricPointValue(metric,point)))}}).filter(item=>item.main.length>=2||item.compare.length>=2)
+  const domain=chartTimeDomain(report,comparisonReport,data,compareData);
+  return metrics.map(metric=>{const mainSource=metric.source==="control"?(report?.controlTrace||[]):data,compareSource=metric.source==="control"?(comparisonReport?.controlTrace||[]):compareData;
+    return{metric,range:[...metricRange(report,metric,metric.source==="control"?report?.controlTrace:report?.trajectory??mainSource),...metricRange(comparisonReport,metric,metric.source==="control"?comparisonReport?.controlTrace:comparisonReport?.trajectory??compareSource)],main:recordingEnvelope(timeWindowPoints(mainSource,domain),metric.key),compare:recordingEnvelope(timeWindowPoints(compareSource,domain),metric.key)}
+  }).filter(item=>item.main.some(p=>Number.isFinite(p[item.metric.key]))||item.compare.some(p=>Number.isFinite(p[item.metric.key])));
 }
 function buildMetricScales(series){
   const groups={};
   for(const item of series){const metric=item.metric;
     const bucket=groups[metric.group]||(groups[metric.group]={group:metric.group,unit:metric.unit,values:[]});
-    for(const point of [...item.main,...item.compare]){const value=metricPointValue(metric,point);if(Number.isFinite(value))bucket.values.push(value)}
+    bucket.values.push(...item.range);
   }
   for(const bucket of Object.values(groups)){
-    let min=Math.min(...bucket.values),max=Math.max(...bucket.values);
+    let min=bucket.values.reduce((a,b)=>Math.min(a,b),Infinity),max=bucket.values.reduce((a,b)=>Math.max(a,b),-Infinity);
+    if(bucket.group==="windDirection"){bucket.min=0;bucket.max=360;continue}
     if(["pitchControl","rollControl","yawControl"].includes(bucket.group)){bucket.min=-100;bucket.max=100;continue}
     if(["elevator","aileron","rudder"].includes(bucket.group)){const magnitude=Math.max(5,Math.abs(min),Math.abs(max));bucket.min=-magnitude;bucket.max=magnitude;continue}
     if(bucket.group==="throttle"){bucket.min=min<-101?-200:min<0?-100:0;bucket.max=100;continue}
@@ -1477,25 +2020,51 @@ function drawMetricLine(c,points,metric,X,Y,comparison=false){
   if(points.length<2)return;
   c.save();c.strokeStyle=activeMetricColor(metric);c.lineWidth=comparison?3.5:2.6;c.lineJoin="round";c.lineCap="round";
   c.globalAlpha=comparison?.74:1;c.setLineDash(comparison?[8,7]:[]);c.shadowColor=activeMetricColor(metric);c.shadowBlur=comparison?3:2;c.beginPath();
-  points.forEach((point,index)=>{const x=X(point.t),y=Y(metric,metricPointValue(metric,point));index?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();c.restore()
+  let drawing=false,previous=null;
+  for(const point of points){const value=metricPointValue(metric,point);if(!Number.isFinite(value)){drawing=false;previous=null;continue}
+    if(metric.key==="windFrom"&&previous!==null&&Math.abs(value-previous)>180)drawing=false;
+    const x=X(point.t),y=Y(metric,value);drawing?c.lineTo(x,y):c.moveTo(x,y);drawing=true;previous=value;
+  }c.stroke();c.restore()
 }
 let sharedHoverTime=null;
+function layoutChartCursor(canvas){
+  const plot=canvas._plot;if(!plot)return;
+  const cursor=canvas._cursorNode||(canvas._cursorNode=document.createElement('i'));
+  if(!cursor.parentNode){cursor.className='chart-time-cursor';cursor.setAttribute('aria-hidden','true');canvas.parentNode.append(cursor)}
+  const rect=canvas.getBoundingClientRect();plot.cssScaleX=canvas.clientWidth/Math.max(1,rect.width);plot.cssScaleY=canvas.clientHeight/Math.max(1,rect.height);
+  cursor.style.left=`${canvas.offsetLeft}px`;cursor.style.top=`${canvas.offsetTop+plot.p.t*plot.cssScaleY}px`;cursor.style.height=`${plot.ph*plot.cssScaleY}px`;
+}
+function updateChartCursors(){
+  for(const canvas of [ui.canvas,ui.controlCanvas]){const p=canvas._plot,cursor=canvas._cursorNode;if(!cursor)continue;
+    cursor.hidden=!p||!Number.isFinite(sharedHoverTime)||sharedHoverTime<p.xmin||sharedHoverTime>p.xmax;
+    if(!cursor.hidden)cursor.style.transform=`translate3d(${p.X(sharedHoverTime)*p.cssScaleX}px,0,0)`;
+  }
+}
+// One seek/tooltip update per browser frame; latest pointer event wins.
+let pendingHover=null,hoverFrame=0;
+function queueHover(handler,event){
+  pendingHover={handler,event:{clientX:event.clientX,clientY:event.clientY},record:state.activeId};
+  if(!hoverFrame)hoverFrame=requestAnimationFrame(()=>{hoverFrame=0;const next=pendingHover;pendingHover=null;if(next&&next.record===state.activeId)next.handler(next.event)});
+}
+function cancelHover(){if(hoverFrame)cancelAnimationFrame(hoverFrame);hoverFrame=0;pendingHover=null}
+
 function drawGroundBands(c,data,X,top,bottom,color){
   if(data.length<2)return;c.save();c.fillStyle=color;
-  for(let index=1;index<data.length;index++){
-    const a=data[index-1],b=data[index];if((a.ground??0)<.5&&(b.ground??0)<.5)continue;
-    const left=Math.min(X(a.t),X(b.t)),right=Math.max(X(a.t),X(b.t));c.fillRect(left,top,Math.max(1,right-left),bottom-top)
-  }
-  c.restore()
+  let start=null,end=null;const flush=()=>{if(start!==null)c.fillRect(X(start),top,Math.max(1,X(end)-X(start)),bottom-top);start=end=null};
+  for(let i=1;i<data.length;i++){const a=data[i-1],b=data[i];if(b.t-a.t>1.1||((a.ground??0)<.5&&(b.ground??0)<.5)){flush();continue}if(start===null)start=a.t;end=b.t}
+  flush();c.restore()
 }
 function synchronizedTimeDomain(report,comparisonReport,...fallbackSets){
-  const points=[report?.trajectory||[],report?.controlTrace||[],comparisonReport?.trajectory||[],comparisonReport?.controlTrace||[],...fallbackSets].flat();
-  const timeline=points.map(point=>point?.t).filter(Number.isFinite);
-  return timeline.length?{xmin:Math.min(...timeline),xmax:Math.max(...timeline)}:{xmin:0,xmax:1}
+  let xmin=Infinity,xmax=-Infinity;
+  for(const rows of [report?.trajectory,report?.controlTrace,comparisonReport?.trajectory,comparisonReport?.controlTrace,...fallbackSets]){
+    if(!rows?.length)continue;const a=rows[0].t,b=rows.at(-1).t;if(Number.isFinite(a))xmin=Math.min(xmin,a);if(Number.isFinite(b))xmax=Math.max(xmax,b);
+  }
+  return Number.isFinite(xmin)&&Number.isFinite(xmax)?{xmin,xmax}:{xmin:0,xmax:1};
 }
 function synchronizedHorizontalPadding(width){return width<700?{l:64,r:48}:{l:82,r:72}}
 function chartPalette(){const style=getComputedStyle(document.documentElement),css=(name,fallback)=>style.getPropertyValue(name).trim()||fallback;return{grid:css("--chart-grid","#355267"),gridStrong:css("--chart-grid-strong","#557184"),text:css("--viz-ink","#dce9ef"),zero:css("--viz-ink","#eef5f7"),minor:css("--chart-grid-strong","#557184"),minorText:css("--viz-ink","#dce9ef"),td:css("--viz-ink","#dce9ef"),tdText:css("--viz-ink","#eef5f7"),fifty:css("--chart-event-50","#f0b54e"),fiftyText:css("--chart-event-50","#f0b54e"),rollZero:css("--chart-event-zero","#ef6070"),rollText:css("--chart-event-zero","#ef6070"),runwayPanel:css("--viz-bg","#091b27"),runwaySurface:css("--chart-runway","#34434c"),runwayEdge:css("--chart-runway-edge","#9aadb7"),runwayCenter:css("--chart-runway-center","#f4f7f8"),threshold:css("--chart-runway-center","#f4f7f8"),thresholdGuide:css("--viz-accent","#53b7df"),touchdown:css("--chart-event-50","#f0b54e"),touchdownText:css("--chart-event-50","#f0b54e"),timelineText:css("--viz-ink","#dce9ef"),ground:css("--chart-ground","rgba(240,181,78,.08)"),cursor:css("--viz-ink","#eef5f7")}}
 function drawFlare(data,compareData=[],report=null,comparisonReport=null){
+  const domain=chartTimeDomain(report,comparisonReport,data,compareData);data=timeWindowPoints(data,domain);compareData=timeWindowPoints(compareData,domain);
   const chartBox=$("chartBox"),empty=$("chartEmpty"),validCompare=compareData.length>=2?compareData:[];
   const metrics=selectedMetricDefs();
   const series=buildMetricSeries(metrics,data,validCompare,report,comparisonReport);
@@ -1510,7 +2079,7 @@ function drawFlare(data,compareData=[],report=null,comparisonReport=null){
   const c=canvas.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);
   const palette=chartPalette(),showDetents=state.chartMode==="fused"&&(detentHasValues(report?.controlTrace||[])||detentHasValues(comparisonReport?.controlTrace||[])),detentRows=showDetents?(comparisonReport?2:1):0,detentOffset=detentRows===2?30:detentRows===1?16:0;
   const groupKeys=Object.keys(scales),singleScale=groupKeys.length===1,W=box.width,H=box.height,horizontal=synchronizedHorizontalPadding(W),p={l:horizontal.l,r:horizontal.r,t:24,b:122+detentOffset},pw=W-p.l-p.r,ph=H-p.t-p.b;
-  const {xmin,xmax}=synchronizedTimeDomain(report,comparisonReport,data,validCompare),runwayTimeline=estimateRunwayTimeline(data,report);
+  const {xmin,xmax}=domain,runwayTimeline=estimateRunwayTimeline(data,report);
   const X=x=>p.l+(x-xmin)/(xmax-xmin||1)*pw;
   const Y=(metric,value)=>{
     const scale=scales[metric.group];
@@ -1540,29 +2109,28 @@ function drawFlare(data,compareData=[],report=null,comparisonReport=null){
     c.setLineDash([]);c.fillStyle=palette.rollText;c.textAlign="right";c.font="700 12px Microsoft YaHei";c.fillText(rollMetric.key==="rollInput"?tr("Roll（操纵） 0%","Roll (control) 0%"):"Roll 0°",W-p.r-6,Math.max(p.t+11,zeroY-6));c.restore()
   }
   const compareFifty=findRaTime(validCompare,50);
-  if(compareFifty!==null){
+  if(compareFifty!==null&&compareFifty>=xmin&&compareFifty<=xmax){
     const x=X(compareFifty);c.save();c.globalAlpha=.38;c.setLineDash([2,6]);c.strokeStyle=palette.minor;c.lineWidth=1.5;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+ph);c.stroke();
     c.setLineDash([]);c.fillStyle=palette.minorText;c.font="700 12px Microsoft YaHei";c.textAlign="left";c.fillText(tr("RA 50 ft 对比","RA 50 ft comparison"),x+6,p.t+30);c.restore()
   }
   for(const item of series)drawMetricLine(c,item.compare,item.metric,X,Y,true);
   const minorRaMarkers=[40,30,20,10,0];
   for(const [index,ra] of minorRaMarkers.entries()){
-    const markerTime=ra===0&&Number.isFinite(report?.firstTouchTime)?report.firstTouchTime:findRaTime(data,ra);if(markerTime===null)continue;
+    const markerTime=ra===0&&Number.isFinite(report?.firstTouchTime)?report.firstTouchTime:findRaTime(data,ra);if(markerTime===null||markerTime<xmin||markerTime>xmax||(ra!==0&&xmax-xmin>35))continue;
     const x=X(markerTime);c.save();c.globalAlpha=ra===0?.68:.46;c.setLineDash(ra===0?[3,4]:[3,6]);c.strokeStyle=ra===0?palette.td:palette.minor;c.lineWidth=ra===0?1.5:1.2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+ph);c.stroke();
-    c.setLineDash([]);c.fillStyle=ra===0?palette.tdText:palette.minorText;c.font="700 11px Microsoft YaHei";c.textAlign=x>p.l+pw*.93?"right":"left";c.fillText(ra===0?tr("接地","TD"):`RA ${ra}`,x+(x>p.l+pw*.93?-4:4),p.t+28+(index%2)*11);c.restore()
+    c.setLineDash([]);c.fillStyle=ra===0?palette.tdText:palette.minorText;c.font="700 11px Microsoft YaHei";c.textAlign=x>p.l+pw*.93?"right":"left";c.fillText(ra===0?tr("接地","TD"):`${report?.fullTimeline?"AGL":"RA"} ${ra}`,x+(x>p.l+pw*.93?-4:4),p.t+28+(index%2)*11);c.restore()
   }
   for(const item of series)drawMetricLine(c,item.main,item.metric,X,Y,false);
   const fifty=findRaTime(data,50);
-  if(fifty!==null){
+  if(fifty!==null&&fifty>=xmin&&fifty<=xmax){
     const x=X(fifty),right=x<p.l+pw*.78;c.save();c.setLineDash([5,5]);c.strokeStyle=palette.fifty;c.lineWidth=2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,runwayTimeline?H-p.b+67+detentOffset:p.t+ph);c.stroke();
-    c.setLineDash([]);c.fillStyle=palette.fiftyText;c.font="700 13px Microsoft YaHei";c.textAlign=right?"left":"right";c.fillText(tr("RA 50 ft 主要","RA 50 ft primary"),x+(right?7:-7),p.t+14);c.restore()
+    c.setLineDash([]);c.fillStyle=palette.fiftyText;c.font="700 13px Microsoft YaHei";c.textAlign=right?"left":"right";c.fillText(report?.fullTimeline?"AGL 50 ft":tr("RA 50 ft 主要","RA 50 ft primary"),x+(right?7:-7),p.t+14);c.restore()
   }
   if(showDetents){const chartBottom=H-p.b;if(comparisonReport){drawDetentRibbon(c,report?.controlTrace||[],X,p.l,pw,chartBottom+30,11,false,tr("主","P"));drawDetentRibbon(c,comparisonReport.controlTrace||[],X,p.l,pw,chartBottom+43,11,true,tr("对比","C"))}else drawDetentRibbon(c,report?.controlTrace||[],X,p.l,pw,chartBottom+30,11,false,tr("主","P"))}
   if(runwayTimeline)drawRunwayTimeline(c,runwayTimeline,X,p,W,H,palette,detentOffset);
-  if(Number.isFinite(sharedHoverTime)){
-    const cursorX=X(clamp(sharedHoverTime,xmin,xmax));c.save();c.strokeStyle=palette.cursor;c.globalAlpha=.8;c.lineWidth=1.4;c.setLineDash([4,4]);c.beginPath();c.moveTo(cursorX,p.t);c.lineTo(cursorX,p.t+ph);c.stroke();c.restore()
-  }
-  canvas._plot={X,Y,p,pw,xmin,xmax,data,compareData:validCompare,metrics:series.map(item=>item.metric),series,scales,runwayTimeline,report,comparisonReport}
+  canvas._plot={X,Y,p,pw,ph,xmin,xmax,data,compareData:validCompare,metrics:series.map(item=>item.metric),series,scales,runwayTimeline,report,comparisonReport};
+  layoutChartCursor(canvas);updateChartCursors();
+
 }
 const CONTROL_LANES=[
   {id:"pitch",label:"Pitch",input:"pitchInput",surfaces:["elevator1","elevator2"],surfaceLabels:["Elevator 1","Elevator 2"]},
@@ -1574,6 +2142,7 @@ function activeDetentColor(label){const hue=DETENT_HUES[label]??rgbToHsl(hexToRg
 function thrustHasValues(data){return data.some(point=>[1,2,3,4,5,6,7,8].some(index=>Number.isFinite(point[`throttle${index}`])||Number.isFinite(point[`power${index}`])||Number.isFinite(point[`n1_${index}`])))}
 function controlHasValues(data){return thrustHasValues(data)||data.some(point=>CONTROL_LANES.some(lane=>Number.isFinite(point[lane.input])||lane.surfaces.some(key=>Number.isFinite(point[key]))))}
 function drawControlSeries(c,data,key,X,Y,color,width,comparison=false,dash=[]){
+  data=recordingEnvelope(data,key);
   let drawing=false;c.save();c.strokeStyle=color;c.lineWidth=width;c.lineJoin="round";c.lineCap="round";c.globalAlpha=comparison?.74:1;c.setLineDash(comparison?[8,7]:dash);c.beginPath();
   for(const point of data){if(!Number.isFinite(point.t)||!Number.isFinite(point[key])){drawing=false;continue}const x=X(point.t),y=Y(point[key]);if(!drawing){c.moveTo(x,y);drawing=true}else c.lineTo(x,y)}
   c.stroke();c.restore()
@@ -1592,6 +2161,7 @@ function drawDetentRibbon(c,data,X,left,width,top,height,comparison=false,rowLab
   c.restore()
 }
 function drawControlChart(data,compareData=[],report=null,comparisonReport=null){
+  const domain=chartTimeDomain(report,comparisonReport,data,compareData);data=timeWindowPoints(data,domain);compareData=timeWindowPoints(compareData,domain);
   if(state.chartMode==="fused"){ui.controlSection.hidden=true;ui.controlCanvas._plot=null;return}
   const hasTable=report&&(/0\.10秒操纵响应表/.test(report.raw)||/0\.10\s*s\s*control\s+response\s+table/i.test(report.raw));
   ui.controlSection.hidden=!hasTable&&!data.length;if(ui.controlSection.hidden){ui.controlCanvas._plot=null;return}
@@ -1601,19 +2171,19 @@ function drawControlChart(data,compareData=[],report=null,comparisonReport=null)
   box.hidden=false;empty.hidden=true;box.style.height=hasThrust?"890px":"735px";
   const canvas=ui.controlCanvas,rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));
   const c=canvas.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);const W=rect.width,H=rect.height,horizontal=synchronizedHorizontalPadding(W),p={l:horizontal.l,r:horizontal.r,t:28,b:122},pw=W-p.l-p.r,innerH=H-p.t-p.b,laneGap=14,laneCount=1+CONTROL_LANES.length+(hasThrust?1:0),laneH=(innerH-laneGap*(laneCount-1))/laneCount;
-  const {xmin,xmax}=synchronizedTimeDomain(report,comparisonReport,data,compareData),X=value=>p.l+(value-xmin)/(xmax-xmin||1)*pw;
+  const {xmin,xmax}=domain,X=value=>p.l+(value-xmin)/(xmax-xmin||1)*pw;
   const palette=chartPalette(),runwayTimeline=estimateRunwayTimeline(report?.trajectory||[],report);
-  c.clearRect(0,0,W,H);drawGroundBands(c,report?.trajectory||[],X,p.t,p.t+innerH,palette.ground);c.font="11px Microsoft YaHei";
+  c.clearRect(0,0,W,H);drawGroundBands(c,timeWindowPoints(report?.trajectory||[],domain),X,p.t,p.t+innerH,palette.ground);c.font="11px Microsoft YaHei";
   for(let tick=0;tick<=5;tick++){const x=p.l+pw*tick/5,time=xmin+(xmax-xmin)*tick/5;c.strokeStyle=palette.gridStrong;c.globalAlpha=.78;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+innerH);c.stroke();c.globalAlpha=1;c.fillStyle=palette.text;c.textAlign="center";c.fillText(`${time.toFixed(1)}s`,x,p.t+innerH+20)}
   const lanePlots=[];
   const trajectoryTop=p.t,trajectoryMetrics=state.separatedMetrics.map(key=>metricByKey[key]).filter(metric=>metric&&metric.source!=="control"),trajectorySeries=buildMetricSeries(trajectoryMetrics,report?.trajectory||[],comparisonReport?.trajectory||[],report,comparisonReport),trajectoryScales=buildMetricScales(trajectorySeries),trajectoryY=(metric,value)=>{const scale=trajectoryScales[metric.group];return trajectoryTop+24+(scale.max-value)/(scale.max-scale.min||1)*Math.max(20,laneH-38)};
   c.save();c.fillStyle=palette.text;c.globalAlpha=.045;c.fillRect(p.l,trajectoryTop,pw,laneH);c.globalAlpha=1;for(let tick=1;tick<4;tick++){const y=trajectoryTop+laneH*tick/4;c.strokeStyle=palette.grid;c.globalAlpha=.72;c.beginPath();c.moveTo(p.l,y);c.lineTo(W-p.r,y);c.stroke()}c.restore();
-  c.fillStyle=palette.text;c.textAlign="left";c.font="700 12px Microsoft YaHei";c.fillText(tr("100 ft 参数","100 ft metrics"),12,trajectoryTop+18);for(const item of trajectorySeries)drawMetricLine(c,item.compare,item.metric,X,trajectoryY,true);for(const item of trajectorySeries)drawMetricLine(c,item.main,item.metric,X,trajectoryY,false);c.font="600 9px Microsoft YaHei";let legendX=p.l+7;for(const item of trajectorySeries){c.fillStyle=activeMetricColor(item.metric);const label=metricLabel(item.metric);c.fillText(label,legendX,trajectoryTop+13);legendX+=Math.min(105,c.measureText(label).width+14)}
+  c.fillStyle=palette.text;c.textAlign="left";c.font="700 12px Microsoft YaHei";c.fillText(report?.fullTimeline?tr("飞行参数","Flight metrics"):tr("100 ft 参数","100 ft metrics"),12,trajectoryTop+18);for(const item of trajectorySeries)drawMetricLine(c,item.compare,item.metric,X,trajectoryY,true);for(const item of trajectorySeries)drawMetricLine(c,item.main,item.metric,X,trajectoryY,false);c.font="600 9px Microsoft YaHei";let legendX=p.l+7;for(const item of trajectorySeries){c.fillStyle=activeMetricColor(item.metric);const label=metricLabel(item.metric);c.fillText(label,legendX,trajectoryTop+13);legendX+=Math.min(105,c.measureText(label).width+14)}
   CONTROL_LANES.forEach((lane,index)=>{
     const top=p.t+(index+1)*(laneH+laneGap),center=top+laneH/2,amplitude=Math.max(24,laneH*.38),surfaceValues=[];
     const laneColors=[activeMetricColor(metricByKey[lane.input]),...lane.surfaces.map(key=>activeMetricColor(metricByKey[key]))];
-    for(const point of [...data,...compareData])for(const key of lane.surfaces)if(Number.isFinite(point[key]))surfaceValues.push(Math.abs(point[key]));
-    const surfaceMax=Math.max(5,...surfaceValues),inputY=value=>center-clamp(value,-1,1)*amplitude,surfaceY=value=>center-clamp(value,-surfaceMax,surfaceMax)/surfaceMax*amplitude;
+    for(const key of lane.surfaces)for(const value of [...metricRange(report,metricByKey[key],report?.controlTrace),...metricRange(comparisonReport,metricByKey[key],comparisonReport?.controlTrace)])surfaceValues.push(Math.abs(value));
+    const surfaceMax=surfaceValues.reduce((a,b)=>Math.max(a,b),5),inputY=value=>center-clamp(value,-1,1)*amplitude,surfaceY=value=>center-clamp(value,-surfaceMax,surfaceMax)/surfaceMax*amplitude;
     c.save();c.fillStyle=palette.text;c.globalAlpha=.025;c.fillRect(p.l,top,pw,laneH);c.globalAlpha=.8;c.strokeStyle=palette.zero;c.beginPath();c.moveTo(p.l,center);c.lineTo(W-p.r,center);c.stroke();c.restore();
     c.fillStyle=palette.text;c.textAlign="left";c.font="700 13px Microsoft YaHei";c.fillText(lane.label,12,top+18);c.font="10px Microsoft YaHei";c.fillText("+100%",12,top+35);c.fillText("0",12,center+4);c.fillText("-100%",12,top+laneH-8);c.textAlign="right";c.fillText(`+${surfaceMax.toFixed(1)}°`,W-10,top+13);c.fillText("0°",W-10,center+4);c.fillText(`-${surfaceMax.toFixed(1)}°`,W-10,top+laneH-5);
     drawControlSeries(c,compareData,lane.input,X,inputY,laneColors[0],3.4,true);lane.surfaces.forEach((key,surfaceIndex)=>drawControlSeries(c,compareData,key,X,surfaceY,laneColors[surfaceIndex+1],2,true));
@@ -1632,12 +2202,13 @@ function drawControlChart(data,compareData=[],report=null,comparisonReport=null)
     const engines=[];for(let engine=1;engine<=engineLimit;engine++)if(data.some(point=>Number.isFinite(point[`throttle${engine}`])||Number.isFinite(point[`power${engine}`])))engines.push(`E${engine}`);c.fillStyle=activeMetricColor(CONTROL_METRICS[9]);c.textAlign="left";c.font="600 10px Microsoft YaHei";c.fillText(engines.length?`${tr("油门","Throttle")} / ${powerSpec.label} · ${engines.join(" ")}`:tr("动力通道不可用","Power channels unavailable"),p.l+7,top+13);
     lanePlots.push({lane:{id:"thrust",label:"Thrust"},top,throttleY,powerY,throttleMin,powerMax})
   }
-  const compareFifty=findRaTime(comparisonReport?.trajectory||[],50);if(compareFifty!==null){const x=X(compareFifty);c.save();c.globalAlpha=.38;c.setLineDash([2,6]);c.strokeStyle=palette.minor;c.lineWidth=1.5;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+innerH);c.stroke();c.setLineDash([]);c.fillStyle=palette.minorText;c.font="700 11px Microsoft YaHei";c.textAlign="left";c.fillText(tr("RA 50 ft 对比","RA 50 ft comparison"),x+6,p.t+30);c.restore()}
-  for(const [index,ra] of[40,30,20,10,0].entries()){const markerTime=ra===0&&Number.isFinite(report?.firstTouchTime)?report.firstTouchTime:findRaTime(report?.trajectory||[],ra);if(markerTime===null)continue;const x=X(markerTime);c.save();c.globalAlpha=ra===0?.68:.46;c.setLineDash(ra===0?[3,4]:[3,6]);c.strokeStyle=ra===0?palette.td:palette.minor;c.lineWidth=ra===0?1.5:1.2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+innerH);c.stroke();c.setLineDash([]);c.fillStyle=ra===0?palette.tdText:palette.minorText;c.font="700 10px Microsoft YaHei";c.textAlign=x>p.l+pw*.93?"right":"left";c.fillText(ra===0?tr("接地","TD"):`RA ${ra}`,x+(x>p.l+pw*.93?-4:4),p.t+48+(index%2)*10);c.restore()}
-  const fifty=findRaTime(report?.trajectory||[],50);if(fifty!==null){const x=X(fifty),right=x<p.l+pw*.78;c.save();c.setLineDash([5,5]);c.strokeStyle=palette.fifty;c.lineWidth=2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,H-p.b+67);c.stroke();c.setLineDash([]);c.fillStyle=palette.fiftyText;c.font="700 12px Microsoft YaHei";c.textAlign=right?"left":"right";c.fillText(tr("RA 50 ft 主要","RA 50 ft primary"),x+(right?7:-7),p.t+14);c.restore()}
+  const compareFifty=findRaTime(comparisonReport?.trajectory||[],50);if(compareFifty!==null&&compareFifty>=xmin&&compareFifty<=xmax){const x=X(compareFifty);c.save();c.globalAlpha=.38;c.setLineDash([2,6]);c.strokeStyle=palette.minor;c.lineWidth=1.5;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+innerH);c.stroke();c.setLineDash([]);c.fillStyle=palette.minorText;c.font="700 11px Microsoft YaHei";c.textAlign="left";c.fillText(tr("RA 50 ft 对比","RA 50 ft comparison"),x+6,p.t+30);c.restore()}
+  for(const [index,ra] of[40,30,20,10,0].entries()){const markerTime=ra===0&&Number.isFinite(report?.firstTouchTime)?report.firstTouchTime:findRaTime(report?.trajectory||[],ra);if(markerTime===null||markerTime<xmin||markerTime>xmax||(ra!==0&&xmax-xmin>35))continue;const x=X(markerTime);c.save();c.globalAlpha=ra===0?.68:.46;c.setLineDash(ra===0?[3,4]:[3,6]);c.strokeStyle=ra===0?palette.td:palette.minor;c.lineWidth=ra===0?1.5:1.2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,p.t+innerH);c.stroke();c.setLineDash([]);c.fillStyle=ra===0?palette.tdText:palette.minorText;c.font="700 10px Microsoft YaHei";c.textAlign=x>p.l+pw*.93?"right":"left";c.fillText(ra===0?tr("接地","TD"):`${report?.fullTimeline?"AGL":"RA"} ${ra}`,x+(x>p.l+pw*.93?-4:4),p.t+48+(index%2)*10);c.restore()}
+  const fifty=findRaTime(report?.trajectory||[],50);if(fifty!==null&&fifty>=xmin&&fifty<=xmax){const x=X(fifty),right=x<p.l+pw*.78;c.save();c.setLineDash([5,5]);c.strokeStyle=palette.fifty;c.lineWidth=2;c.beginPath();c.moveTo(x,p.t);c.lineTo(x,H-p.b+67);c.stroke();c.setLineDash([]);c.fillStyle=palette.fiftyText;c.font="700 12px Microsoft YaHei";c.textAlign=right?"left":"right";c.fillText(report?.fullTimeline?"AGL 50 ft":tr("RA 50 ft 主要","RA 50 ft primary"),x+(right?7:-7),p.t+14);c.restore()}
   if(runwayTimeline)drawRunwayTimeline(c,runwayTimeline,X,p,W,H,palette);
-  if(Number.isFinite(sharedHoverTime)){const cursorX=X(clamp(sharedHoverTime,xmin,xmax));c.save();c.strokeStyle=palette.cursor;c.globalAlpha=.85;c.setLineDash([4,4]);c.lineWidth=1.4;c.beginPath();c.moveTo(cursorX,p.t);c.lineTo(cursorX,p.t+innerH);c.stroke();c.restore()}
-  canvas._plot={X,p,pw,xmin,xmax,data,compareData,lanePlots,trajectorySeries,report,comparisonReport}
+  canvas._plot={X,p,pw,ph:innerH,xmin,xmax,data,compareData,lanePlots,trajectorySeries,report,comparisonReport};
+  layoutChartCursor(canvas);updateChartCursors();
+
 }
 function controlPointSummary(point){
   if(!point)return"";const parts=[];for(const lane of CONTROL_LANES){const values=[];if(Number.isFinite(point[lane.input]))values.push(`${lane.label} ${(point[lane.input]*100).toFixed(1)}%`);lane.surfaces.forEach((key,index)=>{if(Number.isFinite(point[key]))values.push(`${lane.surfaceLabels[index]} ${point[key].toFixed(2)}°`)});if(values.length)parts.push(values.join(" · "))}
@@ -1652,7 +2223,7 @@ function hoverChart(event){
   const plot=ui.canvas._plot;if(!plot)return;
   const rect=ui.canvas.getBoundingClientRect(),mx=event.clientX-rect.left;
   const ratio=clamp((mx-plot.p.l)/(plot.pw||1),0,1),targetTime=plot.xmin+(plot.xmax-plot.xmin)*ratio;
-  setPlaybackTime(targetTime,true);
+  pausePlayback();setPlaybackTime(targetTime,true,false);
   const main=nearestPoint(plot.data,targetTime),reference=nearestPoint(plot.compareData,targetTime),lines=[];if(!main&&!plot.series.some(item=>item.main.length))return;
   lines.push(`${tr("主要","Primary")} T+${(main?.t??targetTime).toFixed(2)} s · RA ${Number.isFinite(main?.ra)?main.ra.toFixed(1):"--"} ft`,seriesMetricSummary(plot.series,targetTime,"main"));
   if(state.chartMode!=="fused"){const control=nearestPoint(plot.report?.controlTrace||[],targetTime);if(control)lines.push(controlPointSummary(control))}
@@ -1663,7 +2234,7 @@ function hoverChart(event){
 }
 function hoverControlChart(event){
   const plot=ui.controlCanvas._plot;if(!plot)return;const rect=ui.controlCanvas.getBoundingClientRect(),mx=event.clientX-rect.left,ratio=clamp((mx-plot.p.l)/(plot.pw||1),0,1),targetTime=plot.xmin+(plot.xmax-plot.xmin)*ratio;
-  setPlaybackTime(targetTime,true);const main=nearestPoint(plot.data,targetTime),reference=nearestPoint(plot.compareData,targetTime),trajectoryPoint=nearestPoint(plot.report?.trajectory||[],targetTime),lines=[];
+  pausePlayback();setPlaybackTime(targetTime,true,false);const main=nearestPoint(plot.data,targetTime),reference=nearestPoint(plot.compareData,targetTime),trajectoryPoint=nearestPoint(plot.report?.trajectory||[],targetTime),lines=[];
   if(main)lines.push(`${tr("主要","Primary")} T+${main.t.toFixed(2)} s · RA ${Number.isFinite(trajectoryPoint?.ra)?trajectoryPoint.ra.toFixed(1):"--"} ft`,pointMetricSummary(trajectoryPoint,plot.trajectorySeries.map(item=>item.metric)),controlPointSummary(main));
   if(reference){const comparisonTrajectory=nearestPoint(plot.comparisonReport?.trajectory||[],targetTime);lines.push(`${tr("对比","Compare")} T+${reference.t.toFixed(2)} s`,pointMetricSummary(comparisonTrajectory,plot.trajectorySeries.map(item=>item.metric)),controlPointSummary(reference))}
   ui.controlTip.style.display="block";ui.controlTip.style.left=`${Math.min(rect.width-360,Math.max(8,plot.X(main?.t??targetTime)+14))}px`;ui.controlTip.style.top="12px";ui.controlTip.textContent=lines.filter(Boolean).join("\n")
@@ -1677,11 +2248,20 @@ function downloadActive(){
   document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
 }
 function clearRecords(){
-  pausePlayback();state.records=[];state.activeId=null;state.compareId=null;state.importMode="main";state.playback.recordId=null;state.playback.time=null;state.playback.touched=false;sharedHoverTime=null;
+  cancelHover();pausePlayback();state.records=[];state.activeId=null;state.compareId=null;state.importMode="main";state.playback.recordId=null;state.playback.time=null;state.playback.touched=false;sharedHoverTime=null;
   renderInstrumentPanels(null,null);updateInstrumentPanels(null);renderRecordList();ui.report.hidden=true;ui.drop.hidden=false;showError("")
 }
 function openPicker(mode="main"){
-  state.importMode=mode;ui.fileInput.multiple=mode!=="compare";ui.fileInput.click()
+  showError("");state.importMode=mode;ui.fileInput.multiple=mode!=="compare";ui.fileInput.click()
+}
+function handleFileDrop(event){
+  const data=event.dataTransfer;if(!data)return;
+  let files=Array.from(data.files||[]);
+  if(!files.length)files=Array.from(data.items||[]).filter(item=>item.kind==="file").map(item=>item.getAsFile()).filter(Boolean);
+  if(files.length)return importFiles(files,"main");
+  const types=Array.from(data.types||[]);
+  if(types.some(type=>type.startsWith("text/")))showError(tr("收到的是路径或文本，并非文件本身。请点击“选择 TXT”按钮选择记录文件。","A path or text was received, not a file. Use the file-selection button to choose the TXT record."));
+  else if(types.includes("Files"))showError(tr("浏览器未提供可读取的文件。请点击文件选择按钮重试；这不表示记录格式错误。","The browser did not provide a readable file. Try the file-selection button; this does not indicate a log-format error."));
 }
 
 $("chooseFiles").addEventListener("click",()=>openPicker("main"));
@@ -1692,17 +2272,18 @@ $("clearFiles").addEventListener("click",clearRecords);
 $("downloadTxt").addEventListener("click",downloadActive);
 $("cancelComparison").addEventListener("click",cancelComparison);
 $("swapComparison").addEventListener("click",swapComparison);
-ui.fileInput.addEventListener("change",event=>{importFiles(event.target.files,state.importMode);event.target.value=""});
+ui.fileInput.addEventListener("change",event=>{const files=Array.from(event.target.files||[]),mode=state.importMode;event.target.value="";if(files.length)importFiles(files,mode)});
 ["dragenter","dragover"].forEach(type=>document.addEventListener(type,event=>{event.preventDefault();ui.drop.classList.add("drag")}));
 ["dragleave","drop"].forEach(type=>document.addEventListener(type,event=>{event.preventDefault();ui.drop.classList.remove("drag")}));
-document.addEventListener("drop",event=>importFiles(event.dataTransfer.files,"main"));
+document.addEventListener("drop",handleFileDrop);
 function redrawTrajectoryChart(){
+  updatePlanViews(sharedHoverTime);
   const primary=activeRecord(),comparison=comparisonRecord();
-  if(primary){drawFlare(primary.report.trajectory,comparison?.report.trajectory||[],primary.report,comparison?.report||null);drawControlChart(primary.report.controlTrace,comparison?.report.controlTrace||[],primary.report,comparison?.report||null)}
+  if(primary){drawFlare(primary.report.trajectory,comparison?.report.trajectory||[],primary.report,comparison?.report||null);drawControlChart(primary.report.controlTrace,comparison?.report.controlTrace||[],primary.report,comparison?.report||null)}updateChartCursors();
 }
-function clearSharedHover(){ui.tip.style.display="none";ui.controlTip.style.display="none";if(!state.playback.touched){sharedHoverTime=null;updateInstrumentPanels(null);redrawTrajectoryChart()}}
-ui.canvas.addEventListener("mousemove",hoverChart);ui.canvas.addEventListener("mouseleave",clearSharedHover);
-ui.controlCanvas.addEventListener("mousemove",hoverControlChart);ui.controlCanvas.addEventListener("mouseleave",clearSharedHover);
+function clearSharedHover(){cancelHover();ui.tip.style.display="none";ui.controlTip.style.display="none";if(!state.playback.touched){sharedHoverTime=null;updateInstrumentPanels(null);redrawTrajectoryChart()}}
+ui.canvas.addEventListener("mousemove",event=>queueHover(hoverChart,event));ui.canvas.addEventListener("mouseleave",clearSharedHover);
+ui.controlCanvas.addEventListener("mousemove",event=>queueHover(hoverControlChart,event));ui.controlCanvas.addEventListener("mouseleave",clearSharedHover);
 ui.chartModeToggle.addEventListener("click",()=>setChartMode(state.chartMode==="fused"?"separated":"fused"));
 ui.layoutToggle.addEventListener("click",()=>setLayoutMode(state.layoutMode==="horizontal"?"vertical":"horizontal"));
 ui.playToggle.addEventListener("click",togglePlayback);
@@ -1720,7 +2301,19 @@ $("presetNew").addEventListener("click",startNewPreset);$("presetSave").addEvent
 const themeLabElement=$("themeLab"),presetLabElement=$("presetLab");themeLabElement.addEventListener("toggle",()=>{if(themeLabElement.open)presetLabElement.open=false});presetLabElement.addEventListener("toggle",()=>{if(presetLabElement.open)themeLabElement.open=false});
 arrangeDashboardLayout(state.layoutMode);syncThemeToneFromSeed();applyGeneratedPalette();renderThemeControls();applyStaticTranslations();renderChartMode();renderLayoutMode();renderMetricPicker();applyReaderZoom(state.zoom,false);renderPlayback();
 $("languageToggle").addEventListener("click",()=>setLanguage(currentLanguage==="zh"?"en":"zh"));
-window.addEventListener("resize",redrawTrajectoryChart);
+$('planZoom').addEventListener('change',()=>zoomPlan(Number($('planZoom').value),true));$('planOverview').addEventListener('click',()=>zoomPlan(1,true));
+$('planZoomIn').addEventListener('click',()=>zoomPlan(2));$('planZoomOut').addEventListener('click',()=>zoomPlan(.5));
+for(const id of ['planWind','showWindProfile'])$(id).addEventListener('change',()=>{cancelHover();updatePlanViews(sharedHoverTime)});
+for(const button of $('profileModes').querySelectorAll('button'))button.addEventListener('click',()=>{cancelHover();state.profileMode=button.dataset.profileMode;updatePlanViews(sharedHoverTime)});
+$('profileZoomIn').addEventListener('click',()=>zoomTimeView(.5));$('profileZoomOut').addEventListener('click',()=>zoomTimeView(2));
+$('timeZoomIn').addEventListener('click',()=>zoomTimeView(.5));$('timeZoomOut').addEventListener('click',()=>zoomTimeView(2));
+$('timeFull').addEventListener('click',()=>focusTimeView('full'));$('time100').addEventListener('click',()=>focusTimeView('100'));
+$('timePan').addEventListener('input',()=>{const report=activeRecord()?.report;if(!report)return;const full=playbackDomain(),d=chartTimeDomain(report,comparisonRecord()?.report),span=d.xmax-d.xmin;setTimeView(full.xmin+Number($('timePan').value)/1000*Math.max(0,full.xmax-full.xmin-span),span)});
+for(const canvas of [ui.canvas,ui.controlCanvas])canvas.addEventListener('wheel',event=>{if(!event.ctrlKey&&!event.shiftKey)return;event.preventDefault();if(event.ctrlKey)zoomTimeView(event.deltaY>0?1.25:.8);else{const report=activeRecord()?.report;if(report){const d=chartTimeDomain(report,comparisonRecord()?.report);setTimeView(d.xmin+Math.sign(event.deltaY||event.deltaX)*(d.xmax-d.xmin)*.15,d.xmax-d.xmin)}}},{passive:false});
+let staticResizeFrame=0;
+function queueChartResize(){if(staticResizeFrame)return;staticResizeFrame=requestAnimationFrame(()=>{staticResizeFrame=0;redrawTrajectoryChart()})}
+window.addEventListener('resize',queueChartResize);
+if(typeof ResizeObserver!=='undefined'){const observer=new ResizeObserver(queueChartResize);observer.observe(ui.canvas.parentNode);observer.observe(ui.controlCanvas.parentNode)}
 
 
 async function loadLuaLaunchReport(){

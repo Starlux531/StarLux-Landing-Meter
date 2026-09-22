@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace StarLux.Installer;
 
-public sealed class Network : IDisposable
+public sealed partial class Network : IDisposable
 {
     public const string GithubRepo = "https://github.com/Starlux531/StarLux-Landing-Meter";
     public const string GiteeRepo = "https://gitee.com/starlux531/starluxlmm";
@@ -13,12 +13,13 @@ public sealed class Network : IDisposable
     public static readonly DownloadSource OfficialFwl = new("GitHub", "https://codeload.github.com/X-Friese/FlyWithLua/zip/" + FwlCommit, "c6e1a4517328c4df20887bba4b6bb40a375344ec5230a39cfd35a99c9708819f");
     readonly HttpClient client;
     readonly Action<string> log;
+    public bool PluginCatalogAvailable { get; private set; }
     public Network(Action<string> log, HttpMessageHandler? handler = null)
     {
         this.log = log;
         client = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false });
         client.Timeout = Timeout.InfiniteTimeSpan;
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("StarLux-LMM-Installer/0.1");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("StarLux-LMM-Installer/" + SelfUpdater.Version);
     }
     public void Dispose() => client.Dispose();
     public static bool TrustedInitial(Uri u)
@@ -38,7 +39,7 @@ public sealed class Network : IDisposable
     async Task<HttpResponseMessage> Open(string url, CancellationToken token)
     {
         var uri = new Uri(url);
-        if (!TrustedInitial(uri)) throw new IOException("不可信下载地址 / Untrusted download URL: " + url);
+        if (!TrustedInitial(uri)) throw new IOException(U.T("不可信下载地址","Untrusted download URL: ") + url);
         for (int i = 0; i < 6; i++)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(25));
@@ -46,18 +47,19 @@ public sealed class Network : IDisposable
             if ((int)response.StatusCode is >= 300 and < 400)
             {
                 var location = response.Headers.Location; response.Dispose();
-                if (location == null) throw new IOException("缺少重定向地址 / Missing redirect");
+                if (location == null) throw new IOException(U.T("缺少重定向地址","Missing redirect"));
                 uri = location.IsAbsoluteUri ? location : new Uri(uri, location);
-                if (!TrustedRedirect(uri)) throw new IOException("下载重定向到未信任站点 / Untrusted redirect: " + uri.Host);
+                if (!TrustedRedirect(uri)) throw new IOException(U.T("下载重定向到未信任站点","Untrusted redirect: ") + uri.Host);
                 continue;
             }
             if (!response.IsSuccessStatusCode) { var status = (int)response.StatusCode; response.Dispose(); throw new IOException("HTTP " + status); }
             return response;
         }
-        throw new IOException("过多下载重定向 / Too many redirects");
+        throw new IOException(U.T("过多下载重定向","Too many redirects"));
     }
     public async Task<List<Release>> Catalog(CancellationToken token)
     {
+        PluginCatalogAvailable = false;
         async Task<List<Release>> Source(string name, string url)
         {
             var list = new List<Release>();
@@ -72,11 +74,13 @@ public sealed class Network : IDisposable
                     using var stream = await response.Content.ReadAsStreamAsync(limit.Token);
                     await CopyBounded(stream, bytes, 8 * 1024 * 1024, limit.Token, null, null);
                     using var doc = JsonDocument.Parse(bytes.ToArray());
-                    if (doc.RootElement.ValueKind != JsonValueKind.Array) throw new IOException("发布列表格式无效 / Invalid release list");
+                    if (doc.RootElement.ValueKind != JsonValueKind.Array) throw new IOException(U.T("发布列表格式无效","Invalid release list"));
                     foreach (var r in doc.RootElement.EnumerateArray())
                     {
                         if (r.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.True) continue;
-                        var version = Core.ExtractVersion(r.GetProperty("tag_name").GetString() ?? ""); if (version == "") continue;
+                        var tag = r.GetProperty("tag_name").GetString() ?? "";
+                        if (tag.StartsWith("installer-", StringComparison.OrdinalIgnoreCase)) continue;
+                        var version = Core.ExtractVersion(tag); if (version == "") continue;
                         if (!r.TryGetProperty("assets", out var assets)) continue;
                         if (assets.ValueKind == JsonValueKind.Object && assets.TryGetProperty("links", out var links)) assets = links;
                         if (assets.ValueKind != JsonValueKind.Array) continue;
@@ -94,10 +98,11 @@ public sealed class Network : IDisposable
                     }
                     if (doc.RootElement.GetArrayLength() < 100) break;
                 }
-                log($"{name}: 找到 {list.Count} 个安装包 / packages");
+                log(U.T($"{name}: 找到 {list.Count} 个安装包", $"{name}: {list.Count} packages found"));
+                PluginCatalogAvailable = true;
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-            catch (Exception e) { log($"{name}: 暂不可用，继续使用其他源与本地版本 / Unavailable: {e.Message}"); }
+            catch (Exception e) { log(name + U.T(": 暂不可用，继续使用其他源与本地版本：", ": unavailable; using other sources and local packages: ") + e.Message); }
             return list;
         }
         var results = await Task.WhenAll(Source("GitHub", "https://api.github.com/repos/Starlux531/StarLux-Landing-Meter/releases"), Source("Gitee", "https://gitee.com/api/v5/repos/starlux531/starluxlmm/releases"));
@@ -110,11 +115,11 @@ public sealed class Network : IDisposable
         {
             using var idle = CancellationTokenSource.CreateLinkedTokenSource(token); idle.CancelAfter(TimeSpan.FromSeconds(25));
             int count = await input.ReadAsync(buffer, idle.Token); if (count == 0) break;
-            if ((total += count) > maximum) throw new IOException("下载超过大小限制 / Download size limit");
+            if ((total += count) > maximum) throw new IOException(U.T("下载超过大小限制","Download size limit"));
             await output.WriteAsync(buffer.AsMemory(0, count), token);
             if (size > 0) progress?.Invoke((int)Math.Min(99, total * 100 / size.Value));
         }
-        if (size.HasValue && total != size.Value) throw new IOException("下载不完整 / Incomplete download");
+        if (size.HasValue && total != size.Value) throw new IOException(U.T("下载不完整","Incomplete download"));
     }
     public async Task<string> Download(IEnumerable<DownloadSource> sources, string destination, string preferred, Action<int> progress, CancellationToken token)
     {
@@ -126,21 +131,21 @@ public sealed class Network : IDisposable
         {
             try
             {
-                log("下载 / Download: " + source.Name + " · " + source.Url); progress(0);
+                log(U.T("下载","Download: ") + source.Name + " · " + source.Url); progress(0);
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromMinutes(8));
                 using var response = await Open(source.Url, deadline.Token);
                 var length = response.Content.Headers.ContentLength;
-                if (length > 256L * 1024 * 1024) throw new IOException("下载包过大 / Package too large");
+                if (length > 256L * 1024 * 1024) throw new IOException(U.T("下载包过大","Package too large"));
                 using (var input = await response.Content.ReadAsStreamAsync(deadline.Token))
                 using (var output = File.Create(destination)) await CopyBounded(input, output, 256L * 1024 * 1024, deadline.Token, length, progress);
                 var expected = source.Sha256.Length > 0 ? source.Sha256 : sharedHash;
-                if (expected.Length > 0 && !Core.Hash(destination).Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new IOException("SHA256 校验失败 / SHA256 mismatch");
-                using (var zip = System.IO.Compression.ZipFile.OpenRead(destination)) { if (zip.Entries.Count == 0) throw new IOException("空 ZIP / Empty ZIP"); }
+                if (expected.Length > 0 && !Core.Hash(destination).Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("SHA256 校验失败","SHA256 mismatch"));
+                using (var zip = System.IO.Compression.ZipFile.OpenRead(destination)) { if (zip.Entries.Count == 0) throw new IOException(U.T("空 ZIP","Empty ZIP")); }
                 progress(100); return destination;
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-            catch (Exception e) { errors.Add(source.Name + ": " + e.Message); log("切换备用源 / Trying fallback: " + e.Message); }
+            catch (Exception e) { errors.Add(source.Name + ": " + e.Message); log(U.T("切换备用源","Trying fallback: ") + e.Message); }
         }
-        throw new IOException("所有下载源均不可用 / All sources failed\n" + string.Join("\n", errors));
+        throw new IOException(U.T("所有下载源均不可用","All sources failed\n") + string.Join("\n", errors));
     }
 }

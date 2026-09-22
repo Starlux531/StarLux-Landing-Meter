@@ -1,263 +1,159 @@
-using System.Diagnostics;
+using System.Drawing.Drawing2D;
 using System.Text.Json;
 
 namespace StarLux.Installer;
 
-public sealed class MainForm : Form
+public class BluePanel : Panel
+{
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public Color TopColor { get; set; } = Color.FromArgb(22, 56, 91);
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public Color BottomColor { get; set; } = Color.FromArgb(13, 32, 58);
+    public BluePanel() { DoubleBuffered = true; }
+    protected override void OnPaintBackground(PaintEventArgs e)
+    { if (Width < 1 || Height < 1) return; using var b = new LinearGradientBrush(ClientRectangle, TopColor, BottomColor, 30f); e.Graphics.FillRectangle(b, ClientRectangle); }
+}
+public sealed class StateCard : BluePanel
+{
+    readonly Label heading = new() { Dock = DockStyle.Top, Height = 28, ForeColor = Color.FromArgb(157, 193, 226), BackColor = Color.Transparent };
+    readonly Label value = new() { Dock = DockStyle.Top, Height = 37, Font = new("Microsoft YaHei UI", 13, FontStyle.Bold), AutoEllipsis = true, BackColor = Color.Transparent };
+    readonly Label caption = new() { Dock = DockStyle.Fill, ForeColor = Color.FromArgb(190, 216, 241), BackColor = Color.Transparent };
+    public bool Flash { get; private set; }
+    Color tone;
+    public StateCard() { Dock = DockStyle.Fill; Padding = new(16, 13, 16, 10); Margin = new(0, 0, 10, 0); Controls.Add(caption); Controls.Add(value); Controls.Add(heading); }
+    public void Set(string title, string text, string detail, Color color, bool flash = false) { heading.Text = title; value.Text = text; caption.Text = detail; tone = color; Flash = flash; value.ForeColor = color; }
+    public void Pulse(bool bright) { value.ForeColor = Flash ? (bright ? Color.FromArgb(255, 87, 107) : Color.FromArgb(168, 47, 69)) : tone; }
+    internal string VisibleText => heading.Text + " " + value.Text + " " + caption.Text;
+}
+public sealed partial class MainForm : Form
 {
     readonly string baseDir = AppContext.BaseDirectory;
-    readonly ComboBox target = new() { DropDownStyle = ComboBoxStyle.DropDown, Dock = DockStyle.Fill };
-    readonly ComboBox releases = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill, DropDownWidth = 950 };
-    readonly ComboBox sources = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 250 };
-    readonly Label status = new() { AutoSize = true, MaximumSize = new(870, 0), ForeColor = Color.FromArgb(26, 68, 78) };
-    readonly Label details = new() { AutoSize = true, MaximumSize = new(870, 0) };
-    readonly Label update = new() { AutoSize = true, ForeColor = Color.FromArgb(28, 100, 102), Text = "启动后自动检查；离线可用本地版本 / Checks online; bundled version works offline" };
-    readonly TextBox logBox = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, BackColor = Color.FromArgb(241, 245, 248), BorderStyle = BorderStyle.FixedSingle };
-    readonly ProgressBar progress = new() { Dock = DockStyle.Fill };
-    readonly Label stage = new() { AutoSize = true, Text = "就绪 / Ready" };
-    readonly Button install = Button("安装所选版本 / Install", true);
-    readonly Button browse = Button("选择目录 / Browse");
-    readonly Button detect = Button("重新检测 / Detect");
-    readonly Button refresh = Button("检查更新 / Check updates");
-    readonly Button restore = Button("恢复备份 / Restore");
-    readonly Button cancel = Button("取消下载 / Cancel");
-    CancellationTokenSource? operation;
-    CancellationTokenSource? catalogCancellation;
-    bool busy, applying, onlineChecking;
+    readonly string preferenceFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarLux_LMM_Installer", "preferences.json");
+    readonly ComboBox target = Combo(false), releases = Combo(true), sources = Combo(true);
+    readonly Button language = MakeButton(), browse = MakeButton(), detect = MakeButton(), refresh = MakeButton(), install = MakeButton(true), repair = MakeButton(), uninstall = MakeButton(), restore = MakeButton(), cancel = MakeButton(), selfUpdate = MakeButton();
+    readonly Label title = Label(22, true), subtitle = Label(10), pathTitle = Label(11, true), versionTitle = Label(11, true), status = Label(10), selection = Label(10), stage = Label(10), foot = Label(9);
+    readonly StateCard pluginCard = new(), healthCard = new(), installerCard = new();
+    readonly TextBox logBox = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = Color.FromArgb(10, 25, 44), ForeColor = Color.FromArgb(158, 197, 230), Margin = new(0, 10, 0, 0) };
+    readonly ProgressBar progress = new() { Dock = DockStyle.Fill, Height = 8, Margin = new(0, 8, 0, 6) };
+    readonly System.Windows.Forms.Timer blink = new() { Interval = 600 }, inspectDelay = new() { Interval = 400 };
     readonly List<Release> local;
     List<Release> online = [];
-    readonly string preferenceFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarLux_LMM_Installer", "preferences.json");
-    static Button Button(string text, bool primary = false) => new()
+    InstallerCatalog? installerCatalog;
+    Diagnosis diagnosis = new();
+    CancellationTokenSource? operation, catalogCancellation;
+    bool busy, applying, checking, pulse, closingForUpdate, pluginOnlineVerified;
+    int inspectGeneration;
+    readonly bool preview;
+    public static readonly Color Good = Color.FromArgb(87, 224, 171), Warning = Color.FromArgb(255, 197, 104), Neutral = Color.FromArgb(138, 201, 255), Alert = Color.FromArgb(255, 87, 107);
+    static ComboBox Combo(bool list) => new() { DropDownStyle = list ? ComboBoxStyle.DropDownList : ComboBoxStyle.DropDown, Dock = DockStyle.Fill, BackColor = Color.FromArgb(21, 47, 76), ForeColor = Color.FromArgb(222, 239, 255), FlatStyle = FlatStyle.Flat, Margin = new(0, 7, 8, 4), DropDownWidth = 920 };
+    static Label Label(float size, bool bold = false) => new() { AutoSize = true, BackColor = Color.Transparent, ForeColor = Color.FromArgb(208, 229, 249), Font = new("Microsoft YaHei UI", size, bold ? FontStyle.Bold : FontStyle.Regular), Margin = new(0, 5, 0, 5) };
+    static Button MakeButton(bool primary = false)
     {
-        Text = text, AutoSize = true, MinimumSize = new(145, 40), Padding = new(9, 4, 9, 4),
-        FlatStyle = FlatStyle.Flat, BackColor = primary ? Color.FromArgb(25, 99, 106) : Color.White,
-        ForeColor = primary ? Color.White : Color.FromArgb(25, 49, 67), Cursor = Cursors.Hand
-    };
-    static FlowLayoutPanel Flow(params Control[] controls)
-    {
-        var flow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = new(0, 4, 0, 6), WrapContents = true };
-        flow.Controls.AddRange(controls); return flow;
+        var b = new Button { AutoSize = true, MinimumSize = new(116, 39), Padding = new(9, 3, 9, 3), FlatStyle = FlatStyle.Flat, BackColor = primary ? Color.FromArgb(67, 156, 231) : Color.FromArgb(28, 66, 104), ForeColor = Color.FromArgb(238, 247, 255), Cursor = Cursors.Hand, Margin = new(0, 0, 8, 0) };
+        b.FlatAppearance.BorderColor = Color.FromArgb(70, 118, 163); b.FlatAppearance.MouseOverBackColor = Color.FromArgb(48, 111, 167); return b;
     }
-    static Label Heading(string text) => new() { Text = text, AutoSize = true, Font = new("Microsoft YaHei UI", 11, FontStyle.Bold), Margin = new(0, 10, 0, 8) };
-    public MainForm()
+    static FlowLayoutPanel Flow(params Control[] items) { var f = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, BackColor = Color.Transparent, Margin = new(0, 8, 0, 8) }; f.Controls.AddRange(items); return f; }
+    public MainForm(bool preview = false)
     {
-        Text = "StarLux LMM · 安装与更新 / Installer 1.1.8";
-        Font = new("Microsoft YaHei UI", 10); AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new(980, 810); MinimumSize = new(820, 760); StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Color.FromArgb(249, 251, 252); Padding = new(24, 15, 24, 18);
-        var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 13 };
+        this.preview = preview; Font = new("Microsoft YaHei UI", 10); AutoScaleMode = AutoScaleMode.Dpi; DoubleBuffered = true;
+        ClientSize = new(1120, 870); MinimumSize = new(1030, 810); StartPosition = FormStartPosition.CenterScreen;
+        var background = new BluePanel { Dock = DockStyle.Fill, Padding = new(28, 22, 28, 20), TopColor = Color.FromArgb(8, 22, 42), BottomColor = Color.FromArgb(44, 103, 155) };
+        var body = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, ColumnCount = 1, RowCount = 13 };
         for (int i = 0; i < 13; i++) body.RowStyles.Add(new(i == 11 ? SizeType.Percent : SizeType.AutoSize, i == 11 ? 100 : 0));
-        body.Controls.Add(new Label { Text = "STARLUX  /  LANDING METRICS MONITOR", AutoSize = true, ForeColor = Color.FromArgb(25, 99, 106), Font = new("Segoe UI", 19, FontStyle.Bold) }, 0, 0);
-        body.Controls.Add(new Label { Text = "便携安装 · 自动识别 · 双源下载 · 安全备份  /  Portable, backed-up installation", AutoSize = true, Margin = new(0, 6, 0, 10) }, 0, 1);
-        body.Controls.Add(Heading("01  X-Plane 12 安装位置 / Simulator folder"), 0, 2);
-        var pathRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, AutoSize = true };
-        pathRow.ColumnStyles.Add(new(SizeType.Percent, 100)); pathRow.ColumnStyles.Add(new(SizeType.AutoSize)); pathRow.ColumnStyles.Add(new(SizeType.AutoSize));
-        target.Margin = new(0, 9, 8, 0); pathRow.Controls.Add(target, 0, 0); pathRow.Controls.Add(browse, 1, 0); pathRow.Controls.Add(detect, 2, 0); body.Controls.Add(pathRow, 0, 3);
-        body.Controls.Add(status, 0, 4);
-        body.Controls.Add(Heading("02  即将安装的版本 / Version to install"), 0, 5);
-        body.Controls.Add(releases, 0, 6);
-        sources.Items.AddRange(["自动切换 / Auto", "Gitee 优先 / Prefer Gitee", "GitHub 优先 / Prefer GitHub"]); sources.SelectedIndex = 0;
-        body.Controls.Add(Flow(sources, refresh, update), 0, 7);
-        body.Controls.Add(details, 0, 8);
-        var actions = Flow(install, restore, cancel, stage); body.Controls.Add(actions, 0, 9);
-        body.Controls.Add(progress, 0, 10); body.Controls.Add(logBox, 0, 11);
-        body.Controls.Add(new Label { Text = "不会更改飞行算法；保留设置、日志及机场缓存。安装前请退出 X-Plane。\nPreserves settings, logs and airport caches. Close X-Plane before installation.", AutoSize = true, ForeColor = Color.DimGray, Margin = new(0, 12, 0, 0) }, 0, 12);
-        Controls.Add(body);
+        var header = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, BackColor = Color.Transparent, Margin = Padding.Empty };
+        header.ColumnStyles.Add(new(SizeType.Percent, 100)); header.ColumnStyles.Add(new(SizeType.AutoSize)); header.Controls.Add(title, 0, 0); header.Controls.Add(language, 1, 0);
+        body.Controls.Add(header, 0, 0); body.Controls.Add(subtitle, 0, 1);
+        var cards = new TableLayoutPanel { Dock = DockStyle.Fill, Height = 143, ColumnCount = 3, Margin = new(0, 17, 0, 13), BackColor = Color.Transparent };
+        for (int i = 0; i < 3; i++) cards.ColumnStyles.Add(new(SizeType.Percent, 33.333f)); cards.Controls.Add(pluginCard, 0, 0); cards.Controls.Add(healthCard, 1, 0); cards.Controls.Add(installerCard, 2, 0); installerCard.Margin = Padding.Empty;
+        body.Controls.Add(cards, 0, 2); body.Controls.Add(pathTitle, 0, 3);
+        var paths = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 3, BackColor = Color.Transparent, Margin = Padding.Empty };
+        paths.ColumnStyles.Add(new(SizeType.Percent, 100)); paths.ColumnStyles.Add(new(SizeType.AutoSize)); paths.ColumnStyles.Add(new(SizeType.AutoSize)); paths.Controls.Add(target, 0, 0); paths.Controls.Add(browse, 1, 0); paths.Controls.Add(detect, 2, 0); body.Controls.Add(paths, 0, 4);
+        status.MaximumSize = new(1010, 70); body.Controls.Add(status, 0, 5); body.Controls.Add(versionTitle, 0, 6); body.Controls.Add(releases, 0, 7);
+        sources.Dock = DockStyle.None; sources.Width = 173; sources.DropDownWidth = 200; body.Controls.Add(Flow(sources, refresh, selfUpdate, selection), 0, 8);
+        body.Controls.Add(Flow(install, repair, uninstall, restore, cancel), 0, 9); body.Controls.Add(progress, 0, 10); body.Controls.Add(logBox, 0, 11); body.Controls.Add(Flow(stage, foot), 0, 12); background.Controls.Add(body); Controls.Add(background);
         foreach (var combo in new[] { releases, sources })
         {
-            combo.DrawMode = DrawMode.OwnerDrawFixed; combo.ItemHeight = 26;
-            combo.DrawItem += (_, e) =>
-            {
-                e.DrawBackground();
-                var label = e.Index >= 0 ? combo.Items[e.Index]?.ToString() ?? "" : combo.Text;
-                TextRenderer.DrawText(e.Graphics, label, combo.Font, Rectangle.Inflate(e.Bounds, -4, 0), e.ForeColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                e.DrawFocusRectangle();
-            };
+            combo.DrawMode = DrawMode.OwnerDrawFixed; combo.ItemHeight = 29;
+            combo.DrawItem += (_, e) => { using var brush = new SolidBrush((e.State & DrawItemState.Selected) != 0 ? Color.FromArgb(39, 88, 136) : combo.BackColor); e.Graphics.FillRectangle(brush, e.Bounds); var item = e.Index >= 0 ? combo.Items[e.Index] : null; TextRenderer.DrawText(e.Graphics, item is Release r ? U.ReleaseName(r) : item?.ToString() ?? "", combo.Font, Rectangle.Inflate(e.Bounds, -6, 0), combo.ForeColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis); };
         }
-        cancel.Enabled = false;
-        local = Core.LocalReleases(baseDir, Log); LoadReleaseList();
-        try { if (File.Exists(preferenceFile)) target.Text = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(preferenceFile))?.GetValueOrDefault("target") ?? ""; } catch { }
-        target.TextChanged += (_, _) => ShowStatus(); releases.SelectedIndexChanged += (_, _) => ShowRelease();
-        browse.Click += (_, _) => { using var d = new FolderBrowserDialog { Description = "选择 X-Plane 根目录（不是 Scripts） / Select X-Plane root", UseDescriptionForTitle = true, SelectedPath = target.Text }; if (d.ShowDialog(this) == DialogResult.OK) { target.Text = d.SelectedPath; SavePreference(); } };
-        detect.Click += async (_, _) => await Detect(); refresh.Click += async (_, _) => await CheckOnline();
-        install.Click += async (_, _) => await Install(); restore.Click += async (_, _) => await Restore();
-        cancel.Click += (_, _) => { operation?.Cancel(); catalogCancellation?.Cancel(); };
-        Shown += async (_, _) => { if (Environment.GetCommandLineArgs().Contains("--render")) { ShowStatus(); ShowRelease(); return; } await Detect(); await CheckOnline(); };
-        FormClosing += (_, e) => { if (busy) { e.Cancel = true; MessageBox.Show(this, applying ? "正在写入或回滚，请等待完成。 / Wait for file operations to finish." : "请先取消下载，等待结束后关闭。 / Cancel the download first."); } else catalogCancellation?.Cancel(); };
-        ShowStatus(); ShowRelease();
+        if (!preview) LoadPreferences(); local = Core.LocalReleases(baseDir, Log); ApplyLanguage(); LoadReleases();
+        target.TextChanged += (_, _) => { inspectGeneration++; inspectDelay.Stop(); inspectDelay.Start(); };
+        inspectDelay.Tick += async (_, _) => { inspectDelay.Stop(); await InspectTarget(); };
+        releases.SelectedIndexChanged += (_, _) => ShowSelection();
+        language.Click += async (_, _) => { U.Language = U.Language == "zh" ? "en" : "zh"; logBox.Clear(); ApplyLanguage(); SavePreferences(); await InspectTarget(); };
+        browse.Click += async (_, _) => { using var d = new FolderBrowserDialog { Description = U.T("选择包含 X-Plane.exe 的根目录", "Select the folder containing X-Plane.exe"), UseDescriptionForTitle = true, SelectedPath = target.Text }; if (d.ShowDialog(this) == DialogResult.OK) { target.Text = d.SelectedPath; SavePreferences(); await InspectTarget(); } };
+        detect.Click += async (_, _) => await Detect(); refresh.Click += async (_, _) => await CheckOnline(); install.Click += async (_, _) => await Install(false); repair.Click += async (_, _) => await Install(true);
+        uninstall.Click += async (_, _) => await Uninstall(); restore.Click += async (_, _) => await Restore(); selfUpdate.Click += async (_, _) => await UpdateInstaller(); cancel.Click += (_, _) => operation?.Cancel();
+        blink.Tick += (_, _) => { pulse = !pulse; pluginCard.Pulse(pulse); installerCard.Pulse(pulse); }; blink.Start();
+        Shown += async (_, _) => { if (!preview) { await Detect(); await CheckOnline(); } };
+        FormClosing += (_, e) => { if (busy && !closingForUpdate) { e.Cancel = true; Prompt(U.T("请等待", "Please wait"), applying ? U.T("正在写入或恢复文件，请等待操作完成。", "Files are being applied or restored. Wait for completion.") : U.T("请先取消下载并等待结束。", "Cancel the download and wait for it to stop.")); } else catalogCancellation?.Cancel(); };
+        FormClosed += (_, _) => { blink.Dispose(); inspectDelay.Dispose(); };
     }
-    void Log(string text)
+    void ApplyLanguage()
     {
-        if (IsDisposed) return;
-        if (InvokeRequired) { BeginInvoke(() => Log(text)); return; }
-        logBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {text}\r\n");
+        Text = U.T("StarLux LMM 安装器 v", "StarLux LMM Installer v") + SelfUpdater.DisplayVersion; title.Text = U.T("STARLUX  安装器", "STARLUX  INSTALLER"); subtitle.Text = "v" + SelfUpdater.DisplayVersion + U.T("  /  安装、更新与维护，一处完成", "  /  Install, update and maintain in one place"); language.Text = U.Language == "zh" ? "English" : "简体中文";
+        pathTitle.Text = U.T("01   选择模拟器", "01   YOUR SIMULATOR"); versionTitle.Text = U.T("02   选择插件版本", "02   PLUGIN VERSION"); browse.Text = U.T("浏览目录", "Browse"); detect.Text = U.T("重新检测", "Detect"); refresh.Text = U.T("检查全部更新", "Check updates"); selfUpdate.Text = U.T("更新安装器", "Update installer"); install.Text = U.T("安装 / 更新插件", "Install / update"); repair.Text = U.T("修复插件", "Repair plugin"); uninstall.Text = U.T("卸载插件", "Uninstall"); restore.Text = U.T("恢复备份", "Restore backup"); cancel.Text = U.T("取消下载", "Cancel download");
+        var index = sources.SelectedIndex; sources.Items.Clear(); sources.Items.AddRange([U.T("自动切换下载源", "Automatic source"), U.T("优先 Gitee", "Prefer Gitee"), U.T("优先 GitHub", "Prefer GitHub")]); sources.SelectedIndex = Math.Max(0, index);
+        stage.Text = U.T("就绪", "Ready"); foot.Text = U.T("操作前请退出 X-Plane · 飞行记录始终保留", "Close X-Plane before changes · Flight reports are always preserved"); releases.Invalidate(); UpdateCards(); ShowSelection();
     }
-    void Percent(int value)
-    {
-        if (InvokeRequired) { BeginInvoke(() => Percent(value)); return; }
-        progress.Value = Math.Clamp(value, 0, 100); stage.Text = $"{(applying ? "安装 / Install" : "下载 / Download")} {value}%";
-    }
-    void SavePreference() { try { Directory.CreateDirectory(Path.GetDirectoryName(preferenceFile)!); File.WriteAllText(preferenceFile, JsonSerializer.Serialize(new { target = target.Text })); } catch { } }
+    void LoadPreferences() { try { if (File.Exists(preferenceFile)) { var p = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(preferenceFile)); target.Text = p?.GetValueOrDefault("target") ?? ""; var lang = p?.GetValueOrDefault("language"); if (lang is "zh" or "en") U.Language = lang; } } catch { } }
+    void SavePreferences() { if (preview) return; try { Directory.CreateDirectory(Path.GetDirectoryName(preferenceFile)!); File.WriteAllText(preferenceFile, JsonSerializer.Serialize(new { target = target.Text, language = U.Language })); } catch { } }
+    void Log(string text) { if (IsDisposed) return; if (InvokeRequired) { BeginInvoke(() => Log(text)); return; } logBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {text}\r\n"); }
+    void Percent(int value) { if (InvokeRequired) { BeginInvoke(() => Percent(value)); return; } progress.Value = Math.Clamp(value, 0, 100); stage.Text = U.T(applying ? "正在应用 " : "正在下载 ", applying ? "Applying " : "Downloading ") + value + "%"; }
     async Task Detect()
     {
         detect.Enabled = false;
-        try
-        {
-            var found = await Task.Run(() => Core.Discover(baseDir)); var current = target.Text;
-            if (busy) return;
-            target.Items.Clear(); target.Items.AddRange(found.Cast<object>().ToArray());
-            target.Text = Core.IsXPlane(current) ? current : found.Count == 1 ? found[0] : "";
-            Log(found.Count switch { 0 => "未自动找到 X-Plane，请手动选择根目录。 / Select the root manually.", 1 => "已找到 X-Plane / Detected: " + found[0], _ => "找到多个 X-Plane，请在下拉列表中选择。 / Multiple installations found; select one." });
-        }
+        try { var found = await Task.Run(() => Core.Discover(baseDir)); if (busy || IsDisposed) return; var previous = target.Text; target.Items.Clear(); target.Items.AddRange(found.Cast<object>().ToArray()); target.Text = Core.IsXPlane(previous) ? previous : found.Count == 1 ? found[0] : ""; Log(U.T("检测到模拟器目录：", "Simulator folders detected: ") + found.Count); await InspectTarget(); }
         catch (Exception e) { Log(e.Message); }
-        finally { detect.Enabled = !busy; ShowStatus(); }
+        finally { if (!IsDisposed) detect.Enabled = !busy; }
     }
-    void LoadReleaseList()
+    async Task InspectTarget()
     {
-        var selected = releases.SelectedItem as Release;
-        releases.Items.Clear(); releases.Items.AddRange(Core.LabelReleases(local.Concat(online)).Cast<object>().ToArray());
-        if (selected != null && releases.Items.Contains(selected)) releases.SelectedItem = selected;
-        else if (releases.Items.Count > 0) releases.SelectedIndex = 0;
-        ShowRelease();
+        var generation = ++inspectGeneration; var path = target.Text.Trim();
+        try { var result = await Task.Run(() => Core.Diagnose(path)); if (generation != inspectGeneration || IsDisposed) return; diagnosis = result; if(diagnosis.Issues.Count > 2) Log(diagnosis.Describe()); }
+        catch (Exception e) { if (generation != inspectGeneration || IsDisposed) return; diagnosis = new(); Log(e.Message); }
+        UpdateCards(); SetBusy(busy);
     }
-    void ShowStatus()
+    void LoadReleases() { var selected = releases.SelectedItem as Release; releases.Items.Clear(); releases.Items.AddRange(Core.LabelReleases(local.Concat(online)).Cast<object>().ToArray()); if (selected != null && releases.Items.Contains(selected)) releases.SelectedItem = selected; else if (releases.Items.Count > 0) releases.SelectedItem = Core.RepairRelease(releases.Items.Cast<Release>(), diagnosis) ?? releases.Items[0]; ShowSelection(); }
+    internal void UpdateCards()
     {
-        InstalledState s;
-        try { s = Core.Inspect(target.Text); }
-        catch (Exception e) { status.Text = "无法读取目录 / Cannot read folder: " + e.Message; return; }
-        status.Text = s.Details + "\nFlyWithLua: " + (s.HasFlyWithLua ? "已检测到运行库文件 / Runtime files detected (not a live load check)" : "未安装或文件不完整 / Missing or incomplete");
-        if (online.Count > 0)
-        {
-            var latest = online[0].Version;
-            update.Text = s.Version.Length == 0 ? "线上最新 / Online: " + latest : Core.CompareVersion(latest, s.Version) > 0 ? "有更新 / Update: " + latest : "线上最新 / Online: " + latest + " · 无更高版本 / No newer version";
-        }
+        var latest = online.FirstOrDefault(); var hasUpdate = latest != null && diagnosis.Version != "" && Core.CompareVersion(latest.Version, diagnosis.Version) > 0; var isLatest = pluginOnlineVerified && latest != null && diagnosis.Version != "" && Core.CompareVersion(latest.Version, diagnosis.Version) == 0;
+        pluginCard.Set(U.T("插件更新", "PLUGIN UPDATE"), hasUpdate ? U.T("有新版本  ", "Update available  ") + latest!.Version : isLatest ? U.T("已是最新版本", "Up to date") : diagnosis.HasPlugin ? U.T("已安装  ", "Installed  ") + diagnosis.Version : U.T("尚未安装", "Not installed"), checking ? U.T("正在检查在线版本…", "Checking online releases…") : latest != null ? U.T("线上版本：", "Online version: ") + latest.Version : U.T("在线状态未知，仍可使用本地包", "Online status unknown; local packages work"), hasUpdate ? Alert : isLatest ? Good : Neutral, hasUpdate);
+        healthCard.Set(U.T("插件状态", "PLUGIN HEALTH"), diagnosis.Verified ? U.T("文件完整 · 兼容", "Verified & compatible") : diagnosis.HasPlugin ? U.T("需要检查 / 修复", "Check / repair needed") : U.T("等待安装", "Ready to install"), diagnosis.SimulatorVersion == "" ? U.T("等待识别 X-Plane 版本", "X-Plane version not identified") : "X-Plane " + diagnosis.SimulatorVersion + " · " + (diagnosis.HasFlyWithLua ? "FlyWithLua ✓" : U.T("缺少 FlyWithLua", "FlyWithLua missing")), diagnosis.Verified ? Good : diagnosis.HasPlugin ? Warning : Neutral);
+        var updateRelease = installerCatalog?.Releases.FirstOrDefault(); var newer = updateRelease != null && Core.CompareVersion(updateRelease.Version, SelfUpdater.Version) > 0; var current = installerCatalog?.Available == true && updateRelease != null && Core.CompareVersion(updateRelease.Version, SelfUpdater.Version) == 0;
+        installerCard.Set(U.T("安装器更新", "INSTALLER UPDATE"), newer ? U.T("有新版本  ", "Update available  ") + updateRelease!.Version : current ? U.T("已是最新版本", "Up to date") : "v" + SelfUpdater.DisplayVersion, checking ? U.T("正在检查独立更新通道…", "Checking installer release channel…") : updateRelease != null ? U.T("当前版本：", "Current version: ") + SelfUpdater.Version : installerCatalog?.Available == true ? U.T("尚无正式更新包", "No installer release package published") : U.T("更新状态待确认", "Update status unconfirmed"), newer ? Alert : current ? Good : Neutral, newer);
+        status.Text = diagnosis.Describe(); if (diagnosis.Issues.Count > 2) status.Text = string.Join("\n", diagnosis.Describe().Split('\n').Take(3)) + U.T("（完整诊断见日志）", " (see log for full diagnosis)");
+        selfUpdate.Enabled = !busy && newer; uninstall.Enabled = !busy && diagnosis.HasPlugin; repair.Enabled = !busy && diagnosis.HasPlugin && releases.Items.Count > 0;
     }
-    void ShowRelease()
-    {
-        if (releases.SelectedItem is not Release r) { details.Text = "没有本地版本；请检查更新或将发行包放入 version。 / No package; check online or add version folder."; install.Enabled = false; return; }
-        details.Text = $"将安装 / Will install: {r.Version} · {r.CompatibilityLabel}\n{r.LanguageLabel} · " + (r.LocalDirectory != "" ? "本地离线包 / Offline package" : "联网下载，自动切换备用源 / Online with fallback");
-        install.Enabled = !busy;
-    }
+    void ShowSelection() { selection.Text = releases.SelectedItem is Release r ? U.Compatibility(r) : U.T("无安装包，请检查更新", "No package; check updates"); install.Enabled = !busy && releases.SelectedItem != null; }
     async Task CheckOnline()
     {
-        if (onlineChecking || busy) return; onlineChecking = true; refresh.Enabled = false;
-        catalogCancellation = new(); update.Text = "正在检查两个源 / Checking both sources…";
-        try
-        {
-            using var net = new Network(Log); online = await net.Catalog(catalogCancellation.Token);
-            if (!busy) LoadReleaseList();
-            if (online.Count == 0) update.Text = "在线状态未知；本地仍可安装 / Online unavailable; local works";
-            ShowStatus();
-        }
-        catch (OperationCanceledException) { update.Text = "检查已取消 / Check cancelled"; }
-        finally { onlineChecking = false; refresh.Enabled = !busy; catalogCancellation.Dispose(); catalogCancellation = null; }
+        if (checking || busy) return; checking = true; refresh.Enabled = false; catalogCancellation = new(); UpdateCards();
+        try { using var net = new Network(Log); var plugin = net.Catalog(catalogCancellation.Token); var updater = net.InstallerCatalog(catalogCancellation.Token); await Task.WhenAll(plugin, updater); if (IsDisposed) return; pluginOnlineVerified = net.PluginCatalogAvailable; if(pluginOnlineVerified) online = await plugin; var result = await updater; installerCatalog = !result.Available && installerCatalog != null ? new(false, installerCatalog.Releases) : result; if (!busy) LoadReleases(); }
+        catch (OperationCanceledException) { }
+        catch (Exception e) { Log(e.Message); }
+        finally { checking = false; catalogCancellation?.Dispose(); catalogCancellation = null; if (!IsDisposed) { refresh.Enabled = !busy; UpdateCards(); } }
     }
-    void SetBusy(bool value)
-    {
-        busy = value; install.Enabled = !value && releases.SelectedItem != null; browse.Enabled = detect.Enabled = restore.Enabled = target.Enabled = releases.Enabled = sources.Enabled = !value; refresh.Enabled = !value && !onlineChecking; cancel.Enabled = value && !applying;
-    }
+    void SetBusy(bool value) { busy = value; foreach (var c in new Control[] { browse, detect, restore, target, releases, sources, language }) c.Enabled = !value; refresh.Enabled = !value && !checking; cancel.Enabled = value && !applying; UpdateCards(); ShowSelection(); }
     string Preferred => sources.SelectedIndex switch { 1 => "Gitee", 2 => "GitHub", _ => "Auto" };
-    async Task Install()
+    DialogResult Prompt(string heading, string text, params (string, DialogResult)[] choices)
     {
-        if (releases.SelectedItem is not Release selected) return;
-        var xp = target.Text.Trim(); string? temp = null;
-        try
-        {
-            Core.ValidateTarget(xp); Core.CheckNotRunning();
-            var pending = PendingBackup(xp);
-            if (pending != null) throw new IOException("发现上次未完成的安装，请先使用“恢复备份”选择此目录的 transaction.json：\nIncomplete install; restore first:\n" + pending);
-            var marker = Core.SafePath(xp, "Resources/plugins/StarLux_LMM.install.pending.json");
-            if (File.Exists(marker)) throw new IOException("上次安装未完成，请根据此标记中的 backup 路径恢复备份：\nRestore the backup referenced by this pending installation:\n" + File.ReadAllText(marker));
-            var current = Core.Inspect(xp);
-            string warning = current.Version.Length > 0 && Core.CompareVersion(selected.Version, current.Version) < 0 ? "警告：所选版本较旧，将降级。 / Warning: this is a downgrade.\n\n" : "";
-            if (selected.LocalDirectory == "" && !selected.Sources.Any(s => s.Sha256.Length == 64)) warning += "此历史包没有发布方 SHA256，依靠官方 HTTPS 来源。 / No publisher SHA256 for this legacy archive.\n\n";
-            if (MessageBox.Show(this, warning + $"版本 / Version: {selected.Version} {selected.Build}\n{selected.CompatibilityLabel}\n{selected.LanguageLabel}\nX-Plane: {xp}\n备份 / Backup: {Path.Combine(baseDir, "backup")}\n\n保留已有设置与落地记录。确认安装？ / Preserve settings and logs. Install?", "确认安装 / Confirm installation", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK) return;
-            catalogCancellation?.Cancel(); operation = new(); SetBusy(true); SavePreference();
-            temp = Directory.CreateTempSubdirectory("StarLux-LMM-install-").FullName;
-            using var net = new Network(Log);
-            PreparedPackage package;
-            if (selected.LocalDirectory != "")
-            {
-                // Snapshot local files into private staging; never install straight from an editable release folder.
-                package = await Task.Run(() => Core.Prepare(selected.LocalDirectory));
-                var staged = Path.Combine(temp, "payload");
-                await Task.Run(() => { foreach (var f in package.Manifest.Files) { var dest = Core.SafePath(staged, f.Path); Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(Core.SafePath(package.Root, f.Path), dest); } });
-                package = new(package.Manifest, staged); Core.ValidatePackage(package);
-            }
-            else
-            {
-                var zip = await net.Download(selected.Sources, Path.Combine(temp, "lmm.zip"), Preferred, Percent, operation.Token);
-                var unpack = Path.Combine(temp, "lmm"); await Task.Run(() => Core.ExtractZip(zip, unpack));
-                package = await Task.Run(() => Core.Prepare(unpack, selected.Version));
-            }
-            string? fwlRoot = null;
-            if (package.Manifest.Kind == "flywithlua" && !Core.HasFwl(xp))
-            {
-                var answer = MessageBox.Show(this, "缺少 FlyWithLua NG+。\n是：自动下载官方固定版本 2.8.14（Windows 运行库）。\n否：选择你已下载的 XP12 NG+ ZIP。\n取消：退出安装，不修改 X-Plane。\n\nFlyWithLua is missing. Yes: download official 2.8.14. No: import a local NG+ ZIP. Cancel: stop.", "安装依赖 / FlyWithLua dependency", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-                if (answer == DialogResult.Cancel) return;
-                string zip;
-                if (answer == DialogResult.Yes) zip = await net.Download(DependencySources(), Path.Combine(temp, "fwl.zip"), Preferred, Percent, operation.Token);
-                else
-                {
-                    using var file = new OpenFileDialog { Title = "FlyWithLua NG+ for XP12 ZIP", Filter = "ZIP files|*.zip" };
-                    if (file.ShowDialog(this) != DialogResult.OK) return; zip = file.FileName;
-                }
-                var unpack = Path.Combine(temp, "fwl"); await Task.Run(() => Core.ExtractZip(zip, unpack)); fwlRoot = Core.FindFwl(unpack);
-                // Source repository stores MIT license one level above the distribution directory.
-                var license = Path.Combine(Path.GetDirectoryName(fwlRoot)!, "LICENSE");
-                if (File.Exists(license) && !File.Exists(Path.Combine(fwlRoot, "LICENSE"))) File.Copy(license, Path.Combine(fwlRoot, "LICENSE"));
-            }
-            operation.Token.ThrowIfCancellationRequested();
-            applying = true; cancel.Enabled = false; progress.Value = 0;
-            var backup = await Task.Run(() => Core.Install(baseDir, xp, package, fwlRoot, Log, Percent));
-            stage.Text = "安装完成 / Complete"; Log("安装成功；请启动 X-Plane 验证插件加载。 / Installed; launch X-Plane to verify loading.");
-            try { File.WriteAllText(Path.Combine(backup, "installer.log"), logBox.Text); } catch (Exception e) { Log("日志未保存（安装已成功） / Log not saved: " + e.Message); }
-            MessageBox.Show(this, $"已安装 / Installed: {package.Manifest.Version} {package.Manifest.Build}\n备份 / Backup: {backup}\n\n现有设置与记录已保留。 / Existing settings and reports preserved.", "StarLux LMM", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        catch (OperationCanceledException) { stage.Text = "已取消 / Cancelled"; Log("下载已取消，未开始安装。 / Cancelled before file installation."); }
-        catch (Exception e) { stage.Text = "未完成 / Not completed"; Log(e.Message); MessageBox.Show(this, e.Message + "\n\n若目录不可写，请把安装器移到可写文件夹；不要关闭安全软件。\nUse a writable folder; do not disable security software.", "安装未完成 / Installation not completed", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-        finally
-        {
-            applying = false; SetBusy(false); operation?.Dispose(); operation = null; ShowStatus();
-            if (temp != null) { try { Core.NoLinks(temp); if (Path.GetFileName(temp).StartsWith("StarLux-LMM-install-") && Path.GetDirectoryName(temp) == Path.GetTempPath().TrimEnd('\\')) Directory.Delete(temp, true); } catch (Exception e) { Log("临时文件保留 / Temporary files retained: " + e.Message); } }
-        }
+        using var d = new Form { Text = heading, Font = Font, ClientSize = new(680, 385), MinimumSize = new(680, 385), StartPosition = FormStartPosition.CenterParent, ShowInTaskbar = false, BackColor = Color.FromArgb(14, 34, 57), ForeColor = Color.FromArgb(223, 239, 252), Padding = new(22) };
+        var content = new TextBox { Text = text, Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = d.BackColor, ForeColor = d.ForeColor, ScrollBars = ScrollBars.Vertical };
+        var row = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new(0, 16, 0, 0) };
+        if (choices.Length == 0) choices = [(U.T("确定", "OK"), DialogResult.OK)]; foreach (var (label, result) in choices.Reverse()) { var b = MakeButton(); b.Text = label; b.DialogResult = result; row.Controls.Add(b); if (result == DialogResult.Cancel) d.CancelButton = b; }
+        d.Controls.Add(content); d.Controls.Add(row); return d.ShowDialog(this);
     }
-    IEnumerable<DownloadSource> DependencySources()
+    (string, DialogResult) Yes => (U.T("继续", "Continue"), DialogResult.OK);
+    (string, DialogResult) No => (U.T("取消", "Cancel"), DialogResult.Cancel);
+    internal void PreviewState(bool updates)
     {
-        // Publisher may add same-byte Gitee release mirrors here without rebuilding the EXE.
-        var file = Path.Combine(baseDir, "version", "flywithlua-mirrors.json");
-        var list = new List<DownloadSource>();
-        if (File.Exists(file))
-        {
-            var mirrors = JsonSerializer.Deserialize<List<DownloadSource>>(File.ReadAllText(file), Core.Json) ?? [];
-            foreach (var mirror in mirrors)
-                if (mirror.Sha256.Equals(Network.OfficialFwl.Sha256, StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(mirror.Url, UriKind.Absolute, out var u) && Network.TrustedInitial(u)) list.Add(mirror);
-        }
-        list.Add(Network.OfficialFwl); return list;
+        pluginOnlineVerified = true;
+        diagnosis = new() { ValidTarget = true, HasPlugin = true, HasFlyWithLua = true, Verified = true, Version = "1.1.8", SimulatorVersion = "12.4.4" };
+        online = [new() { Version = updates ? "1.1.9" : "1.1.8", UiVariant = "sdk440", DefaultLanguage = U.Language, Sources = [new("GitHub", Network.GithubRepo + "/preview")] }];
+        installerCatalog = new(true, [new() { Version = updates ? "1.1.0" : SelfUpdater.Version }]); target.Text = @"D:\Games\X-Plane 12"; inspectDelay.Stop(); LoadReleases(); UpdateCards();
     }
-    string? PendingBackup(string xp)
-    {
-        var folder = Path.Combine(baseDir, "backup"); if (!Directory.Exists(folder)) return null;
-        foreach (var dir in Directory.GetDirectories(folder))
-        {
-            var f = Path.Combine(dir, "transaction.json"); if (!File.Exists(f)) continue;
-            var j = JsonSerializer.Deserialize<Journal>(File.ReadAllText(f), Core.Json);
-            if (j != null && j.Status is "prepared" or "installing" && Core.NormalizeDirectory(j.Target).Equals(Core.NormalizeDirectory(xp), StringComparison.OrdinalIgnoreCase)) return f;
-        }
-        return null;
-    }
-    async Task Restore()
-    {
-        try
-        {
-            Core.ValidateTarget(target.Text); Core.CheckNotRunning();
-            using var file = new OpenFileDialog { Title = "选择备份 transaction.json / Select backup journal", Filter = "Backup transaction|transaction.json", InitialDirectory = Path.Combine(baseDir, "backup") };
-            if (file.ShowDialog(this) != DialogResult.OK) return;
-            if (MessageBox.Show(this, "恢复将替换此次安装涉及的文件，不恢复用户设置或飞行日志。\n请优先选择最近一次备份。继续？\nRestore files touched by this install. Prefer the latest backup. Continue?", "恢复备份 / Restore", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
-            var xp = target.Text; applying = true; SetBusy(true);
-            await Task.Run(() => Core.Restore(Path.GetDirectoryName(file.FileName)!, xp)); Log("备份已恢复 / Backup restored"); stage.Text = "已恢复 / Restored";
-        }
-        catch (Exception e) { MessageBox.Show(this, e.Message, "恢复未完成 / Restore failed"); }
-        finally { applying = false; SetBusy(false); ShowStatus(); }
-    }
+    internal string[] CardText => [pluginCard.VisibleText, healthCard.VisibleText, installerCard.VisibleText];
+    internal bool[] FlashStates => [pluginCard.Flash, installerCard.Flash];
+    internal void PreviewOffline() { pluginOnlineVerified = false; if(installerCatalog != null) installerCatalog = new(false,installerCatalog.Releases); UpdateCards(); }
 }

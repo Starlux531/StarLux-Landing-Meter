@@ -1,38 +1,63 @@
-# StarLux LMM 安装器 / Installer
+# StarLux LMM 安装器 v1.0 使用说明
 
-适用于 Windows 10/11 x64 与 X-Plane 12。安装器自带 .NET 运行库，无需另外安装 Python、.NET SDK 或 FlyWithLua 才能启动。
+安装器版本从 v1.0 开始独立维护，与插件版本分别更新。支持 Windows 10/11 x64 和 X-Plane 12，程序自带 .NET 运行库。
 
-## 使用
+## 开始使用
 
-1. 完整解压收到的 ZIP 到一个可写文件夹，里面只有 `StarLux_LMM_installer_安装器.exe` 和 `version`。不要在压缩包预览里直接运行 EXE，也不要放入 X-Plane 目录内部。
-2. 退出 X-Plane，运行安装器。自动识别 Steam 库、X-Plane 安装记录和常见路径；多份模拟器需要自己选择，也可手动浏览到包含 `X-Plane.exe` 的根目录。
-3. 查看安装状态，选择版本。离线包会标注“本地”；线上会显示 GitHub / Gitee。检查失败意味着“在线状态未知”，不是“没有更新”。
-4. 点击安装并核对版本与目标。已有 FlyWithLua 不会自动升级；未找到时，可同意下载官方 XP12 NG+ 2.8.14，或导入自己已下载的 XP12 NG+ ZIP。
-5. 安装完成后启动模拟器验证。安装器只检查文件是否存在/匹配，不声称验证了插件实机成功加载。
+1. 将离线包完整解压到 X-Plane 目录之外的可写文件夹。根目录包含 `StarLux_LMM_installer_安装器.exe` 和 `version/`；也可只使用 EXE 联网获取插件包。
+2. 启动安装器，顶部按钮可在中文与英文之间切换，选择会保存。安装器语言与插件默认语言分别设置。
+3. 检查识别出的 X-Plane 根目录；多份模拟器可在列表选择，或点击“浏览目录”。目录应包含 `X-Plane.exe`。
+4. 选择插件版本，点击“安装 / 更新插件”。操作前完全退出 X-Plane。缺少 FlyWithLua 时，可选择下载固定官方 XP12 NG+ 运行库或导入自己的 NG+ ZIP。
 
-安装器可单独复制运行，不带 `version` 时会通过 GitHub/Gitee Releases 选择并下载发布包。本地包不需要联网，更新检查不阻塞本地安装。GitHub 与 Gitee 只有发布了同名同版本安装 ZIP 才能相互接替；缺失的版本不会被旧版本替代。
+## 三个状态区
 
-## 备份与恢复
+- **插件更新**：有更高版本时持续红色闪烁；确认当前版本与在线最高版本一致时为静态绿色。
+- **插件状态**：检查文件是否缺失、内容是否匹配安装记录、有无多个主脚本或旧 UI 残留，以及已知 XP 版本与 UI 的兼容性。通过文件及兼容检查后显示绿色。
+- **安装器更新**：独立检查安装器版本。有更新时红色闪烁，并启用“更新安装器”；已确认最新时静态绿色。
 
-安装时在 EXE 旁新增 `backup/日期-唯一编号/`，包含被覆盖/移出的文件、安装事务清单与日志。首次安装也会记录新增文件列表，以便恢复到未安装状态。
+联网失败、尚无正式更新包或 XP 版本未知时显示待确认状态，不会显示为已验证或最新。文件检查不能代替实际启动模拟器验证。
 
-安装器保留已有 `LMM_Settings.cfg`、`LMM_Log`、机场索引和其他用户脚本；升级前把旧的 LMM 主 Lua 脚本备份后移出 Scripts，避免重复运行。FlyWithLua 的示例脚本不会被自动启用。
+## 修复与纯净重装
 
-发生可捕获的写入错误会自动回滚。断电或强制终止后重新运行，若检测到未完成事务，先点“恢复备份”，选择对应 `transaction.json`。恢复应从最近一次备份开始；安装后手工修改过的插件程序文件会被所选备份覆盖，用户设置和飞行记录不受影响。不要手动编辑或删除备份内容。
+点击“修复插件”后，安装器优先选用当前已安装版本的兼容包；如果该版本不可用，会在确认窗口显示可用替代版本。较旧 XP 的标准版问题会优先匹配兼容版。确认前核对版本、语言与目标目录。
 
-## 下载与安全
+| 方式 | 插件设置 | 随插件分析器偏好 | 飞行记录与机场缓存 |
+| --- | --- | --- | --- |
+| 保留配置 | 保留 | 保留 | 保留 |
+| 纯净重装 | 备份后重置 | 下次打开该分析器时重置已知 LMM 偏好 | 保留 |
 
-- LMM 来源为官方 GitHub `Starlux531/StarLux-Landing-Meter` 与 Gitee `starlux531/starluxlmm`，无需账号或 token。
-- 使用 HTTPS、超时切源、ZIP 路径检查和大小上限；本地清单及可用的发布方 SHA256 会进行校验。旧版资产没有发布方摘要时会明确提示，不能把自行计算的散列视为发行方身份认证。
-- 本地 `version/版本/manifest.json` 必须配套 `payload`，不是任意 Lua/ZIP 都会自动执行。具体版本及构建标记以清单与安装界面为准。
-- FlyWithLua 自动下载固定官方源码归档中的 2.8.14 Windows 二进制、支持模块、依赖 DLL 和许可证；不会下载 GitHub Releases 上的 XP11 2.7.32，也不跟随 master 的不稳定更新。下载完不执行安装脚本，仅安装运行文件。
-- FlyWithLua 国内镜像尚未发布时依赖下载仍需要连通 GitHub；可在官方 NG+ 页面登录下载后导入 ZIP。安装器不绕过登录。
-- 若已有 FlyWithLua 文件检测通过但模拟器不能加载，请检查 X-Plane `Log.txt`；文件存在不代表依赖、版本或配置一定正常。
-- 安装器目前没有代码签名。Windows 可能显示未知发布者，请核对来源；不要关闭防病毒软件。受保护的目录、目录联接/符号链接不支持自动写入，改用普通可写目录或手动安装。
-- 关闭安装器不会保留后台更新任务，不上传用户飞行数据。
+两种方式都重新部署所选包并清理已识别的旧 LMM 程序文件。其他插件、用户脚本和既有 FlyWithLua 不会被卸载。纯净重装后，已生成的临时查看页面会移除，重新从插件打开报告即可。
 
-## English quick start
+分析器偏好存储在浏览器中，安装器不会扫描或改写浏览器用户目录。一次纯净重装只触发一次页面内重置；此后普通修复保留新的偏好。不同浏览器对本地文件的存储隔离方式可能不同，重置只作用于打开页面所能访问的已知 LMM 设置键。独立分析器 HTML 文件不会被修改。
 
-Extract the whole bundle into a writable folder outside X-Plane. Run the EXE, select your X-Plane 12 root and package, then confirm installation. Local packages work offline; standalone EXE users can fetch official releases online. Exit X-Plane first. Existing settings, logs, airport caches and unrelated scripts are preserved. Missing FlyWithLua can be downloaded with consent or imported from an XP12 NG+ ZIP. Use **Restore** with the latest backup's `transaction.json` if necessary. The installer checks files, not live simulator loading. This preview installer is unsigned.
+## 卸载与恢复
 
-Official sources: [GitHub](https://github.com/Starlux531/StarLux-Landing-Meter/releases), [Gitee](https://gitee.com/starlux531/starluxlmm/releases), [FlyWithLua NG+](https://forums.x-plane.org/files/file/82888-flywithlua-ng-next-generation-plus-edition-for-x-plane-12-win-lin-mac/), [fixed FlyWithLua commit](https://github.com/X-Friese/FlyWithLua/tree/453f6a22de4fde15a9c960588690f4780d7d7bf0).
+“卸载插件”会移除已识别的 LMM 主脚本、UI 模块、随插件分析器和临时查看代码，保留设置、飞行 TXT、机场缓存、其他脚本及 FlyWithLua。共用的顶层 README/LICENSE 文件保留。
+
+安装、修复、纯净重装和卸载均在 EXE 旁的 `backup/日期-编号/` 保存受影响的原文件及 `transaction.json`。写入失败时自动回滚；断电或强制结束后，按未完成事务提示使用“恢复备份”。优先选择最近一次备份，并核对其对应的 XP 目录。
+
+恢复会覆盖该事务涉及的文件。纯净重装备份可以恢复插件配置，但不能恢复已在浏览器中执行重置前的偏好。
+
+## 安装器自更新
+
+点击“更新安装器”后，程序下载并校验新版本，关闭当前窗口，由更新助手替换 EXE 并重新启动。插件、`version/` 和 `backup/` 保持原位。新程序未能正常启动时尝试恢复原安装器；旧 EXE 和更新结果记录会保留，便于排查。
+
+自更新从安装器 v1.0 的独立发布通道开始。尚未支持此协议的旧预览安装器需要先手动替换为 v1.0。联网更新需要发布方将对应版本的正式更新资产上传至官方 GitHub/Gitee；本地构建完成不等于已上线。
+
+## English guide
+
+Extract the portable bundle to a writable folder outside X-Plane and run the EXE. Use the top-right button for a fully English installer interface. Select the simulator root, package and installation mode. Installer language and plugin default language are independent.
+
+**Repair plugin** checks file integrity and selects a compatible package, preferring the installed version. **Keep settings** preserves plugin and analyzer preferences. **Clean reinstall** backs up/resets plugin configuration and resets known analyzer preferences when the bundled page is next opened. Flight reports, airport caches, other plugins and FlyWithLua remain. Browser profiles are never scanned; local-file storage isolation depends on the browser.
+
+**Uninstall** removes identified LMM code while retaining settings and reports. **Restore backup** restores files recorded in a transaction; prefer the latest matching backup. Browser preferences already reset in the browser are not recoverable through a file backup.
+
+Plugin and installer updates have separate status cards: available updates flash red; confirmed current versions are static green. Unknown/offline status is never reported as current. **Update installer** verifies the download, replaces the executable, restarts and attempts rollback if the new process fails its readiness check. Installer updates require published assets in the independent installer release channel.
+
+Close X-Plane before any plugin file operation. The installer checks files and known compatibility, not successful live simulator loading. Windows system file dialogs follow the operating system's language.
+
+## 1.0.1 maintenance / 文件清理修订
+
+升级、修复和卸载会备份并移除可确认属于 StarLux 的旧版本 README 和旧 UI 文件，随后移除空的版本目录及 fonts 子目录。目录中未知的用户文件不会删除；设置、落地记录和机场缓存继续保留。历史备份可从安装器恢复。
+
+Upgrade, repair and uninstall now back up and remove obsolete StarLux version guides and UI files, then prune empty version folders and their empty fonts folders. Unknown user files, settings, flight records and airport caches are preserved. Transaction backups remain restorable.

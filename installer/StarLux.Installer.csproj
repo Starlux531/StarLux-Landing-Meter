@@ -6,7 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>StarLux_LMM_installer_安装器</AssemblyName>
-    <Version>1.1.8</Version>
+    <Version>1.0.1</Version>
+    <Product>StarLux LMM Installer</Product>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>

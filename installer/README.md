@@ -1,116 +1,56 @@
-# StarLux LMM portable installer — development and publishing
+# StarLux LMM Installer v1.0
 
-This is a Windows 10/11 x64, .NET 10 WinForms **self-contained, single-file** application. The distributed EXE needs no separately installed .NET/Python. Installer and plugin are now version `1.1.8`. Nothing is uploaded or published by the build.
+The installer has its own version line, starting at **1.0.0** (displayed as **v1.0**). Plugin versions remain independent: plugin **1.1.9** is stable as of 2026-09-23. Its offline bundles include installer **1.0.1** with obsolete LMM file cleanup. The existing standalone installer update release remains `installer-v1.0.0`; plugin release tags do not advance that channel.
 
-The stable builder is `tools/prepare_release_118.ps1`, also called by `installer/build.ps1`. It generates `dist/1.1.8/StarLux_LMM_Installer_1.1.8` with exactly EXE + version at its root, four Standard/Compatibility × CN/International packages, the standalone analyzer and sanitized author presets. Manifests add `uiVariant` (`sdk440`/`legacy`) and `defaultLanguage` (`zh`/`en`). Existing settings take precedence over package defaults. See [the current bilingual release guide](../README_1.1.8.md). The beta tree below documents the preceding packaging format, not the current output filename.
+## Implemented lifecycle
 
-Latest badges are computed across successfully loaded local and remote releases using numeric semantic versions (final > beta). Every variant of the highest version is labelled. The UI displays target compatibility separately; the badge does not mean that the package is suitable for the selected XP installation. Online variants are identified by `-Standard-` / `-Compatibility-` and `-CN` / `-International` asset names. GitHub and Gitee must receive identical attachment filenames and bytes for same-release fallback.
+- Separate GitHub/Gitee catalogs for plugin updates and installer updates. Installer updates use `installer-vX.Y.Z` release tags; plugin tags cannot advance the installer version.
+- Verified staging, executable replacement after the parent exits, restart acknowledgement, previous-EXE backup and rollback on restart failure. The portable `version` and `backup` directories stay in place.
+- File diagnosis against installation receipts: missing/modified files, multiple main scripts, obsolete UI modules, interrupted transactions and known X-Plane/UI compatibility mismatches. Unknown simulator versions are not marked verified.
+- Repair selects the installed version where available and a compatible UI variant. If that version is unavailable, the proposed alternative appears in the confirmation. Users can preserve settings or choose clean reinstall.
+- Clean reinstall backs up/removes plugin configuration and inserts a one-time reset hook into the installed analyzer. It resets the analyzer's known storage keys when that page is next opened; the transformed HTML hash and reset token are recorded in the receipt. Normal repair carries the token forward to avoid repeated resets. Browser profiles are never scanned or edited directly.
+- Uninstall removes identified LMM program files and generated viewer code, preserving settings, reports, caches, unrelated scripts and FlyWithLua. Shared top-level README/LICENSE files are retained. Uninstall uses the same backup, transaction and rollback machinery as installation.
+- Persistent Chinese/English switch, localized controls/dialogs/diagnostics, blue gradient UI, independent health/update cards. Known updates pulse red; confirmed current versions remain green; offline/unknown states do not claim to be current.
 
-## Build the requested two-item distribution
+## Build
 
-From PowerShell with .NET 10 SDK:
-
-```powershell
-./installer/build.ps1
-```
-
-Output:
-
-```text
-dist/StarLux_LMM_Installer/
-├── StarLux_LMM_installer_安装器.exe
-└── version/
-    ├── 安装说明.md
-    └── 1.1.8beta-language-fix/
-        ├── manifest.json
-        └── payload/
-            ├── StarLux_LMM_v1.1.8beta.lua
-            ├── LMM_Report_Reader.html
-            ├── README_1.1.8beta.md
-            ├── LICENSE
-            └── LMM_UI_118/...
-```
-
-`dist/StarLux_LMM_Installer.zip` contains exactly these two root entries. `backup` is created beside the EXE **at installation time**, not shipped empty. Preferences store only the chosen simulator path in `%LOCALAPPDATA%/StarLux_LMM_Installer/preferences.json`. Downloads use a unique OS temporary staging directory and do not pollute the portable release root.
-
-The current package is generated from the working tree's language-fixed source, not the earlier `StarLux_LMM_v1.1.8beta.zip`. Build-generated manifests carry SHA256 for every installed file; the bundled fonts keep their OFL license. Existing config is deliberately not included/overwritten.
-
-## Architecture and boundaries
-
-- `Core.cs`: bounded discovery (Steam registry/libraryfolders/appmanifest, X-Plane install list, fixed common paths), package validation, install planning, backup, restore and installed-file receipts.
-- `Network.cs`: bounded release pagination, GitHub/Gitee merge by version **and asset filename**, HTTPS host restrictions, timeout-based failover, download limits and checksum verification. Assets named `StarLux-Landing-Meter*.zip` or `StarLux_LMM_v*.zip` are supported; repository snapshots and installer ZIPs are excluded.
-- `MainForm.cs`: bilingual UI, explicit version/target confirmation, downgrade warning, missing-FWL consent, download cancellation, backup restoration. Catalog checks do not disable local installation.
-- `SelfTests.cs`: offline integration tests with isolated fake simulators; optional real download tests. These do not install into the user's real X-Plane.
-
-Only active **LMM main scripts** matching the explicit filename family are removed from Scripts, after backup. Other scripts, all user configs, logs and airport caches remain untouched. Locally renamed LMM scripts outside the filename family must be removed manually; the installer does not guess ownership of arbitrary Lua files.
-
-Every target is guarded by a per-target process mutex. Backups are checksum-verified before writing. The journal is persisted before writes, with a pending marker in the simulator plugins folder so an interrupted installation is discoverable even if the installer is later moved. Ordinary errors roll back immediately; interrupted transactions require restoration. This is not a guarantee against disk hardware failure or loss of the backup drive. Backups are not automatically pruned.
-
-ZIP entries reject traversal, Windows device names/ADS, duplicate case-insensitive paths, links and over-large expansion. Reparse/junction simulator or backup paths are rejected rather than followed. Installer is as-invoker, does not disable antivirus, change OS settings, run downloaded scripts, kill X-Plane, self-update its EXE, or publish releases.
-
-## Publishing future local / online versions
-
-Prepare a single clean payload directory with only the files intended for installation, then:
+Requires the .NET 10 SDK on Windows. The shipped executable is self-contained and needs no separately installed .NET runtime.
 
 ```powershell
-./installer/pack-version.ps1 -SourceDirectory 'D:/release-payload' -DestinationDirectory 'D:/release/version/1.1.8beta2' -Version '1.1.8beta2' -Build '20260920-preview'
+dotnet restore installer/StarLux.Installer.csproj
+./installer/build.ps1 -NoRestore
+# Optionally include an existing, verified plugin version directory:
+./installer/build.ps1 -NoRestore -PluginVersionDirectory 'D:/release/1.1.8/version'
 ```
 
-For online installation, ZIP the generated `manifest.json` **and** `payload` together; upload it as a GitHub/Gitee **Release attachment**, e.g. `StarLux_LMM_v1.1.8beta2.zip`. Keep identical bytes and filenames on both sites. A normal repository commit is not a release and does not change the installer's version menu. Use a new version tag for updates; editing files under the same tag/build is supported as reinstall, not automatically reported as a higher version.
+Output: `dist/installer/1.0.0/`. The offline bundle has the EXE and `version/` at its root. No plugin development source is automatically promoted or packaged. `-SkipPublish` reuses `.tools/installer-v1/published/` after checking its product and version.
 
-The installer already understands the historical public 1.1.4 CN/International assets. For these legacy ZIPs it extracts only its allowlist and ignores bundled settings/logs. GitHub's SHA256 asset digest is verified; if a matching Gitee mirror has no digest, GitHub's known digest is used. If neither source supplies a digest, the user must confirm the weaker HTTPS-only legacy provenance. SHA256 is integrity protection, not an offline cryptographic publisher signature.
+For future plugin 1.1.9 packaging, use `tools/prepare_release_119.ps1` separately.
 
-Local manifest schema:
+## Self-update release contract
 
-```json
-{
-  "schema": 1,
-  "product": "StarLux_LMM",
-  "version": "1.1.8beta2",
-  "build": "20260920-preview",
-  "kind": "flywithlua",
-  "notes": "Release notes",
-  "files": [{ "path": "StarLux_LMM_v1.1.8beta2.lua", "sha256": "64 hexadecimal characters" }]
-}
-```
+Publish the following files from the build output under **`installer-v1.0.0`** on the configured official repositories:
 
-Paths are relative to `payload`, not arbitrary destinations. Local discovery accepts `version/manifest.json` or one subdirectory per version. Unmanifested local ZIPs are not automatically trusted or executed. A future `kind: "native"` uses only `Resources/plugins/StarLux_LMM`, requires `win_x64/StarLux_LMM.xpl`, and does not require FlyWithLua. Lua→native disables the old Lua main; native→Lua is blocked until the native plugin has been manually moved out. Native installation plumbing is tested with fixtures; no native LMM binary is shipped or claimed ready.
+| Asset | Purpose |
+| --- | --- |
+| `StarLux_LMM_Installer_v1.0.0.zip` | User-facing portable/offline bundle |
+| `StarLux_LMM_Installer_Update_v1.0.0.zip` | Self-update payload: exactly the EXE and `installer-update.json` |
+| `installer-release.json` | Product/version/asset name and archive SHA256 for sources without an API digest |
+| `SHA256SUMS.txt` | Checksums for the generated distribution files |
 
-## FlyWithLua NG+ provenance and domestic mirror
+The internal update manifest identifies `StarLux_LMM_Installer`, the version, the fixed executable filename and its SHA256. The release metadata hashes the entire ZIP. Downloads must originate at the configured repositories over HTTPS; redirects, paths and sizes are checked. Product/version metadata in the PE must match the selected update. Conflicting mirror digests are excluded. These integrity checks do not replace publisher code signing.
 
-The [official NG+ page](https://forums.x-plane.org/files/file/82888-flywithlua-ng-next-generation-plus-edition-for-x-plane-12-win-lin-mac/) says 2.8.14 was restored while 2.8.16 issues were being investigated. The GitHub Releases `latest` endpoint is still XP11 2.7.32 and must **not** be used for XP12 auto-install.
+Future versions increment the installer project's `<Version>` and publish the matching `installer-v...` tag and filenames. Both repositories should serve identical bytes. The current local work has not uploaded these assets; an unpublished channel displays “No installer release package published”, not “Up to date”.
 
-Instead, consent-based download uses the [official fixed repository commit](https://github.com/X-Friese/FlyWithLua/tree/453f6a22de4fde15a9c960588690f4780d7d7bf0). Its included Windows binary identifies itself as **2.8.14 build Apr 15 2026 10:24:09**, with OpenAL32/glut DLLs. The installer extracts only Windows runtime/support folders, copies the repository MIT license, and never enables the repository's demo scripts. It does not overwrite an existing detected FWL installation. File detection is not a live plugin load/compatibility test.
+Self-update keeps a previous executable beside the target and a staging `result.json` for recovery. Failure to restart returns to the original executable where filesystem permissions permit. Browser preferences cannot be restored from file backups after a clean reset has already run in the browser.
 
-Pinned archive:
-
-```text
-https://codeload.github.com/X-Friese/FlyWithLua/zip/453f6a22de4fde15a9c960588690f4780d7d7bf0
-SHA256 c6e1a4517328c4df20887bba4b6bb40a375344ec5230a39cfd35a99c9708819f
-```
-
-For a domestic mirror, first review redistribution licenses and publish this **unchanged archive** as an attachment under the user's Gitee project. Then add `version/flywithlua-mirrors.json` (inside the second release-root entry):
-
-```json
-[
-  {
-    "name": "Gitee",
-    "url": "https://gitee.com/starlux531/starluxlmm/releases/download/YOUR_RELEASE/FlyWithLua-2.8.14-official.zip",
-    "sha256": "c6e1a4517328c4df20887bba4b6bb40a375344ec5230a39cfd35a99c9708819f"
-  }
-]
-```
-
-This is a publishing template, **not an existing URL**. No mirror was uploaded during development. The EXE accepts only matching pinned hashes and approved repository URLs, falling back to the official fixed GitHub source. Until the mirror is published/configured, dependency auto-download needs GitHub connectivity; manual NG+ ZIP import remains available. LMM itself already has working dual-source release assets.
-
-## Verification commands
+## Verification
 
 ```powershell
-dotnet build installer/StarLux.Installer.csproj -c Release
-$exe = 'D:/Starlux_LMM/installer/bin/Release/net10.0-windows/win-x64/StarLux_LMM_installer_安装器.exe'
-Start-Process -FilePath $exe -ArgumentList @('--self-test', 'D:/Starlux_LMM/.tools/installer-tests.json', 'D:/Starlux_LMM/dist/StarLux_LMM_Installer/version/1.1.8beta-language-fix') -Wait -WindowStyle Hidden
+$exe = 'D:/Starlux_LMM/.tools/installer-v1/published/StarLux_LMM_installer_安装器.exe'
+Start-Process -FilePath $exe -ArgumentList @('--self-test', 'D:/Starlux_LMM/.tools/installer-v1/tests.json') -WindowStyle Hidden -Wait
 ```
 
-Optional `--network` downloads and validates both public 1.1.4 sources; `--fwl-archive PATH` validates the pinned archive and installs/restores it in a fixture. Test fixture roots remain in OS temp for inspection. `--inspect XP_ROOT OUTPUT.json` and `--detect OUTPUT.json` are read-only diagnostics; `--render OUTPUT.png` produces an off-screen UI preview without connecting to the internet. Paths with spaces must be quoted in process argument strings.
+For an actual self-update replacement/restart test, build a self-contained higher-version executable into a separate fixture folder and append `--update-fixture PATH_TO_EXE` to the test arguments. Tests operate only on temporary fixtures. `--render OUTPUT.png --language en --preview-updates` and `--language zh --preview-current` render off-screen previews with explicitly simulated statuses; they make no network requests and do not inspect a real simulator.
 
-Before wider publication: test on a clean Windows 10/11 machine (no SDK), non-admin directories, 125–200% DPI, no FWL, an existing custom FWL setup, multiple Steam libraries, offline/GitHub-blocked networks, and a real XP12 startup after installation. Current verification covers the executable and fixture file operations, not an actual simulator startup. Sign the EXE with the publisher's code-signing certificate before general release where practical; no certificate or identity is invented by this project.
+The existing `--inspect XP_ROOT OUTPUT.json` and `--detect OUTPUT.json` diagnostics remain read-only. See [validation results](VALIDATION.md) and [user guide](USER_GUIDE.md).

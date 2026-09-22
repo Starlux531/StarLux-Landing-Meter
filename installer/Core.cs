@@ -19,6 +19,7 @@ public sealed class PackageManifest
     public string Notes { get; set; } = "";
     public string UiVariant { get; set; } = "";
     public string DefaultLanguage { get; set; } = "";
+    public string AnalyzerResetToken { get; set; } = "";
     public List<PayloadFile> Files { get; set; } = [];
 }
 public sealed class Release
@@ -51,7 +52,7 @@ public sealed class Journal
 }
 public record JournalEntry(string Path, bool Existed, string Sha256 = "");
 
-public static class Core
+public static partial class Core
 {
     sealed class TargetLease : IDisposable
     {
@@ -62,7 +63,7 @@ public static class Core
             var key = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(target).TrimEnd('\\').ToUpperInvariant())));
             mutex = new Mutex(false, "Local\\StarLuxLMM-" + key);
             try { acquired = mutex.WaitOne(0); } catch (AbandonedMutexException) { acquired = true; }
-            if (!acquired) { mutex.Dispose(); throw new IOException("此 X-Plane 正在被其他安装器修改，请稍后重试。 / Another installer is modifying this simulator."); }
+            if (!acquired) { mutex.Dispose(); throw new IOException(U.T("此 X-Plane 正在被其他安装器修改，请稍后重试。","Another installer is modifying this simulator.")); }
         }
         public void Dispose() { if (acquired) mutex.ReleaseMutex(); mutex.Dispose(); }
     }
@@ -102,13 +103,13 @@ public static class Core
     }
     public static string SafePath(string root, string relative)
     {
-        if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Contains(':')) throw new IOException("非法路径 / Invalid relative path: " + relative);
+        if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Contains(':')) throw new IOException(U.T("非法路径","Invalid relative path: ") + relative);
         var parts = relative.Replace('\\', '/').Split('/');
         if (parts.Any(p => p is ".." or "." or "" || p.EndsWith(' ') || p.EndsWith('.') || p.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || Regex.IsMatch(p, @"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", RegexOptions.IgnoreCase)))
-            throw new IOException("非法路径 / Invalid relative path: " + relative);
+            throw new IOException(U.T("非法路径","Invalid relative path: ") + relative);
         var full = Path.GetFullPath(Path.Combine(root, relative));
         var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) throw new IOException("路径超出目标 / Path escapes target");
+        if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("路径超出目标","Path escapes target"));
         NoLinks(full);
         return full;
     }
@@ -116,7 +117,7 @@ public static class Core
     {
         for (var p = Path.GetFullPath(path); p != null; p = Path.GetDirectoryName(p))
             if ((File.Exists(p) || Directory.Exists(p)) && (File.GetAttributes(p) & FileAttributes.ReparsePoint) != 0)
-                throw new IOException("为保证备份安全，不支持符号链接或目录联接 / Reparse point: " + p);
+                throw new IOException(U.T("为保证备份安全，不支持符号链接或目录联接","Reparse point: ") + p);
     }
     public static IEnumerable<string> Files(string root)
     {
@@ -127,39 +128,22 @@ public static class Core
     public static bool IsXPlane(string path) => File.Exists(Path.Combine(path, "X-Plane.exe")) && Directory.Exists(Path.Combine(path, "Resources", "plugins"));
     public static void ValidateTarget(string path)
     {
-        if (!IsXPlane(path)) throw new IOException("请选择含 X-Plane.exe 和 Resources/plugins 的 X-Plane 根目录。 / Select the X-Plane root.");
+        if (!IsXPlane(path)) throw new IOException(U.T("请选择含 X-Plane.exe 和 Resources/plugins 的 X-Plane 根目录。","Select the X-Plane root."));
         NoLinks(path);
         // Avoid interpreting an XP11 installation as an XP12 target. Missing metadata remains user-confirmed.
         var version = FileVersionInfo.GetVersionInfo(Path.Combine(path, "X-Plane.exe")).ProductMajorPart;
-        if (version > 0 && version < 12) throw new IOException("本安装器面向 X-Plane 12，不支持 X-Plane 11。 / X-Plane 12 required.");
+        if (version > 0 && version < 12) throw new IOException(U.T("本安装器面向 X-Plane 12，不支持 X-Plane 11。","X-Plane 12 required."));
     }
     public static void CheckNotRunning()
     {
-        if (Process.GetProcessesByName("X-Plane").Length > 0) throw new IOException("请完全退出 X-Plane 后再安装或恢复。 / Exit X-Plane before installing or restoring.");
+        if (Process.GetProcessesByName("X-Plane").Length > 0) throw new IOException(U.T("请完全退出 X-Plane 后再安装或恢复。","Exit X-Plane before installing or restoring."));
     }
     public static bool HasFwl(string root) => new[] { "win_x64/FlyWithLua.xpl", "64/win.xpl" }.Any(p => File.Exists(Path.Combine(root, Fwl, p)))
         && File.Exists(Path.Combine(root, Fwl, "Internals/FlyWithLua.ini"));
     public static InstalledState Inspect(string root)
     {
-        if (!IsXPlane(root)) return new("", "尚未选择有效的 X-Plane 根目录 / No valid X-Plane folder selected", false);
-        var scripts = Path.Combine(root, Scripts);
-        var mains = Directory.Exists(scripts) ? Directory.GetFiles(scripts, "*.lua").Where(f => MainLua(Path.GetFileName(f))).ToArray() : [];
-        var v = mains.Length == 0 ? "" : string.Join(", ", mains.Select(f => ExtractVersion(Path.GetFileName(f))));
-        var details = mains.Length switch { 0 => "未安装 / Not installed", 1 => "已安装 / Installed: " + v, _ => "检测到多个主脚本，安装时将备份旧脚本 / Multiple active scripts: " + v };
-        var receipt = Path.Combine(root, Receipt);
-        if (File.Exists(receipt))
-        {
-            try
-            {
-                var m = JsonSerializer.Deserialize<PackageManifest>(File.ReadAllText(receipt), Json)!;
-                var prefix = m.Kind == "native" ? "Resources/plugins/StarLux_LMM" : Scripts;
-                var valid = m.Files.Count > 0 && m.Files.All(f => { var p = SafePath(Path.Combine(root, prefix), f.Path); return File.Exists(p) && Hash(p) == f.Sha256; });
-                if (valid) { v = m.Version; details = $"已安装 / Installed: {v} · {m.Build}（文件校验通过 / verified）"; }
-                else details += "\n安装记录与文件不一致，建议重新安装 / Receipt differs; repair recommended";
-            }
-            catch { details += "\n安装记录无法读取 / Invalid receipt"; }
-        }
-        return new(v, details, HasFwl(root));
+        var diagnosis = Diagnose(root);
+        return new(diagnosis.Version, diagnosis.Describe(), diagnosis.HasFlyWithLua);
     }
     public static List<string> Discover(string baseDir)
     {
@@ -209,10 +193,10 @@ public static class Core
             try
             {
                 var m = JsonSerializer.Deserialize<PackageManifest>(File.ReadAllText(f), Json)!;
-                if (m.Product != "StarLux_LMM" || m.Schema != 1 || ExtractVersion(m.Version) == "") throw new IOException("无效清单 / Invalid manifest");
+                if (m.Product != "StarLux_LMM" || m.Schema != 1 || ExtractVersion(m.Version) == "") throw new IOException(U.T("无效清单","Invalid manifest"));
                 result.Add(new Release { Version = m.Version, Build = m.Build, UiVariant = m.UiVariant, DefaultLanguage = m.DefaultLanguage, LocalDirectory = dir });
             }
-            catch (Exception e) { log($"本地版本忽略 / Skipped: {f}: {e.Message}"); }
+            catch (Exception e) { log(U.T("本地版本忽略：", "Local package skipped: ") + f + ": " + e.Message); }
         }
         return result.OrderByDescending(r => r.Version, Comparer<string>.Create(CompareVersion)).ToList();
     }
@@ -220,17 +204,17 @@ public static class Core
     {
         using var archive = ZipFile.OpenRead(zip);
         long total = 0; var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (archive.Entries.Count > 20000) throw new IOException("ZIP 文件过多 / Too many ZIP entries");
+        if (archive.Entries.Count > 20000) throw new IOException(U.T("ZIP 文件过多","Too many ZIP entries"));
         foreach (var entry in archive.Entries)
         {
             // Reject Unix symlinks, Windows reparse points, traversal, duplicate Windows paths and zip bombs.
-            if (((entry.ExternalAttributes >> 16) & 0xf000) == 0xa000 || (entry.ExternalAttributes & 0x400) != 0) throw new IOException("ZIP 不允许链接 / ZIP links forbidden");
+            if (((entry.ExternalAttributes >> 16) & 0xf000) == 0xa000 || (entry.ExternalAttributes & 0x400) != 0) throw new IOException(U.T("ZIP 不允许链接","ZIP links forbidden"));
             var relative = entry.FullName.Replace('\\', '/').TrimEnd('/'); if (relative == "") continue;
             var target = SafePath(destination, relative);
-            if (!seen.Add(relative)) throw new IOException("ZIP 重复路径 / Duplicate ZIP path: " + relative);
+            if (!seen.Add(relative)) throw new IOException(U.T("ZIP 重复路径","Duplicate ZIP path: ") + relative);
             if (entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\')) { Directory.CreateDirectory(target); continue; }
             total += entry.Length;
-            if (entry.Length > 256L * 1024 * 1024 || total > 512L * 1024 * 1024) throw new IOException("ZIP 超出大小限制 / ZIP size limit");
+            if (entry.Length > 256L * 1024 * 1024 || total > 512L * 1024 * 1024) throw new IOException(U.T("ZIP 超出大小限制","ZIP size limit"));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             entry.ExtractToFile(target, false);
         }
@@ -240,9 +224,9 @@ public static class Core
         var manifestFile = Path.Combine(directory, "manifest.json");
         if (File.Exists(manifestFile))
         {
-            var manifest = JsonSerializer.Deserialize<PackageManifest>(File.ReadAllText(manifestFile), Json) ?? throw new IOException("空清单 / Empty manifest");
+            var manifest = JsonSerializer.Deserialize<PackageManifest>(File.ReadAllText(manifestFile), Json) ?? throw new IOException(U.T("空清单","Empty manifest"));
             var prepared = new PreparedPackage(manifest, Path.Combine(directory, "payload")); ValidatePackage(prepared);
-            if (version.Length > 0 && CompareVersion(version, manifest.Version) != 0) throw new IOException("所选版本与清单不一致 / Manifest version mismatch");
+            if (version.Length > 0 && CompareVersion(version, manifest.Version) != 0) throw new IOException(U.T("所选版本与清单不一致","Manifest version mismatch"));
             return prepared;
         }
         // Historic release ZIPs are not repository snapshots. Only a unique active payload is accepted.
@@ -250,10 +234,10 @@ public static class Core
         var manifests = all.Where(f => Path.GetFileName(f) == "manifest.json" && !f.Contains(Path.DirectorySeparatorChar + "fonts" + Path.DirectorySeparatorChar)).ToArray();
         if (manifests.Length == 1) return Prepare(Path.GetDirectoryName(manifests[0])!, version);
         var mains = all.Where(f => MainLua(Path.GetFileName(f))).ToArray();
-        if (mains.Length != 1) throw new IOException("发布包应只有一个 LMM 主脚本；不接受含历史备份的仓库快照。 / Ambiguous package; use release ZIP.");
+        if (mains.Length != 1) throw new IOException(U.T("发布包应只有一个 LMM 主脚本；不接受含历史备份的仓库快照。","Ambiguous package; use release ZIP."));
         var root = Path.GetDirectoryName(mains[0])!;
-        var m = new PackageManifest { Version = ExtractVersion(Path.GetFileName(mains[0])), Build = "legacy-release", Notes = "历史发布包 / Legacy release" };
-        if (version.Length > 0 && CompareVersion(version, m.Version) != 0) throw new IOException("所选版本与主脚本不一致 / Release version mismatch");
+        var m = new PackageManifest { Version = ExtractVersion(Path.GetFileName(mains[0])), Build = "legacy-release", Notes = U.T("历史发布包","Legacy release") };
+        if (version.Length > 0 && CompareVersion(version, m.Version) != 0) throw new IOException(U.T("所选版本与主脚本不一致","Release version mismatch"));
         m.Files = Files(root).Select(f => new PayloadFile(Path.GetRelativePath(root, f).Replace('\\', '/'), Hash(f))).Where(f => Allowed(m.Kind, f.Path)).ToList();
         var p = new PreparedPackage(m, root); ValidatePackage(p); return p;
     }
@@ -268,28 +252,28 @@ public static class Core
     public static void ValidatePackage(PreparedPackage package)
     {
         var m = package.Manifest;
-        if (m.Schema != 1 || m.Product != "StarLux_LMM" || ExtractVersion(m.Version) == "" || m.Kind is not ("flywithlua" or "native") || m.Files.Count == 0 || m.Files.Count > 2000) throw new IOException("不支持的安装清单 / Unsupported manifest");
+        if (m.Schema != 1 || m.Product != "StarLux_LMM" || string.IsNullOrWhiteSpace(m.Version) || ExtractVersion(m.Version) == "" || m.Kind is not ("flywithlua" or "native") || m.UiVariant is not ("" or "sdk440" or "legacy") || m.Files == null || m.Files.Count == 0 || m.Files.Count > 2000) throw new IOException(U.T("不支持的安装清单","Unsupported manifest"));
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in m.Files)
         {
-            if (!seen.Add(f.Path.Replace('\\', '/')) || !Allowed(m.Kind, f.Path)) throw new IOException("不允许的载荷文件 / Disallowed payload: " + f.Path);
+            if (f == null || string.IsNullOrEmpty(f.Path) || string.IsNullOrEmpty(f.Sha256) || !seen.Add(f.Path.Replace('\\', '/')) || !Allowed(m.Kind, f.Path)) throw new IOException(U.T("不允许的载荷文件","Disallowed payload: ") + f?.Path);
             var path = SafePath(package.Root, f.Path);
-            if (!Regex.IsMatch(f.Sha256, "^[a-fA-F0-9]{64}$") || !File.Exists(path) || !Hash(path).Equals(f.Sha256, StringComparison.OrdinalIgnoreCase)) throw new IOException("文件校验失败 / SHA256 mismatch: " + f.Path);
+            if (!Regex.IsMatch(f.Sha256, "^[a-fA-F0-9]{64}$") || !File.Exists(path) || !Hash(path).Equals(f.Sha256, StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("文件校验失败","SHA256 mismatch: ") + f.Path);
         }
-        if (m.Kind == "flywithlua" && m.Files.Count(f => MainLua(f.Path)) != 1) throw new IOException("必须只有一个主脚本 / Exactly one main script required");
+        if (m.Kind == "flywithlua" && m.Files.Count(f => MainLua(f.Path)) != 1) throw new IOException(U.T("必须只有一个主脚本","Exactly one main script required"));
         if (m.Kind == "flywithlua")
         {
             var fileVersion = ExtractVersion(m.Files.Single(f => MainLua(f.Path)).Path);
-            if (fileVersion.Length > 0 && CompareVersion(fileVersion, m.Version) != 0) throw new IOException("主脚本文件名版本与清单不同 / Main script version differs from manifest");
+            if (fileVersion.Length > 0 && CompareVersion(fileVersion, m.Version) != 0) throw new IOException(U.T("主脚本文件名版本与清单不同","Main script version differs from manifest"));
         }
-        if (m.Kind == "native" && !m.Files.Any(f => f.Path.Replace('\\', '/').Equals("win_x64/StarLux_LMM.xpl", StringComparison.OrdinalIgnoreCase))) throw new IOException("缺少原生插件 / Missing native plugin");
+        if (m.Kind == "native" && !m.Files.Any(f => f.Path.Replace('\\', '/').Equals("win_x64/StarLux_LMM.xpl", StringComparison.OrdinalIgnoreCase))) throw new IOException(U.T("缺少原生插件","Missing native plugin"));
     }
     public static string FindFwl(string extracted)
     {
         var binaries = Files(extracted).Where(f => Path.GetFileName(f).Equals("FlyWithLua.xpl", StringComparison.OrdinalIgnoreCase) && Path.GetFileName(Path.GetDirectoryName(f)) == "win_x64").ToArray();
-        if (binaries.Length != 1) throw new IOException("请选择 XP12 NG+ Windows 版 ZIP（win_x64/FlyWithLua.xpl）。 / XP12 NG+ ZIP required.");
+        if (binaries.Length != 1) throw new IOException(U.T("请选择 XP12 NG+ Windows 版 ZIP（win_x64/FlyWithLua.xpl）。","XP12 NG+ ZIP required."));
         var root = Path.GetDirectoryName(Path.GetDirectoryName(binaries[0]))!;
-        if (!File.Exists(Path.Combine(root, "Internals/FlyWithLua.ini")) || !Directory.Exists(Path.Combine(root, "Modules"))) throw new IOException("FlyWithLua ZIP 不完整 / Incomplete FlyWithLua ZIP");
+        if (!File.Exists(Path.Combine(root, "Internals/FlyWithLua.ini")) || !Directory.Exists(Path.Combine(root, "Modules"))) throw new IOException(U.T("FlyWithLua ZIP 不完整","Incomplete FlyWithLua ZIP"));
         return root;
     }
     public static Dictionary<string, string> Plan(string target, PreparedPackage package, string? fwlRoot)
@@ -300,7 +284,7 @@ public static class Core
         foreach (var file in package.Manifest.Files) plan.Add(prefix + "/" + file.Path.Replace('\\', '/'), SafePath(package.Root, file.Path));
         if (package.Manifest.Kind == "flywithlua" && !HasFwl(target))
         {
-            if (fwlRoot == null) throw new IOException("缺少 FlyWithLua，未授权安装依赖 / FlyWithLua required");
+            if (fwlRoot == null) throw new IOException(U.T("缺少 FlyWithLua，未授权安装依赖","FlyWithLua required"));
             // Never replace another installation's user scripts/preferences; deploy only runtime essentials.
             foreach (var f in Files(fwlRoot))
             {
@@ -313,31 +297,45 @@ public static class Core
         // Old LMM scripts only; leave all other scripts, reports, settings and airport caches untouched.
         var scripts = Path.Combine(target, Scripts);
         if (Directory.Exists(scripts)) foreach (var old in Directory.GetFiles(scripts, "*.lua").Where(f => MainLua(Path.GetFileName(f)))) plan.TryAdd(Scripts + "/" + Path.GetFileName(old), "");
+        foreach (var old in OwnedFiles(target)) plan.TryAdd(old, "");
         if (package.Manifest.Kind == "flywithlua")
         {
             var native = Path.Combine(target, "Resources/plugins/StarLux_LMM");
             if (Directory.Exists(native) && Files(native).Any(f => f.EndsWith(".xpl", StringComparison.OrdinalIgnoreCase)))
-                throw new IOException("检测到原生 StarLux_LMM 插件，请先手动移出其目录，避免双重记录。 / Remove native LMM before switching to Lua.");
+                throw new IOException(U.T("检测到原生 StarLux_LMM 插件，请先手动移出其目录，避免双重记录。","Remove native LMM before switching to Lua."));
         }
         foreach (var path in plan.Keys) SafePath(target, path);
         return plan;
     }
-    public static string Install(string baseDir, string target, PreparedPackage package, string? fwlRoot, Action<string> log, Action<int> progress, bool checkRunning = true, int failAfter = -1)
+    public static string Install(string baseDir, string target, PreparedPackage package, string? fwlRoot, Action<string> log, Action<int> progress, bool checkRunning = true, int failAfter = -1, bool clean = false)
     {
         if (checkRunning) CheckNotRunning();
         target = NormalizeDirectory(target);
         using var targetLease = new TargetLease(target);
-        var plan = Plan(target, package, fwlRoot);
+        ValidateCompatibility(target, package.Manifest);
+        var originalRoot = package.Root;
+        package = PreparePreferences(target, package, clean);
+        try
+        {
+            var plan = Plan(target, package, fwlRoot);
+            if (clean) { plan[Scripts + "/LMM_Settings.cfg"] = ""; plan[Scripts + "/LMM_Log/LMM_Viewer.html"] = ""; plan[Scripts + "/LMM_Log/LMM_Viewer_Data.js"] = ""; }
+            return ExecutePlan(baseDir, target, plan, package.Manifest, log, progress, checkRunning, failAfter);
+        }
+        finally { if (package.Root != originalRoot) { NoLinks(package.Root); Directory.Delete(package.Root, true); } }
+    }
+    static string ExecutePlan(string baseDir, string target, Dictionary<string,string> plan, PackageManifest? manifest, Action<string> log, Action<int> progress, bool checkRunning, int failAfter)
+    {
         var backupRoot = Path.Combine(baseDir, "backup"); NoLinks(backupRoot);
         // Keep recovery data outside the simulator tree; user must move an installer placed inside XP.
-        if (Path.GetFullPath(backupRoot).StartsWith(target.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)) throw new IOException("请将安装器移到 X-Plane 文件夹外，再安装。 / Keep installer/backup outside X-Plane.");
+        if (Path.GetFullPath(backupRoot).StartsWith(target.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("请将安装器移到 X-Plane 文件夹外，再安装。","Keep installer/backup outside X-Plane."));
         var backup = Path.Combine(backupRoot, DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8]);
         // A portable installer may have been moved. Also check an in-target marker from an interrupted run.
         var marker = SafePath(target, "Resources/plugins/StarLux_LMM.install.pending.json");
-        if (File.Exists(marker)) throw new IOException("发现未完成的安装，请先恢复标记中指定的备份 / Restore incomplete installation first: " + File.ReadAllText(marker));
+        if (File.Exists(marker)) throw new IOException(U.T("发现未完成的安装，请先恢复标记中指定的备份","Restore incomplete installation first: ") + File.ReadAllText(marker));
         Directory.CreateDirectory(backup);
-        var receiptSource = Path.Combine(backup, "new-receipt.json"); File.WriteAllText(receiptSource, JsonSerializer.Serialize(package.Manifest, Json)); plan[Receipt] = receiptSource;
-        var journal = new Journal { Target = target, Version = package.Manifest.Version };
+        if (manifest != null) { var receiptSource = Path.Combine(backup, "new-receipt.json"); File.WriteAllText(receiptSource, JsonSerializer.Serialize(manifest, Json)); plan[Receipt] = receiptSource; }
+        else plan[Receipt] = "";
+        var journal = new Journal { Target = target, Version = manifest?.Version ?? "uninstall" };
         var journalPath = Path.Combine(backup, "transaction.json");
         void Save() { File.WriteAllText(journalPath + ".tmp", JsonSerializer.Serialize(journal, Json)); File.Move(journalPath + ".tmp", journalPath, true); }
         // All originals are copied BEFORE any target writes. Backup failure leaves target untouched.
@@ -346,9 +344,9 @@ public static class Core
             var path = SafePath(target, relative); var exists = File.Exists(path);
             var hash = exists ? Hash(path) : "";
             journal.Entries.Add(new(relative, exists, hash));
-            if (exists) { var dest = SafePath(Path.Combine(backup, "files"), relative); Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(path, dest, false); if (Hash(dest) != hash) throw new IOException("备份校验失败，未修改目标 / Backup verification failed; target unchanged"); }
+            if (exists) { var dest = SafePath(Path.Combine(backup, "files"), relative); Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(path, dest, false); if (Hash(dest) != hash) throw new IOException(U.T("备份校验失败，未修改目标","Backup verification failed; target unchanged")); }
         }
-        Save(); log("备份 / Backup: " + backup);
+        Save(); log(U.T("备份","Backup: ") + backup);
         try
         {
             if (checkRunning) CheckNotRunning();
@@ -358,16 +356,17 @@ public static class Core
             {
                 var dest = SafePath(target, relative);
                 if (source.Length == 0) File.Delete(dest);
-                else { Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(source, dest, true); if (Hash(source) != Hash(dest)) throw new IOException("写入后校验失败 / Write verification failed: " + relative); }
+                else { Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(source, dest, true); if (Hash(source) != Hash(dest)) throw new IOException(U.T("写入后校验失败","Write verification failed: ") + relative); }
                 if (++count == failAfter) throw new IOException("Injected test failure");
                 progress(count * 100 / plan.Count);
             }
+            PruneEmptyUiDirectories(target);
             journal.Status = "completed"; Save(); File.Delete(marker); return backup;
         }
         catch (Exception installError)
         {
-            try { Restore(backup, target, false); log("安装失败，原文件已恢复 / Failed; originals restored"); }
-            catch (Exception restoreError) { throw new IOException($"安装失败且回滚未完成，请保留备份 / Recovery required: {backup}\n{installError.Message}\n{restoreError.Message}"); }
+            try { Restore(backup, target, false); log(U.T("安装失败，原文件已恢复","Failed; originals restored")); }
+            catch (Exception restoreError) { throw new IOException(U.T("安装失败且回滚未完成，请保留备份：", "Recovery required: ") + $"{backup}\n{installError.Message}\n{restoreError.Message}"); }
             throw;
         }
     }
@@ -377,17 +376,17 @@ public static class Core
         using var targetLease = new TargetLease(expectedTarget);
         NoLinks(backup);
         var file = Path.Combine(backup, "transaction.json");
-        var journal = JsonSerializer.Deserialize<Journal>(File.ReadAllText(file), Json) ?? throw new IOException("无效备份 / Invalid backup");
-        if (!NormalizeDirectory(journal.Target).Equals(NormalizeDirectory(expectedTarget), StringComparison.OrdinalIgnoreCase)) throw new IOException("备份属于其他 X-Plane 目录 / Backup target mismatch");
+        var journal = JsonSerializer.Deserialize<Journal>(File.ReadAllText(file), Json) ?? throw new IOException(U.T("无效备份","Invalid backup"));
+        if (!NormalizeDirectory(journal.Target).Equals(NormalizeDirectory(expectedTarget), StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("备份属于其他 X-Plane 目录","Backup target mismatch"));
         ValidateTarget(journal.Target);
         // Validate the full journal before touching any file, including manually altered journals.
         foreach (var entry in journal.Entries)
         {
             var rel = entry.Path.Replace('\\', '/');
-            if (!(rel.StartsWith(Fwl + "/", StringComparison.OrdinalIgnoreCase) || rel.StartsWith("Resources/plugins/StarLux_LMM/", StringComparison.OrdinalIgnoreCase) || rel == Receipt)) throw new IOException("非法备份路径 / Invalid backup path");
+            if (!(rel.StartsWith(Fwl + "/", StringComparison.OrdinalIgnoreCase) || rel.StartsWith("Resources/plugins/StarLux_LMM/", StringComparison.OrdinalIgnoreCase) || rel == Receipt)) throw new IOException(U.T("非法备份路径","Invalid backup path"));
             SafePath(journal.Target, rel);
-            if (entry.Existed && !File.Exists(SafePath(Path.Combine(backup, "files"), rel))) throw new IOException("备份缺失 / Missing backup file: " + rel);
-            if (entry.Existed && entry.Sha256.Length > 0 && !Hash(SafePath(Path.Combine(backup, "files"), rel)).Equals(entry.Sha256, StringComparison.OrdinalIgnoreCase)) throw new IOException("备份文件校验失败 / Backup file checksum mismatch: " + rel);
+            if (entry.Existed && !File.Exists(SafePath(Path.Combine(backup, "files"), rel))) throw new IOException(U.T("备份缺失","Missing backup file: ") + rel);
+            if (entry.Existed && entry.Sha256.Length > 0 && !Hash(SafePath(Path.Combine(backup, "files"), rel)).Equals(entry.Sha256, StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("备份文件校验失败","Backup file checksum mismatch: ") + rel);
         }
         foreach (var entry in journal.Entries.AsEnumerable().Reverse())
         {
