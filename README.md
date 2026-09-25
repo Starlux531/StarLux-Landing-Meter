@@ -83,6 +83,14 @@ The original aggregated TXT trace remains available for checking recorded sample
   <a href="docs/images/389431ad037fa71f20b03bb7768d3164.png"><img src="docs/images/389431ad037fa71f20b03bb7768d3164.png" alt="Original TXT trajectory table with 0.25-second aggregated samples" width="760"></a>
 </p>
 
+## 完整进近与滑跑复盘 / Full approach and rollout analysis
+
+![完整记录、滑跑轨迹与同步时间轴](docs/images/lmm-119-full-flight-analysis.png)
+
+## 触地俯视图 / Touchdown plan view
+
+![Touchdown and rollout on the runway](docs/images/lmm-119-touchdown-plan-en.png)
+
 ## 当前能力 / Features
 
 - **接地过程**：完整记录跟随接地与滑跑直至地速低于 30 kt 连续两秒；弹跳监测不再受 6 秒／100 ft 短窗限制。FPM 保留物理、VVI、AGL 的来源复核，G 保留固定 160 ms 稳健值与冲量闭合复核。
@@ -131,12 +139,3 @@ For bug reports, include versions, aircraft, replay/pause status, frame rate and
 代码采用 [MIT License](LICENSE)，随包 LMM UI 字体采用 [SIL OFL 1.1](LMM_UI_119/fonts/OFL.txt)。X-Plane、FlyWithLua 等名称归其权利人所有，本项目与其官方开发者无隶属关系。
 
 Code: MIT. Bundled fonts: SIL OFL 1.1. This project is not affiliated with the X-Plane or FlyWithLua developers.
-
-
-## 完整进近与滑跑复盘 / Full approach and rollout analysis
-
-![完整记录、滑跑轨迹与同步时间轴](docs/images/lmm-119-full-flight-analysis.png)
-
-## 触地俯视图 / Touchdown plan view
-
-![Touchdown and rollout on the runway](docs/images/lmm-119-touchdown-plan-en.png)
