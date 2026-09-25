@@ -1,16 +1,15 @@
-# StarLux Landing Meter · 1.1.9 正式版 / Stable
+# StarLux Landing Meter · 1.1.9rc2
 
-**1.1.9 于 2026-09-23 正式发布。** 从 2500 ft 地形 AGL 进近至低速滑跑的连续录制、逐时刻风与操纵数据、完整时间轴复盘、滑跑中心线评分和独立游戏覆盖层现已整合。
+**1.1.9rc2 于 2026-09-25 正式公开发行。** 修复旧 FlyWithLua 设置界面的 Lua stopped，新增同步姿态仪与 Windows 游戏内更新提示，内置安装器 **1.0.2**。
 
-**[下载 / Download 1.1.9](https://github.com/Starlux531/StarLux-Landing-Meter/releases/tag/v1.1.9)** · [版本说明](README_1.1.9.md) · [发行说明 / Release notes](RELEASE_NOTES_v1.1.9.md) · [更新记录](CHANGELOG.md) · [路线图](ROADMAP.md)
+**[下载 / Download RC2](https://github.com/Starlux531/StarLux-Landing-Meter/releases/tag/v1.1.9rc2)** · [安装说明](README_1.1.9.md) · [发行说明 / Release notes](RELEASE_NOTES_v1.1.9rc2.md) · [更新记录](CHANGELOG.md) · [路线图](ROADMAP.md)
 
-- 国内用户：`StarLux_LMM_Installer_1.1.9_CN.zip`；海外用户：`StarLux_LMM_Installer_1.1.9_EN.zip`（归档内全部为英文文件名）。完整包内置安装器 1.0.1 和四种插件载荷，已有安装器也可联网选择 1.1.9。
-- **Standard：Windows x64、XP 12.4.4+、FlyWithLua NG+。Compatibility：旧 XP 12，采用传统控件和数字覆盖层。** CN / International 只决定首次安装的默认语言，已有设置优先。安装器仅适用于 Windows。
-- 安装器保留已有设置、飞行记录和机场缓存，备份并替换插件文件。只安装包内的当前主脚本、完整 UI 目录和报告分析器，不要把不同版本主脚本同时放入 Scripts。
-- 覆盖层支持拖动、边缘缩放、折叠、实时风及 N1 反推；AP / AT 监测提示已移除，ILS 参考仅用于分析器。
-- 大盘分析仍为独立验证模块，游戏内实时 G 曲线及 FF777 专有输入适配留待后续开发。正式发布不代表所有机模与平台均已完成实测。
+- 国内包：StarLux_LMM_Installer_1.1.9rc2_CN.zip；海外包：StarLux_LMM_Installer_1.1.9rc2_EN.zip（全部使用英文/ASCII 路径）。均内置安装器 1.0.2 和四种 UI/语言载荷。
+- Standard：Windows x64、XP 12.4.4+、FlyWithLua NG+。Compatibility：旧 XP 12 的传统界面与数字覆盖层；本次重新提供 RC2 修复包。旧 v1.1.9 兼容附件仍撤回；XP 12.4.3 原用户实机反馈尚待确认。
+- 旧安装器先完成自身更新，再检查 RC2；完整安装保留配置与记录，不要混用主脚本及 UI 模块。1.1.10-beta2 测试用户需手动选择 RC2。
+- 保留全程记录、滑跑评分、风与 ILS 分析、可拖动/缩放/折叠覆盖层及反推显示；大盘分析仍为独立验证模块，不含 AP/AT 监测。
 
-Version 1.1.9 is stable. Choose the EN offline bundle for ASCII filenames, or use the existing installer to discover the four edition/language packages. Standard requires Windows x64, XP 12.4.4+ and FlyWithLua NG+; Compatibility retains legacy controls and numeric overlays on older XP 12. Existing settings and flight records are preserved. See the bilingual release notes for features and limitations.
+**Public maintenance release 1.1.9rc2**, marked Latest. Adds legacy SliderInt fixes, the ASCII Chinese label, synchronized attitude replay and background Windows update notices. Use the **EN** bundle for ASCII filenames. Both bundles include installer **1.0.2** and all four plugin variants. Update older installers first. RC2 Compatibility is available again; affected-user XP 12.4.3 validation remains pending. The original v1.1.9 Compatibility assets stay withdrawn.
 
 | 文件或目录 | 用途 |
 | --- | --- |
@@ -110,9 +109,9 @@ FPM and G use the more severe band, followed by existing centerline/bounce adjus
 
 ## 数据、更新与隐私 / Data and privacy
 
-报告、设置和机场缓存留在本机；插件和分析器不上传飞行数据。安装器才联网查询官方 GitHub／Gitee Releases、下载发行包。下载包不含作者的飞行 TXT、浏览器日志或个人配置；作者明确授权展示的截图与配色预设除外。
+报告、设置和机场缓存留在本机；插件和分析器不上传飞行数据。安装器联网查询官方 GitHub／Gitee Releases、下载发行包；Windows 插件也会后台查询官方 GitHub 发行元数据以提示更新。下载包不含作者的飞行 TXT、浏览器日志或个人配置；作者明确授权展示的截图与配色预设除外。
 
-Reports/settings/cache stay local. Only the installer contacts official release sources. Packages exclude personal flight TXT files and browser data; screenshots and sanitized appearance presets are explicitly author-approved. The installer is not yet code-signed; see the [installation guide](README_1.1.9.md) for safeguards and limitations.
+Reports/settings/cache stay local. The installer contacts official release sources; the Windows plugin also checks official GitHub release metadata for update notices. Packages exclude personal flight TXT files and browser data; screenshots and sanitized appearance presets are explicitly author-approved. The installer is not yet code-signed; see the [installation guide](README_1.1.9.md) for safeguards and limitations.
 
 ## 文档与反馈 / Documentation and feedback
 

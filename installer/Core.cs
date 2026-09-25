@@ -86,7 +86,11 @@ public static partial class Core
             var m = Regex.Match(ExtractVersion(s), @"(?i)^(\d+)\.(\d+)(?:\.(\d+))?(?:[-.]?(alpha|beta|rc)(\d*))?$");
             if (!m.Success) return ([0, 0, 0], -1, 0);
             int N(int i) => int.TryParse(m.Groups[i].Value, out var n) ? n : 0;
-            return ([N(1), N(2), N(3)], m.Groups[4].Value.ToLowerInvariant() switch { "alpha" => 0, "beta" => 1, "rc" => 2, _ => 3 }, N(5));
+            // Historical project naming: bare 1.1.9rc2+ is a maintenance revision
+            // after 1.1.9; ordinary -rc prerelease ordering remains unchanged.
+            int rank=m.Groups[4].Value.ToLowerInvariant() switch { "alpha" => 0, "beta" => 1, "rc" => 2, _ => 3 };
+            if(Regex.IsMatch(ExtractVersion(s),@"^1\.1\.9rc\d+$",RegexOptions.IgnoreCase) && N(5)>=2) rank=4;
+            return ([N(1), N(2), N(3)], rank, N(5));
         }
         var x = Parse(a); var y = Parse(b);
         for (int i = 0; i < 3; i++) { int c = x.Item1[i].CompareTo(y.Item1[i]); if (c != 0) return c; }

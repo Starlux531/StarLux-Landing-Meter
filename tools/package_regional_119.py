@@ -7,7 +7,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 meta = json.loads((ROOT / 'development.json').read_text(encoding='utf-8'))
-assert meta['channel'] == 'stable' and meta['version'] == '1.1.9'
+assert meta['channel'] == 'stable' and meta['version'] in ('1.1.9','1.1.9rc2')
 version = meta['version']
 release = ROOT / 'dist' / version
 bundle = release / f'StarLux_LMM_Installer_{version}.zip'
@@ -35,8 +35,9 @@ names += [f'StarLux_LMM_v{version}-{variant}-{language}.zip'
           for variant in ('Standard', 'Compatibility') for language in ('CN', 'International')]
 for name in names:
     shutil.copyfile(release / name, publish / name)
-shutil.copyfile(ROOT / 'RELEASE_NOTES_v1.1.9.md', publish / 'RELEASE_NOTES_v1.1.9.md')
-names.append('RELEASE_NOTES_v1.1.9.md')
+notes = f'RELEASE_NOTES_v{version}.md'
+shutil.copyfile(ROOT / notes, publish / notes)
+names.append(notes)
 assert {p.name for p in publish.iterdir()} <= set(names) | {'SHA256SUMS.txt'}
 def checksum(folder, items):
     return ''.join(hashlib.sha256((folder / name).read_bytes()).hexdigest() + '  ' + name + '\n'

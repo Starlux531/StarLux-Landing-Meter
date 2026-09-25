@@ -256,12 +256,17 @@ html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-co
 #inputIlsNote{grid-column:1/-1;color:var(--muted);font-size:10px;line-height:1.5}#inputIlsNote[hidden]{display:none}
 
 .chart-time-cursor{position:absolute;width:0;border-left:1.4px dashed var(--viz-ink);opacity:.82;pointer-events:none;z-index:2;will-change:transform}.chart-time-cursor[hidden]{display:none}
+
+.timeline-attitude{flex:1 0 148px;max-width:220px;min-width:148px;align-self:center;margin:auto;text-align:center;border:1px solid var(--line);border-radius:12px;padding:8px;background:var(--panel2)}
+.timeline-attitude svg{display:block;width:100%;max-height:200px}.timeline-attitude-title{font-size:11px;color:var(--soft)}.timeline-attitude-readout{font:700 10px Consolas,monospace;color:var(--text);padding:4px 0;white-space:nowrap}.xy-stage>.input-readouts{max-width:140px}
+@media(max-width:760px){.xy-stage>.input-readouts{max-width:none}.timeline-attitude{flex-basis:200px}}
+@media(max-width:980px){.live-panels{grid-template-columns:minmax(0,1fr)}}
 </style>
 </head>
 <body>
 <div class="app">
   <header class="topbar">
-    <div class="brand">STARLUX LANDING METRICS MONITOR · 分析器 <small id="analyzerBuild" style="font-size:10px;opacity:.75;margin-left:8px">1.1.9</small></div>
+    <div class="brand">STARLUX LANDING METRICS MONITOR · 分析器 <small id="analyzerBuild" style="font-size:10px;opacity:.75;margin-left:8px">1.1.9rc2</small></div>
     <div class="top-actions">
       <div class="privacy">完全本地读取 · 数据不会上传</div>
       <details class="theme-lab" id="themeLab"><summary class="theme-panel-toggle">RGB 配色</summary><div class="theme-popover">
@@ -400,6 +405,7 @@ html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-co
                 <div class="xy-stage">
                   <div class="input-flight-reference"><div class="xy-pad" aria-label="俯仰横滚输入"><i class="xy-ring"></i><span class="axis-name pitch">PITCH / Y</span><span class="axis-name roll">ROLL / X</span><svg class="input-wind" viewBox="0 0 100 100" aria-hidden="true"><path id="inputWindArrow" fill="none" stroke="var(--viz-compare)" stroke-opacity=".38" stroke-width="2" stroke-linecap="round" visibility="hidden"/></svg><i class="xy-dot" id="xyDot"></i><i class="xy-dot compare" id="xyCompareDot" hidden></i></div><svg id="inputLoc" class="ils-gauge" viewBox="0 0 200 28" preserveAspectRatio="xMidYMid meet" data-inop="true" role="img" aria-label="LOC INOP"><text x="0" y="10" fill="currentColor" font-size="8">LOC REF</text><path d="M100,3V24" stroke="currentColor" stroke-width="1.5"/><circle data-ils-dot="true" cx="30" cy="16" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="65" cy="16" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="135" cy="16" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="170" cy="16" r="2" fill="none" stroke="currentColor"/><path id="inputLocDiamond" visibility="hidden" class="ils-diamond" d="M0,-5L4,0L0,5L-4,0Z"/><text id="inputLocInop" class="ils-inop" x="100" y="19" text-anchor="middle">INOP</text></svg><svg id="inputGs" class="ils-gauge" viewBox="0 0 32 200" preserveAspectRatio="xMidYMid meet" data-inop="true" role="img" aria-label="GS INOP"><text x="1" y="9" fill="currentColor" font-size="8">GS</text><path d="M2,100H22" stroke="currentColor" stroke-width="1.5"/><circle data-ils-dot="true" cx="12" cy="30" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="12" cy="65" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="12" cy="135" r="2" fill="none" stroke="currentColor"/><circle data-ils-dot="true" cx="12" cy="170" r="2" fill="none" stroke="currentColor"/><path id="inputGsDiamond" visibility="hidden" class="ils-diamond" d="M0,-5L4,0L0,5L-4,0Z"/><text id="inputGsInop" class="ils-inop" x="16" y="103" text-anchor="middle">INOP</text></svg></div>
                   <div class="input-readouts"><div class="input-readout"><span>Pitch / Y</span><b id="pitchInputValue">0.0%</b></div><div class="input-readout"><span>Roll / X</span><b id="rollInputValue">0.0%</b></div><div class="input-readout"><span>Yaw / Z</span><b id="yawInputValue">0.0%</b></div><div class="input-readout"><span id="inputWindLabel">风来自 / 风速</span><b id="inputWindValue">N/A</b><small id="inputWindNote"></small></div></div>
+                  <div id="timelineAttitude" class="timeline-attitude"></div>
                   <div id="inputIlsNote" hidden></div><div class="yaw-wrap"><div class="yaw-label"><span>-100% LEFT</span><b id="yawCompareValue"></b><span>RIGHT +100%</span></div><div class="yaw-track"><i class="yaw-marker" id="yawMarker"></i><i class="yaw-marker compare" id="yawCompareMarker" hidden></i></div></div>
                 </div>
               </article>
@@ -1867,10 +1873,33 @@ function renderInstrumentPanels(report,comparison=null){
 function signedPercent(value){return Number.isFinite(value)?`${value>=0?"+":""}${(value*100).toFixed(1)}%`:"N/A"}
 function setAxisDot(element,roll,pitch){element.style.setProperty("--x-pos",`${50+clamp(Number(roll)||0,-1,1)*42}%`);element.style.setProperty("--y-pos",`${50+clamp(Number(pitch)||0,-1,1)*42}%`)}
 function setYawMarker(element,yaw){element.style.setProperty("--yaw-pos",`${50+clamp(Number(yaw)||0,-1,1)*48}%`)}
+function updateTimelineAttitude(report,time){
+  const root=$('timelineAttitude');if(!root)return;
+  if(!root._parts){
+    const title=document.createElement('strong');title.className='timeline-attitude-title';
+    const svg=svgNode('svg',{viewBox:'0 0 200 200',role:'img'}),defs=svgNode('defs'),clip=svgNode('clipPath',{id:'timelineAttitudeClip'});
+    clip.append(svgNode('circle',{cx:100,cy:100,r:91}));defs.append(clip);svg.append(defs);
+    const clipped=svgNode('g',{'clip-path':'url(#timelineAttitudeClip)'}),bank=svgNode('g'),world=svgNode('g');
+    world.append(svgNode('rect',{x:-250,y:-350,width:700,height:450,fill:'#236c98'}),svgNode('rect',{x:-250,y:100,width:700,height:450,fill:'#80613c'}),svgNode('path',{d:'M-250 100H450',stroke:'#f2f5f7','stroke-width':2}));
+    for(let p=-80;p<=80;p+=10){if(!p)continue;const y=100-p*2.3,w=p%20===0?28:16;world.append(svgNode('path',{d:`M${100-w} ${y}H${100+w}`,stroke:'#eff4f5','stroke-width':1.2}));if(Math.abs(p)<=30)world.append(svgNode('text',{x:100+w+5,y:y+3,fill:'#eff4f5','font-size':8},String(Math.abs(p))))}
+    bank.append(world);clipped.append(bank);svg.append(clipped);
+    for(const a of [-60,-45,-30,-20,-10,0,10,20,30,45,60])svg.append(svgNode('path',{d:`M100 13V${a%30===0?24:19}`,transform:`rotate(${a} 100 100)`,stroke:'#eaf1f4','stroke-width':1.5}));
+    const pointer=svgNode('path',{d:'M95 29L100 22L105 29Z',fill:'#ffda65'});svg.append(pointer,svgNode('circle',{cx:100,cy:100,r:92,fill:'none',stroke:'var(--line)','stroke-width':3}),svgNode('path',{d:'M48 100H83V107M117 107V100H152M96 100H104',fill:'none',stroke:'#ffda65','stroke-width':3,'stroke-linejoin':'round'}));
+    const missing=svgNode('text',{x:100,y:144,'text-anchor':'middle',fill:'#fff','font-size':12});svg.append(missing);
+    const readout=document.createElement('div');readout.className='timeline-attitude-readout';root.replaceChildren(title,svg,readout);root._parts={title,svg,bank,world,pointer,missing,readout,clipped};
+  }
+  const p=Number.isFinite(time)?nearestPoint(report?.trajectory||[],time):null,ok=Number.isFinite(p?.pitch)&&Number.isFinite(p?.roll),v=root._parts;
+  v.title.textContent=tr('同步姿态仪','Synchronized attitude');v.svg.setAttribute('aria-label',v.title.textContent);
+  root.dataset.available=String(ok);root.dataset.time=Number.isFinite(time)?String(time):'';
+  v.clipped.setAttribute('opacity',ok?'1':'.15');v.pointer.setAttribute('visibility',ok?'visible':'hidden');v.missing.textContent=ok?'':tr('无姿态数据','NO ATTITUDE DATA');
+  v.bank.setAttribute('transform',`rotate(${ok?-p.roll:0} 100 100)`);v.world.setAttribute('transform',`translate(0 ${ok?clamp(p.pitch,-90,90)*2.3:0})`);v.pointer.setAttribute('transform',`rotate(${ok?-p.roll:0} 100 100)`);
+  const signed=x=>`${x>=0?'+':''}${x.toFixed(1)}°`;
+  v.readout.textContent=ok?`Pitch ${signed(p.pitch)} · Roll ${signed(p.roll)}`:'Pitch — · Roll —';
+}
 function updateInstrumentPanels(time){
   updatePlanViews(time);
   const report=activeRecord()?.report,comparison=comparisonRecord()?.report||null,active=Number.isFinite(time)&&Boolean(report),main=active?nearestPoint(report.controlTrace||[],time):null,reference=active&&comparison?nearestPoint(comparison.controlTrace||[],time):null,spec=ui.throttleAxes?._powerSpec||powerGaugeSpec(report,comparison);
-  updateInputWind(report,time);updateInputIls(report,time);
+  updateInputWind(report,time);updateInputIls(report,time);updateTimelineAttitude(report,time);
   ui.throttleState.textContent=active?`T+ ${time.toFixed(2)} s`:tr("等待图表定位","Awaiting chart position");ui.inputState.textContent=active?`T+ ${time.toFixed(2)} s`:tr("中立","Neutral");
   const pitch=main?.pitchInput,roll=main?.rollInput,yaw=main?.yawInput,comparePitch=reference?.pitchInput,compareRoll=reference?.rollInput,compareYaw=reference?.yawInput;setAxisDot(ui.xyDot,roll,pitch);setYawMarker(ui.yawMarker,yaw);const comparing=Boolean(reference);ui.xyCompareDot.hidden=!comparing;ui.yawCompareMarker.hidden=!comparing;if(comparing){setAxisDot(ui.xyCompareDot,compareRoll,comparePitch);setYawMarker(ui.yawCompareMarker,compareYaw)}
   const value=(id,primary,secondary)=>{const node=$(id);node.textContent=Number.isFinite(secondary)?`P ${signedPercent(primary)} · C ${signedPercent(secondary)}`:signedPercent(primary)};value("pitchInputValue",pitch,comparePitch);value("rollInputValue",roll,compareRoll);value("yawInputValue",yaw,compareYaw);$("yawCompareValue").textContent=comparing?tr("实心：主 · 虚线：对比","Solid: primary · dashed: compare"):"";

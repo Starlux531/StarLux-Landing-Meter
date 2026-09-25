@@ -1,4 +1,20 @@
-# StarLux LMM 1.1.9 正式版 / Stable release
+# StarLux LMM 1.1.9rc2 · 正式公开发行 / Public release
+
+2026-09-25：**1.1.9rc2** 正式公开发布，GitHub 标记为 Latest。保留 beta2 对旧 FlyWithLua 设置 SliderInt 格式参数缺失导致 Lua stopped 的修复，以及模块缺失/损坏的启动保护。恢复提供 RC2 Compatibility 修复包；旧 v1.1.9 兼容附件继续撤回。XP 12.4.3 原用户实机反馈尚待确认。
+
+- 兼容设置语言选项改为 Chinese。
+- 分析器新增实际 Pitch/Roll 姿态仪，与共享时间轴同步，缺失样本明确标注。
+- Windows 后台检查 GitHub 同 UI 类型更新：30 秒游戏提示、设置常驻提示、6 小时缓存、失败 15 分钟后重试，不上传飞行数据。
+- 内置安装器 **1.0.2**，通过 installer-v1.0.2 独立自更新发行提供给旧安装器；正确识别 1.1.9rc2 高于 1.1.9。
+- Standard 要求 Windows x64 / XP 12.4.4+ / FlyWithLua NG+；Compatibility 使用传统 UI 和数字覆盖层。
+
+退出 X-Plane，完整解压 CN 或 EN 包，使用内置安装器安装对应 UI 版本并保留配置。旧安装器先更新自身。使用过 1.1.10-beta2 的测试用户需要手动选择 1.1.9rc2。不要只复制主 Lua 文件。
+
+Public **1.1.9rc2**, marked Latest. Includes the SliderInt/startup fixes, ASCII Chinese label, synchronized recorded attitude and Windows update notices. Installer **1.0.2** supports this maintenance version ordering. RC2 Compatibility is available again; affected-user XP 12.4.3 flight validation remains pending. Original v1.1.9 Compatibility assets remain withdrawn. Update older installers first; select RC2 manually when migrating from 1.1.10-beta2.
+
+[下载 / Download](https://github.com/Starlux531/StarLux-Landing-Meter/releases/tag/v1.1.9rc2) · [本次发行说明 / Release notes](RELEASE_NOTES_v1.1.9rc2.md)
+
+## 1.1.9 基线说明 / Stable baseline
 
 2026-09-23：1.1.9 正式发布，以 beta10 的最终功能为基线。覆盖层、连续录制、风序列、完整复盘与 GS ≥60 kt 滑跑评分已纳入本版。安装器可从 GitHub 发现四种 UI / 语言载荷；完整离线包内置安装器 1.0.1。
 

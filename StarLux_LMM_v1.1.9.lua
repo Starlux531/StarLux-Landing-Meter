@@ -1,4 +1,4 @@
--- StarLux 落地率插件 v1.1.9
+-- StarLux 落地率插件 v1.1.9rc2
 -- 适用于 X-Plane 12.4.4 + FlyWithLua (LuaJIT)，需同时安装 LMM_UI_119 文件夹。
 -- SDK 440 原生 Unicode 弹窗；旧版渲染安全回退；沿用 v1.1.7 数据采集与落地算法。
 
@@ -776,7 +776,7 @@ function LMM_CONTROL_REFS.input_candidate_is_active(candidate, slots, count)
 end
 
 function LMM_CONTROL_REFS.resolve_input_sources(slots, count)
-    -- 1.1.9: sources are resolved while observing, never retrospectively.
+    -- 1.1.9rc2: sources are resolved while observing, never retrospectively.
     -- Existing samples retain their selected source and candidate raw values.
     return count
 end
@@ -1334,16 +1334,64 @@ local settings_window = nil
 local log_manager_window = nil
 -- 新增文件管理函数统一放入表中，避免 Lua 5.1 主代码块超过 200 个局部变量上限。
 local log_tools = {}
-log_tools.dev = assert(loadfile(join_path(LMM_BASE_DIRECTORY, "LMM_UI_119/core_experience.lua")))(
-    join_path(LMM_BASE_DIRECTORY, "LMM_UI_119") .. PATH_SEPARATOR
-).new(LMM_CONTROL_REFS, LMM_BASE_DIRECTORY .. PATH_SEPARATOR)
-log_tools.recording = assert(loadfile(join_path(LMM_BASE_DIRECTORY,"LMM_UI_119/core_recording.lua")))().new(LOG_DIRECTORY_PATH .. PATH_SEPARATOR)
-log_tools.recording.version = "1.1.9"
-log_tools.dev.recording=log_tools.recording
-log_tools.rollout_module = assert(loadfile(join_path(LMM_BASE_DIRECTORY,"LMM_UI_119/core_rollout.lua")))()
-log_tools.ils_module = assert(loadfile(join_path(LMM_BASE_DIRECTORY,"LMM_UI_119/core_ils.lua")))()
-log_tools.ils = log_tools.ils_module.new({root=SYSTEM_DIRECTORY or ""})
-log_tools.dev.ils = log_tools.ils.runtime
+do
+    -- This bootstrap stays inside the main script: a missing UI directory must
+    -- not prevent the installation diagnostic itself from loading.
+    local directory=join_path(LMM_BASE_DIRECTORY,"LMM_UI_119")..PATH_SEPARATOR
+    local chunks,errors={},{}
+    for _,name in ipairs({"core_inputs.lua","core_visual_state.lua","core_experience.lua",
+        "core_recording.lua","core_rollout.lua","core_ils.lua"}) do
+        local ok,chunk,err=pcall(loadfile,directory..name)
+        if ok and type(chunk)=="function" then chunks[name]=chunk
+        else errors[#errors+1]=name..": "..tostring(ok and err or chunk) end
+    end
+    if #errors==0 then
+        local ok,err=pcall(function()
+            log_tools.dev=chunks["core_experience.lua"](directory).new(LMM_CONTROL_REFS,LMM_BASE_DIRECTORY..PATH_SEPARATOR)
+            log_tools.recording=chunks["core_recording.lua"]().new(LOG_DIRECTORY_PATH..PATH_SEPARATOR)
+            log_tools.recording.version="1.1.9rc2"
+            log_tools.dev.recording=log_tools.recording
+            log_tools.rollout_module=chunks["core_rollout.lua"]()
+            log_tools.ils_module=chunks["core_ils.lua"]()
+            log_tools.ils=log_tools.ils_module.new({root=SYSTEM_DIRECTORY or ""})
+            log_tools.dev.ils=log_tools.ils.runtime
+        end)
+        if not ok then errors[#errors+1]="Core initialization: "..tostring(err) end
+    end
+    if #errors>0 then
+        local lines={"[StarLux LMM 1.1.9rc2] STARTUP FAILED - LMM paused; other Lua scripts may continue.",
+            "Install or repair the complete Compatibility package for XP 12.4.3; keep settings and logs.",
+            "Scripts directory: "..tostring(LMM_BASE_DIRECTORY),"Expected modules: "..directory,
+            "Do not install only the main Lua file. LMM_UI_118 is not a substitute for LMM_UI_119.",
+            "After repair, restart X-Plane or reload all Lua scripts. No recording or grading is active."}
+        for _,err in ipairs(errors) do lines[#lines+1]=err end
+        local function report()
+            if type(logMsg)=="function" then for _,line in ipairs(lines) do pcall(logMsg,line) end end
+        end
+        report()
+        -- Best effort only: read-only Scripts must still return without a Lua error.
+        pcall(function()
+            local file=io.open(join_path(LMM_BASE_DIRECTORY,"LMM_Startup_Diagnostic.txt"),"w")
+            if file then
+                pcall(function() file:write(table.concat(lines,"\n").."\n") end)
+                pcall(function() file:close() end)
+            end
+        end)
+        function ma_lmm119_startup_details() report() end
+        function ma_lmm119_startup_notice()
+            if type(draw_string)~="function" then return end
+            local top=math.max(65,(tonumber(SCREEN_HIGHT) or tonumber(SCREEN_HEIGHT) or 600)-45)
+            pcall(draw_string,20,top,"StarLux LMM: installation incomplete - recorder paused",1,.35,.25)
+            pcall(draw_string,20,top-18,"Repair the complete Compatibility package; keep settings and logs.",1,1,1)
+            pcall(draw_string,20,top-36,"Details: LMM_Startup_Diagnostic.txt / FlyWithLua Log.txt",1,1,1)
+        end
+        if type(add_macro)=="function" then
+            pcall(add_macro,"StarLux LMM - Installation error / diagnostic log","ma_lmm119_startup_details()")
+        end
+        if type(do_every_draw)=="function" then pcall(do_every_draw,"ma_lmm119_startup_notice()") end
+        return
+    end
+end
 log_tools.native_ui = { attempted = false, force_compatibility = false }
 -- 1.1.7 新增状态继续集中放入既有表中，避免 Lua 5.1 主代码块触及 200 个局部变量上限。
 log_tools.popup_style = {
@@ -5529,8 +5577,8 @@ function log_tools.native_initialize()
     refresh_popup_cache()
     if logMsg then
         logMsg(ui.instance and ui.instance.ready
-            and "[StarLux LMM] 1.1.9 SDK 440 Unicode popup ready. " .. (ui.instance.version_info or "")
-            or "[StarLux LMM] 1.1.9 legacy popup fallback: " .. ui.error)
+            and "[StarLux LMM] 1.1.9rc2 SDK 440 Unicode popup ready. " .. (ui.instance.version_info or "")
+            or "[StarLux LMM] 1.1.9rc2 legacy popup fallback: " .. ui.error)
     end
 end
 
@@ -6559,7 +6607,7 @@ log_tools.report_translations = {
     { "FPM 与 G 分别分档，最终评价取较严重等级；拉平曲率暂不参与评分。", "FPM and G are rated independently; the more severe band is final. Flare curvature does not affect the rating." },
     { "长行程压缩达到采集上限，局部包络样本不足，采用全局第75百分位曲线G", "Long-travel compression reached the capture limit; local envelope insufficient, global P75 G selected" },
     { "轻柔接地：下降率不超过 100 fpm，且过载不超过 1.20 G", "Soft touchdown: vertical speed did not exceed 100 fpm and load did not exceed 1.20 G" },
-    { "评分说明: v1.1.9 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。", "Rating note: flare curvature and control data in v1.1.9 are for review only and do not affect the rating." },
+    { "评分说明: v1.1.9rc2 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。", "Rating note: flare curvature and control data in v1.1.9rc2 are for review only and do not affect the rating." },
     { "需注意：下降率不超过 300 fpm，且过载不超过 1.80 G", "Review advised: vertical speed did not exceed 300 fpm and load did not exceed 1.80 G" },
     { "不良落地：下降率超过 300 fpm，或过载超过 1.80 G", "Adverse landing: vertical speed exceeded 300 fpm or load exceeded 1.80 G" },
     { " 才为高可信；任一组超过阈值立即降低可信度并由 VVI 接管。", " for high confidence; exceeding the threshold on any pair lowers confidence and hands control to VVI." },
@@ -6569,7 +6617,7 @@ log_tools.report_translations = {
     { "高下降率事件采用触地前80 ms离地物理速度中位数", "High-sink-rate event uses the median airborne physical velocity in the 80 ms before touchdown" },
     { "物理轨迹（高下降率80 ms短窗复核）", "Physical trajectory (80 ms high-sink-rate review)" },
     { "显示值可能按界面位数四舍五入，复算请使用本节保留的高精度值。", "Displayed values may be rounded to interface precision; use the high-precision values retained here for recalculation." },
-    { "StarLux 落地率插件 v1.1.9 - 单次落地记录", "StarLux Landing Meter v1.1.9 - Landing Report" },
+    { "StarLux 落地率插件 v1.1.9rc2 - 单次落地记录", "StarLux Landing Meter v1.1.9rc2 - Landing Report" },
     { "中可信冲量，采用全局P75与160ms局部冲击包络的较大值", "Medium-confidence impulse; larger of global P75 and 160 ms local impact envelope selected" },
     { "中可信冲量，局部包络样本不足，采用全局第75百分位曲线G", "Medium-confidence impulse; local envelope insufficient, global P75 G selected" },
     { "跑道说明: 依据 scenery_packs.ini 优先级读取 apt.dat，并用跑道端点、触地坐标和地速向量完成几何匹配；位置采用飞机参考点，数值为约值。", "Runway note: apt.dat is read in scenery_packs.ini priority order and matched using runway endpoints, touchdown coordinates and the ground-velocity vector; positions use the aircraft reference point and are approximate." },
@@ -7879,7 +7927,7 @@ function log_tools.build_landing_log_payload(existing_path)
     local file = log_tools.make_report_writer(raw_file)
 
     file:write("\239\187\191")
-    file:write("StarLux 落地率插件 v1.1.9 - 单次落地记录\n")
+    file:write("StarLux 落地率插件 v1.1.9rc2 - 单次落地记录\n")
     file:write("======================================================================\n\n")
     raw_file:write(log_tools.ui_text(
         "100 ft 节选（完整记录见末尾）\n接地阶段快照；滑跑可能仍在录制。\n\n",
@@ -8033,7 +8081,7 @@ function log_tools.build_landing_log_payload(existing_path)
         FLARE_CONFIG.oscillation_efficiency_max,
         FLARE_CONFIG.oscillation_worsening_ratio_min
     ))
-    file:write("评分说明: v1.1.9 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。\n")
+    file:write("评分说明: v1.1.9rc2 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。\n")
     file:write(string.format("曲率分析耗时: %.3f ms\n\n", flare_analysis.calculation_ms))
 
     if landing_analysis.math_log_enabled then
@@ -8916,6 +8964,11 @@ end
 
 function ma_build_settings_window(wnd, x, y, gui)
     local imgui = gui or _G.imgui
+    if log_tools.updates and log_tools.updates.available then
+        local latest=log_tools.updates.latest
+        imgui.TextUnformatted(log_tools.settings_text("发现新版本 "..latest.."，请使用 StarLux 安装器下载。",
+            "Update available: "..latest..". Open StarLux Installer to download."))
+    end
     local page="all"
     if imgui.Tabs then
         log_tools.settings_ui_tab=imgui.Tabs({
@@ -8930,7 +8983,7 @@ function ma_build_settings_window(wnd, x, y, gui)
     end
     if page=="all" or page=="general" then
     log_tools.dialog_section(imgui,"全局语言", "Global language")
-    if imgui.RadioButton("中文##lmm_language_zh", runtime_state.document_language == "zh") then
+    if imgui.RadioButton((imgui.Tabs and "中文" or "Chinese").."##lmm_language_zh", runtime_state.document_language == "zh") then
         log_tools.set_global_language("zh")
     end
     imgui.SameLine()
@@ -9092,7 +9145,7 @@ function ma_build_settings_window(wnd, x, y, gui)
     end
     if log_tools.native_ui.instance and log_tools.native_ui.instance.ready then
         log_tools.dialog_section(imgui,"字体大小", "Font size")
-        local changed, px = imgui.SliderInt(log_tools.settings_text("原生弹窗字号", "Native popup font size") .. "##lmm_font_px", log_tools.popup_style.font_px, 10, 32)
+        local changed, px = imgui.SliderInt(log_tools.settings_text("原生弹窗字号", "Native popup font size") .. "##lmm_font_px", log_tools.popup_style.font_px, 10, 32, "%d")
         if changed then log_tools.popup_style.font_px = px; save_settings() end
         if log_tools.popup_style.renderer == "legacy" then imgui.TextUnformatted(log_tools.settings_text("兼容模式：中文使用标准字号。", "Compatibility: standard size for Chinese.")) end
     else
@@ -9649,13 +9702,14 @@ end
 -- =========================
 
 function ma_landing_meter_draw()
+    log_tools.draw_update_notice()
     log_tools.legacy_popup_bounds=nil
     log_tools.native_initialize()
     do
         local ok,err=pcall(log_tools.dev.present,log_tools.dev,log_tools.native_ui.instance,DEBUG_MODE,log_tools.popup_language()=="en")
         if not ok and log_tools.dev.render_error~=tostring(err) then
             log_tools.dev.render_error=tostring(err)
-            logMsg("[LMM 1.1.9] Overlay: "..tostring(err))
+            logMsg("[LMM 1.1.9rc2] Overlay: "..tostring(err))
         end
     end
     log_tools.update_native_dialogs()
@@ -9849,6 +9903,25 @@ function ma_lmm119_popup_mouse()
     RESUME_MOUSE_CLICK=true
 end
 if type(do_on_mouse_click)=="function" then do_on_mouse_click("ma_lmm119_popup_mouse()") end
+function ma_lmm119_check_updates()
+    local ok,err=pcall(function()
+        if not log_tools.updates then
+            local loader=assert(loadfile(join_path(LMM_BASE_DIRECTORY,"LMM_UI_119/core_updates.lua")))
+            log_tools.updates=loader().new({current="1.1.9rc2",path=join_path(LOG_DIRECTORY_PATH,log_tools.native_ui.force_compatibility and ".lmm-update-compatibility.txt" or ".lmm-update-standard.txt"),
+                variant=log_tools.native_ui.force_compatibility and "Compatibility" or "Standard"})
+        end
+        log_tools.updates:tick()
+    end)
+    if not ok and log_tools.update_error~=tostring(err) then
+        log_tools.update_error=tostring(err);logMsg("[StarLux LMM] Update check unavailable: "..tostring(err))
+    end
+end
+function log_tools.draw_update_notice()
+    local u=log_tools.updates
+    if not u or not u.available or os.time()>(u.toast_until or 0) or type(draw_string)~="function" then return end
+    draw_string(25,math.max(45,(SCREEN_HIGHT or 600)-80),"StarLux LMM "..u.latest.." available - open StarLux Installer to download.",1,.8,.3)
+end
+if type(do_sometimes)=="function" then do_sometimes("ma_lmm119_check_updates()") end
 do_every_frame("ma_landing_meter_update()")
 do_every_draw("ma_landing_meter_draw()")
 
@@ -9861,7 +9934,7 @@ if type(do_on_exit) == "function" then do_on_exit("ma_lmm118_shutdown()") end
 
 if logMsg then
     logMsg(string.format(
-        "[StarLux LMM] v1.1.9 loaded successfully with %d direct XPLM DataRefs, persistent apt.dat indexing and optional control capture.",
+        "[StarLux LMM] v1.1.9rc2 loaded successfully with %d direct XPLM DataRefs, persistent apt.dat indexing and optional control capture.",
         #LMM_DATAREF_SPECS
     ))
 end

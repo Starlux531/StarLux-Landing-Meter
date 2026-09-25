@@ -4,8 +4,8 @@ $repo = Split-Path $PSScriptRoot -Parent
 $utf8 = [Text.UTF8Encoding]::new($false)
 $development = Get-Content -LiteralPath (Join-Path $repo 'development.json') -Raw | ConvertFrom-Json
 $developmentVersion = [string]$development.version
-$stable = $development.channel -eq 'stable' -and $developmentVersion -eq '1.1.9'
-if (!$stable -and ($development.channel -ne 'unpublished' -or $developmentVersion -notmatch '^1\.1\.9-beta[1-9][0-9]*$')) { throw 'Use stable 1.1.9 or an explicit unpublished 1.1.9-betaN in development.json.' }
+$stable = $development.channel -eq 'stable' -and $developmentVersion -in @('1.1.9','1.1.9rc2')
+if (!$stable -and ($development.channel -ne 'unpublished' -or $developmentVersion -notmatch '^(1\.1\.(9|10)-beta[1-9][0-9]*|1\.1\.9rc2)$')) { throw 'Use stable 1.1.9 or an explicit unpublished 1.1.9rc2 / 1.1.9-betaN / 1.1.10-betaN in development.json.' }
 $mainSource = [IO.File]::ReadAllText((Join-Path $repo 'StarLux_LMM_v1.1.9.lua'))
 if (!$mainSource.StartsWith("-- StarLux 落地率插件 v$developmentVersion`n") -and !$mainSource.StartsWith("-- StarLux 落地率插件 v$developmentVersion`r`n")) { throw 'Main source header must match development.json.' }
 # Local packaging for 1.1.9; this script does not publish to GitHub.
@@ -63,8 +63,8 @@ foreach ($variant in @('Standard','Compatibility')) {
             uiVariant=$(if ($variant -eq 'Standard') {'sdk440'} else {'legacy'})
             defaultLanguage=$(if ($locale -eq 'CN') {'zh'} else {'en'})
             notes=$(if ($stable) {
-                if ($variant -eq 'Standard') {'1.1.9 正式版。标准版：XP 12.4.4+。 / Stable 1.1.9. Standard: XP 12.4.4+.'}
-                else {'1.1.9 正式版。兼容版：旧 XP 12，覆盖层为数字显示。 / Stable 1.1.9. Compatibility: older XP 12; numeric overlays.'}
+                if ($variant -eq 'Standard') {"$developmentVersion 正式版。标准版：XP 12.4.4+。 / Stable $developmentVersion. Standard: XP 12.4.4+."}
+                else {"$developmentVersion 兼容修复版：旧 XP 12，覆盖层为数字显示；XP 12.4.3 用户实机反馈仍待确认。 / $developmentVersion Compatibility repair: older XP 12; numeric overlays. XP 12.4.3 user validation pending."}
             } elseif ($variant -eq 'Standard') {'未发布开发测试版，待实机验收。标准版：XP 12.4.4+。 / Unreleased development build, flight validation pending. Standard: XP 12.4.4+.'} else {'未发布开发测试版，兼容覆盖层暂为数字显示。 / Unreleased development build; legacy overlays currently display numbers.'})
             files=$entries
         }

@@ -2,6 +2,8 @@
 
 The installer has its own version line, starting at **1.0.0** (displayed as **v1.0**). Plugin versions remain independent: plugin **1.1.9** is stable as of 2026-09-23. Its offline bundles include installer **1.0.1** with obsolete LMM file cleanup. The existing standalone installer update release remains `installer-v1.0.0`; plugin release tags do not advance that channel.
 
+The public **1.1.9rc2** bundle includes installer **1.0.2**. It treats the project's bare `1.1.9rc2` (and later `1.1.9rcN`) maintenance naming as newer than `1.1.9`; normal `1.1.9-rc2` prerelease ordering is unchanged. Moving from the earlier `1.1.10-beta2` test build requires manual selection of the local rc2 package. The installer self-update release is **installer-v1.0.2**, published alongside RC2 without replacing the plugin Latest release.
+
 ## Implemented lifecycle
 
 - Separate GitHub/Gitee catalogs for plugin updates and installer updates. Installer updates use `installer-vX.Y.Z` release tags; plugin tags cannot advance the installer version.

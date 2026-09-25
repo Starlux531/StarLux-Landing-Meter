@@ -141,7 +141,8 @@ function M:settings(gui,tr,debug,save)
         local key=row[1]; local style=key=="alpha" or key=="red" or key=="green" or key=="blue"
         local target=({"","stick_","throttle_","n1_"})[math.floor(self.config.appearance)] or ""
         if style then key=target..key end
-        local changed,v=gui.SliderInt(tr(row[2],row[3]).."##live_"..key,self.config[key],row[4],row[5])
+        -- FlyWithLua's ImGui binding requires format even though C++ has a default.
+        local changed,v=gui.SliderInt(tr(row[2],row[3]).."##live_"..key,self.config[key],row[4],row[5],"%d")
         if changed then
             self.config[key]=v
             if style and target=="" then for _,id in ipairs({"stick","throttle","n1"}) do self.config[id.."_"..key]=v end end
