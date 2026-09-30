@@ -13,6 +13,9 @@ public sealed class Diagnosis
     public bool HasPlugin { get; set; }
     public bool Verified { get; set; }
     public List<string> Issues { get; set; } = [];
+    public List<InstalledFile> Files { get; set; } = [];
+    public bool HasRelatedFiles => Files.Any(f => f.Exists && f.Removable);
+    public string Details() => Describe() + "\n\n" + U.T("修复依据：按本机安装清单校验 SHA-256。内容不同不一定表示损坏，也可能是手工替换或版本混用。", "Integrity checks use the local receipt's SHA-256 hashes. A mismatch can mean a manual replacement or mixed versions, not necessarily corruption.");
     public string Describe() => !ValidTarget ? U.T("请选择 X-Plane 根目录", "Select an X-Plane folder") :
         !HasPlugin ? U.T("未安装插件", "Plugin not installed") :
         string.Join("\n", new[] { U.T("插件版本：", "Plugin version: ") + (Version.Length > 0 ? Version : U.T("未知", "Unknown")) }
@@ -88,7 +91,7 @@ public static partial class Core
             foreach (var path in Directory.EnumerateFiles(scripts, "README*"))
             {
                 // Versioned names alone are not proof of ownership in shared Scripts.
-                if (!Regex.IsMatch(Path.GetFileName(path), @"^README_\d+\.\d+(?:\.\d+)?(?:beta\d*)?\.(?:md|txt)$", RegexOptions.IgnoreCase)) continue;
+                if (!Regex.IsMatch(Path.GetFileName(path), @"^README_\d+\.\d+(?:\.\d+)?(?:(?:beta|rc)\d*)?\.(?:md|txt)$", RegexOptions.IgnoreCase)) continue;
                 NoLinks(path);
                 using var reader = new StreamReader(path);
                 var buffer = new char[2048]; var count = reader.Read(buffer, 0, buffer.Length);
@@ -141,27 +144,27 @@ public static partial class Core
         NoLinks(target);
         d.SimulatorVersion = SimulatorVersion(target); d.HasFlyWithLua = HasFwl(target);
         var files = OwnedFiles(target);
-        d.HasPlugin = files.Count > 0 || File.Exists(SafePath(target, Receipt));
-        if (!d.HasPlugin) return d;
-        if (File.Exists(SafePath(target,"Resources/plugins/StarLux_LMM.install.pending.json"))) d.Issues.Add(U.T("上次操作未完成，请先恢复对应备份", "An interrupted operation requires backup recovery"));
+        d.HasPlugin = files.Count > 0 || File.Exists(SafePath(target, Receipt)) || File.Exists(SafePath(target, Pending));
+        if (!d.HasPlugin) { d.Files = Inventory(target); return d; }
+        if (File.Exists(SafePath(target,"Resources/plugins/StarLux_LMM.install.pending.json"))) d.Issues.Add(U.T("存在未收尾事务：点击安装/修复，定位备份或保留数据重新安装", "Pending transaction: choose Install/Repair to locate its backup or reinstall keeping current data"));
         var mains = files.Where(f => MainLua(Path.GetFileName(f)) && Path.GetDirectoryName(f)?.Replace('\\', '/') == Scripts).ToList();
         d.Version = mains.Select(f => ExtractVersion(Path.GetFileName(f))).OrderByDescending(v => v, Comparer<string>.Create(CompareVersion)).FirstOrDefault() ?? "";
-        if (mains.Count > 1) d.Issues.Add(U.T("混装：存在多个启用的主脚本", "Mixed installation: multiple active main scripts"));
+        if (mains.Count > 1) d.Issues.Add(U.T("混装：存在多个启用的主脚本：", "Mixed installation: multiple active main scripts: ") + string.Join(", ", mains));
         PackageManifest? receipt = null;
-        try { receipt = ReadReceipt(target); } catch (Exception e) when (e is IOException or JsonException) { d.Issues.Add(U.T("安装记录损坏，需要修复", "Damaged receipt; repair required")); }
+        try { receipt = ReadReceipt(target); } catch (Exception e) when (e is IOException or JsonException) { d.Issues.Add(U.T("安装记录无法验证：", "Cannot validate receipt: ") + Receipt + " · " + e.Message); }
+        d.Files = Inventory(target, receipt);
         if (receipt != null)
         {
             d.Version = receipt.Version;
             var prefix = receipt.Kind == "native" ? "Resources/plugins/StarLux_LMM" : Scripts;
             var expected = new HashSet<string>(receipt.Files.Select(f => prefix + "/" + f.Path.Replace('\\', '/')), StringComparer.OrdinalIgnoreCase);
-            foreach (var f in receipt.Files)
+            foreach (var f in d.Files.Where(f => f.Expected != ""))
             {
-                var p = SafePath(target, prefix + "/" + f.Path);
-                if (!File.Exists(p)) d.Issues.Add(U.T("缺失：", "Missing: ") + f.Path);
-                else if (!Hash(p).Equals(f.Sha256, StringComparison.OrdinalIgnoreCase)) d.Issues.Add(U.T("文件不匹配：", "File mismatch: ") + f.Path);
+                if (!f.Exists) d.Issues.Add(U.T("缺失：", "Missing: ") + f.Path);
+                else if (!f.Actual.Equals(f.Expected, StringComparison.OrdinalIgnoreCase)) d.Issues.Add(U.T("文件不匹配 / 无法读取：", "File mismatch / unreadable: ") + f.Path + " · " + f.Status);
             }
             foreach (var extra in files.Where(f => !expected.Contains(f))) d.Issues.Add(U.T("旧版残留或混装：", "Obsolete or mixed file: ") + Path.GetRelativePath(Scripts, extra));
-            if (!Compatible(d.SimulatorVersion, InstalledVariant(target,receipt))) d.Issues.Add(U.T("插件 UI 与 X-Plane 版本不兼容", "Plugin UI is incompatible with X-Plane"));
+            if (!Compatible(d.SimulatorVersion, InstalledVariant(target,receipt))) d.Issues.Add(U.T("插件 UI 与 X-Plane 版本不兼容：", "Plugin UI incompatible with X-Plane: ") + d.SimulatorVersion + " / " + InstalledVariant(target,receipt));
             if (receipt.Kind == "flywithlua" && !d.HasFlyWithLua) d.Issues.Add(U.T("FlyWithLua 缺失或不完整", "FlyWithLua is missing or incomplete"));
         }
         else

@@ -29,7 +29,7 @@ function M:update(now,identity,config,debug,count)
     local reset=identity~=self.identity or (self.last and (now<self.last or now-self.last>1))
     if reset then self.handles={};self.next_probe=now end
     self.identity,self.last=identity,now
-    local stick=config.stick or debug;local n1=config.n1
+    local stick=config.stick or debug;local n1=config.n1 or config.engine_combined and config.throttle
     if not stick and not n1 then
         self.bank=nil;return
     end

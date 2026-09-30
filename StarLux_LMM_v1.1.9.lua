@@ -1,4 +1,4 @@
--- StarLux 落地率插件 v1.1.9rc2
+-- StarLux 落地率插件 v1.1.9rc4
 -- 适用于 X-Plane 12.4.4 + FlyWithLua (LuaJIT)，需同时安装 LMM_UI_119 文件夹。
 -- SDK 440 原生 Unicode 弹窗；旧版渲染安全回退；沿用 v1.1.7 数据采集与落地算法。
 
@@ -776,7 +776,7 @@ function LMM_CONTROL_REFS.input_candidate_is_active(candidate, slots, count)
 end
 
 function LMM_CONTROL_REFS.resolve_input_sources(slots, count)
-    -- 1.1.9rc2: sources are resolved while observing, never retrospectively.
+    -- 1.1.9rc4: sources are resolved while observing, never retrospectively.
     -- Existing samples retain their selected source and candidate raw values.
     return count
 end
@@ -1340,7 +1340,7 @@ do
     local directory=join_path(LMM_BASE_DIRECTORY,"LMM_UI_119")..PATH_SEPARATOR
     local chunks,errors={},{}
     for _,name in ipairs({"core_inputs.lua","core_visual_state.lua","core_experience.lua",
-        "core_recording.lua","core_rollout.lua","core_ils.lua"}) do
+        "core_recording.lua","core_rollout.lua","core_ils.lua","core_flare.lua"}) do
         local ok,chunk,err=pcall(loadfile,directory..name)
         if ok and type(chunk)=="function" then chunks[name]=chunk
         else errors[#errors+1]=name..": "..tostring(ok and err or chunk) end
@@ -1348,8 +1348,9 @@ do
     if #errors==0 then
         local ok,err=pcall(function()
             log_tools.dev=chunks["core_experience.lua"](directory).new(LMM_CONTROL_REFS,LMM_BASE_DIRECTORY..PATH_SEPARATOR)
-            log_tools.recording=chunks["core_recording.lua"]().new(LOG_DIRECTORY_PATH..PATH_SEPARATOR)
-            log_tools.recording.version="1.1.9rc2"
+            log_tools.flare_module=chunks["core_flare.lua"]()
+            log_tools.recording=chunks["core_recording.lua"](log_tools.flare_module).new(LOG_DIRECTORY_PATH..PATH_SEPARATOR)
+            log_tools.recording.version="1.1.9rc4"
             log_tools.dev.recording=log_tools.recording
             log_tools.rollout_module=chunks["core_rollout.lua"]()
             log_tools.ils_module=chunks["core_ils.lua"]()
@@ -1359,7 +1360,7 @@ do
         if not ok then errors[#errors+1]="Core initialization: "..tostring(err) end
     end
     if #errors>0 then
-        local lines={"[StarLux LMM 1.1.9rc2] STARTUP FAILED - LMM paused; other Lua scripts may continue.",
+        local lines={"[StarLux LMM 1.1.9rc4] STARTUP FAILED - LMM paused; other Lua scripts may continue.",
             "Install or repair the complete Compatibility package for XP 12.4.3; keep settings and logs.",
             "Scripts directory: "..tostring(LMM_BASE_DIRECTORY),"Expected modules: "..directory,
             "Do not install only the main Lua file. LMM_UI_118 is not a substitute for LMM_UI_119.",
@@ -3429,7 +3430,7 @@ function log_tools.select_cached_touchdown_runway(excluded_airport)
     end
     local second = matches[2]
     if second ~= nil and second.best.score - selected.best.score < 25 then
-        return nil
+        return nil, nil, nil, nil, "ambiguous"
     end
     return selected.best, selected.confidence, selected.cached, selected.airport_id
 end
@@ -3492,10 +3493,17 @@ function log_tools.finish_airport_block()
         return true
     end
 
+    -- A nearest navaid can be a heliport. Load the bounded nearby land-airport
+    -- candidates asynchronously before deciding from touchdown geometry.
+    if state.landing_search and #(state.landing_candidates or {}) > 0 then
+        log_tools.finish_runway_resolver("scanning", "Checking nearby runway candidates")
+        return true
+    end
+
     local best, confidence, reason = log_tools.select_touchdown_runway()
-    if best == nil then
+    if best == nil or state.landing_search then
         local fallback_best, fallback_confidence, fallback_cache, fallback_airport =
-            log_tools.select_cached_touchdown_runway(cache_key)
+            log_tools.select_cached_touchdown_runway(state.landing_search and "" or cache_key)
         if fallback_best == nil then
             -- 候选复核保持静默；失败时继续沿用原有主机场失败原因，不增加报告/UI 提示。
             log_tools.finish_runway_resolver("unavailable", reason)
@@ -3571,6 +3579,9 @@ function log_tools.finish_airport_block()
         landing_context.centerline_side = "CENTER"
     end
     log_tools.apply_centerline_score()
+    if log_tools.apply_flare_score then log_tools.apply_flare_score() end
+    state.landing_search = nil
+    state.landing_candidates = nil
     log_tools.finish_runway_resolver("resolved", "")
     return true
 end
@@ -3741,6 +3752,18 @@ end
 
 function log_tools.process_runway_resolver(now)
     local state = log_tools.runway_state
+    if state.landing_search and now - state.landing_search >= log_tools.runway_config.timeout_seconds then
+        state.landing_search=nil;state.landing_candidates=nil
+        log_tools.finish_runway_resolver("timeout", "Nearby runway search exceeded its total time budget")
+        return true
+    end
+    if not state.active and state.landing_search then
+        local next_id=table.remove(state.landing_candidates,1)
+        if next_id then log_tools.start_runway_resolver(next_id,now,"landing");return not state.active end
+        state.landing_search=nil
+        local best,_,_,id=log_tools.select_cached_touchdown_runway("")
+        if best then log_tools.start_runway_resolver(id,now,"landing");return not state.active end
+    end
     if not state.active then return false end
     local timeout_seconds = state.mode == "prefetch"
         and log_tools.runway_config.prefetch_timeout_seconds
@@ -3832,7 +3855,8 @@ function log_tools.probe_prefetch_airport(query_lat, query_lon, origin_lat, orig
         longitude = airport_lon,
         name = trim_text(airport_name)
     }
-    log_tools.enqueue_runway_prefetch(airport_id, prefer_front)
+    local index=log_tools.runway_state.index
+    if not index.complete or index.entries[airport_id] then log_tools.enqueue_runway_prefetch(airport_id, prefer_front) end
     return airport_id
 end
 
@@ -3944,6 +3968,42 @@ function log_tools.update_runway_prefetch(now, radio_alt_ft, on_ground, local_vy
     return state.cache[airport_id] ~= nil
 end
 
+function log_tools.begin_landing_runway_search(airport_id,now)
+    local state=log_tools.runway_state
+    state.landing_search=nil;state.landing_candidates=nil
+    log_tools.discover_nearby_prefetch_airports(landing_context.touch_latitude,landing_context.touch_longitude,now)
+    local best,_,_,cached_id,reason=log_tools.select_cached_touchdown_runway("")
+    if best then return log_tools.start_runway_resolver(cached_id,now,"landing") end
+    if reason=="ambiguous" then
+        log_tools.finish_runway_resolver("unavailable","Multiple airports match the touchdown; refusing to guess")
+        landing_context.runway_status="unavailable"
+        return false
+    end
+    local candidates={}
+    for id,nav in pairs(state.airport_nav) do
+        local distance=distance_km(landing_context.touch_latitude,landing_context.touch_longitude,nav.latitude,nav.longitude)
+        -- A complete apt index contains land-airport headers (row 1), not
+        -- heliport headers (row 17). Do not scan the entire database for those.
+        if distance<=log_tools.runway_config.nearby_candidate_max_distance_km
+            and (state.index.entries[id] or not state.index.complete)
+            and not (state.cache[id] and #(state.cache[id].runways or {})==0) then
+            candidates[#candidates+1]={id=id,distance=distance,indexed=state.index.entries[id]~=nil}
+        end
+    end
+    table.sort(candidates,function(a,b) if a.indexed~=b.indexed then return a.indexed end;return a.distance<b.distance end)
+    state.landing_candidates={}
+    for i=1,math.min(#candidates,log_tools.runway_config.nearby_prefetch_queue_limit) do state.landing_candidates[i]=candidates[i].id end
+    if #state.landing_candidates==0 then
+        if state.index.complete and not state.index.entries[airport_id] then
+            log_tools.finish_runway_resolver("unavailable","No nearby land-airport runway candidate")
+            landing_context.runway_status="unavailable";return false
+        end
+        state.landing_candidates[1]=airport_id
+    end
+    state.landing_search=now
+    return log_tools.start_runway_resolver(table.remove(state.landing_candidates,1),now,"landing")
+end
+
 local function resolve_landing_context(now)
     landing_context.airport_id = "UNKNOWN"
     landing_context.airport_internal_id = ""
@@ -3995,7 +4055,7 @@ local function resolve_landing_context(now)
         name = airport_name
     }
     if runtime_state.runway_detection_enabled then
-        log_tools.start_runway_resolver(airport_id, now, "landing")
+        log_tools.begin_landing_runway_search(airport_id, now)
     else
         landing_context.runway_status = "disabled"
     end
@@ -5577,8 +5637,8 @@ function log_tools.native_initialize()
     refresh_popup_cache()
     if logMsg then
         logMsg(ui.instance and ui.instance.ready
-            and "[StarLux LMM] 1.1.9rc2 SDK 440 Unicode popup ready. " .. (ui.instance.version_info or "")
-            or "[StarLux LMM] 1.1.9rc2 legacy popup fallback: " .. ui.error)
+            and "[StarLux LMM] 1.1.9rc4 SDK 440 Unicode popup ready. " .. (ui.instance.version_info or "")
+            or "[StarLux LMM] 1.1.9rc4 legacy popup fallback: " .. ui.error)
     end
 end
 
@@ -6413,6 +6473,8 @@ end
 
 local function status_explanation(status)
     local explanations = {}
+    local flare=log_tools.flare_result and log_tools.flare_result()
+    if flare and (flare.long_float or flare.balloon) then explanations[#explanations+1]=log_tools.flare_module.describe(flare,runtime_state.document_language=="en") end
     local rollout=log_tools.dev.route
     if rollout and rollout.session_id==landing_context.recording_id and rollout.revision>0 then
         explanations[#explanations+1]=log_tools.ui_text("滑跑考核：","Rollout grading: ")..rollout:description(runtime_state.document_language=="en")
@@ -6607,7 +6669,7 @@ log_tools.report_translations = {
     { "FPM 与 G 分别分档，最终评价取较严重等级；拉平曲率暂不参与评分。", "FPM and G are rated independently; the more severe band is final. Flare curvature does not affect the rating." },
     { "长行程压缩达到采集上限，局部包络样本不足，采用全局第75百分位曲线G", "Long-travel compression reached the capture limit; local envelope insufficient, global P75 G selected" },
     { "轻柔接地：下降率不超过 100 fpm，且过载不超过 1.20 G", "Soft touchdown: vertical speed did not exceed 100 fpm and load did not exceed 1.20 G" },
-    { "评分说明: v1.1.9rc2 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。", "Rating note: flare curvature and control data in v1.1.9rc2 are for review only and do not affect the rating." },
+    { "评分说明: v1.1.9rc4 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。", "Rating note: flare curvature and control data in v1.1.9rc4 are for review only and do not affect the rating." },
     { "需注意：下降率不超过 300 fpm，且过载不超过 1.80 G", "Review advised: vertical speed did not exceed 300 fpm and load did not exceed 1.80 G" },
     { "不良落地：下降率超过 300 fpm，或过载超过 1.80 G", "Adverse landing: vertical speed exceeded 300 fpm or load exceeded 1.80 G" },
     { " 才为高可信；任一组超过阈值立即降低可信度并由 VVI 接管。", " for high confidence; exceeding the threshold on any pair lowers confidence and hands control to VVI." },
@@ -6617,7 +6679,7 @@ log_tools.report_translations = {
     { "高下降率事件采用触地前80 ms离地物理速度中位数", "High-sink-rate event uses the median airborne physical velocity in the 80 ms before touchdown" },
     { "物理轨迹（高下降率80 ms短窗复核）", "Physical trajectory (80 ms high-sink-rate review)" },
     { "显示值可能按界面位数四舍五入，复算请使用本节保留的高精度值。", "Displayed values may be rounded to interface precision; use the high-precision values retained here for recalculation." },
-    { "StarLux 落地率插件 v1.1.9rc2 - 单次落地记录", "StarLux Landing Meter v1.1.9rc2 - Landing Report" },
+    { "StarLux 落地率插件 v1.1.9rc4 - 单次落地记录", "StarLux Landing Meter v1.1.9rc4 - Landing Report" },
     { "中可信冲量，采用全局P75与160ms局部冲击包络的较大值", "Medium-confidence impulse; larger of global P75 and 160 ms local impact envelope selected" },
     { "中可信冲量，局部包络样本不足，采用全局第75百分位曲线G", "Medium-confidence impulse; local envelope insufficient, global P75 G selected" },
     { "跑道说明: 依据 scenery_packs.ini 优先级读取 apt.dat，并用跑道端点、触地坐标和地速向量完成几何匹配；位置采用飞机参考点，数值为约值。", "Runway note: apt.dat is read in scenery_packs.ini priority order and matched using runway endpoints, touchdown coordinates and the ground-velocity vector; positions use the aircraft reference point and are approximate." },
@@ -7927,7 +7989,7 @@ function log_tools.build_landing_log_payload(existing_path)
     local file = log_tools.make_report_writer(raw_file)
 
     file:write("\239\187\191")
-    file:write("StarLux 落地率插件 v1.1.9rc2 - 单次落地记录\n")
+    file:write("StarLux 落地率插件 v1.1.9rc4 - 单次落地记录\n")
     file:write("======================================================================\n\n")
     raw_file:write(log_tools.ui_text(
         "100 ft 节选（完整记录见末尾）\n接地阶段快照；滑跑可能仍在录制。\n\n",
@@ -7979,6 +8041,7 @@ function log_tools.build_landing_log_payload(existing_path)
     file:write(string.format("IAS / GS: %.0f / %.0f kt\n", landing_ias_kts, landing_gs_kts))
     file:write("相对风: " .. landing_wind_relative_text .. "\n")
     log_tools.write_rollout_report(raw_file)
+    log_tools.write_flare_report(raw_file)
     if landing_context.centerline_penalty_applied then
         file:write("中心线评价: " .. landing_context.centerline_warning_text .. "\n")
     elseif landing_context.runway_detected then
@@ -8081,7 +8144,7 @@ function log_tools.build_landing_log_payload(existing_path)
         FLARE_CONFIG.oscillation_efficiency_max,
         FLARE_CONFIG.oscillation_worsening_ratio_min
     ))
-    file:write("评分说明: v1.1.9rc2 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。\n")
+    file:write("评分说明: v1.1.9rc4 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。\n")
     file:write(string.format("曲率分析耗时: %.3f ms\n\n", flare_analysis.calculation_ms))
 
     if landing_analysis.math_log_enabled then
@@ -8599,7 +8662,7 @@ local function process_landing_jobs(now, allow_prefetch_scan)
 
     local runway_state = log_tools.runway_state
     local may_scan = runway_state.mode ~= "prefetch" or allow_prefetch_scan == true
-    if runway_state.active and may_scan then
+    if (runway_state.active or runway_state.landing_search) and may_scan then
         local call_ok, finished = pcall(log_tools.process_runway_resolver, now)
         if not call_ok then
             log_tools.finish_runway_resolver("unavailable", "apt.dat 解析异常: " .. tostring(finished))
@@ -8634,10 +8697,11 @@ local function process_landing_jobs(now, allow_prefetch_scan)
             resolve_context_safely(now)
         end
         -- 报告最早在 8 秒写入；若分帧扫描尚未完成，则只等待到独立时间预算耗尽。
-        if log_tools.runway_state.active and now < landing_jobs.runway_deadline then
+        if (log_tools.runway_state.active or log_tools.runway_state.landing_search) and now < landing_jobs.runway_deadline then
             return
         end
-        if log_tools.runway_state.active then
+        if log_tools.runway_state.active or log_tools.runway_state.landing_search then
+            log_tools.runway_state.landing_search=nil;log_tools.runway_state.landing_candidates=nil
             log_tools.finish_runway_resolver("timeout", "跑道识别超过独立时间预算")
             refresh_popup_cache()
         end
@@ -9339,7 +9403,34 @@ create_command("starlux/lmm/open_records", "StarLux LMM | 落地记录 / Landing
 -- 核心逻辑
 -- =========================
 
+function log_tools.flare_result()
+    local rec=log_tools.recording;local route=log_tools.dev.route
+    if not rec.flare or rec.id~=landing_context.recording_id then return nil end
+    local length
+    if route and route.session_id==rec.id and landing_context.runway_detected then
+        length=route.length-(route.reverse and route.runway.displaced2_m or route.runway.displaced1_m or 0)
+    end
+    return rec.flare:result(length,rec.reason)
+end
+function log_tools.apply_flare_score()
+    if not landing_complete then return end
+    local result=log_tools.flare_result();if not result then return end
+    local next_status=log_tools.flare_module.score(landing_status,result)
+    if next_status~=landing_status then
+        landing_status=next_status;log_tools.recording.summary_dirty=true;refresh_popup_cache()
+    end
+end
+function log_tools.write_flare_report(file)
+    local en=runtime_state.document_language=="en";local result=log_tools.flare_result()
+    file:write(en and "\nFlare assessment (RC3 experimental)\n" or "\n平飘与拉飘考核（RC3 测试规则）\n")
+    if not result then file:write(en and "Not assessed: no approach evidence\n\n" or "未考核：无进近证据\n\n");return end
+    file:write((en and "Flare result: " or "平飘评价: ")..log_tools.flare_module.describe(result,en).."\n")
+    file:write(string.format("Flare rule: %s; AGL <=20 ft; |vertical trend| <=150 fpm; >=5 s; distance > clamp(0.15*LDA,300,600) m; balloon >=3 ft / >=1 s; source=%s\n",result.rule,result.source))
+    file:write(string.format("Flare evidence: LDA=%s m; limit=%s m; flat=%.2f s / %.2f m; rise=%.2f ft / %.2f s; flat_t=%s; rise_t=%s\n",tostring(result.usable_length or "N/A"),tostring(result.limit or "N/A"),result.seconds,result.distance,result.rise,result.rise_seconds,tostring(result.flat_time or "N/A"),tostring(result.rise_time or "N/A")))
+    file:write(en and "First-contact approach only; yellow ceiling, existing red remains red. Experimental plugin thresholds, not an airline QAR standard.\n\n" or "仅首次触地前；任一触发降为黄色，原有红色保持。插件测试阈值，非航空公司 QAR 标准。\n\n")
+end
 function log_tools.apply_rollout_score()
+    log_tools.apply_flare_score()
     local rec=log_tools.recording;local r=log_tools.dev.route
     if not landing_complete or not r or r.session_id~=rec.id or r.session_id~=landing_context.recording_id
         or r.revision==(r.applied_revision or 0) then return end
@@ -9709,7 +9800,7 @@ function ma_landing_meter_draw()
         local ok,err=pcall(log_tools.dev.present,log_tools.dev,log_tools.native_ui.instance,DEBUG_MODE,log_tools.popup_language()=="en")
         if not ok and log_tools.dev.render_error~=tostring(err) then
             log_tools.dev.render_error=tostring(err)
-            logMsg("[LMM 1.1.9rc2] Overlay: "..tostring(err))
+            logMsg("[LMM 1.1.9rc4] Overlay: "..tostring(err))
         end
     end
     log_tools.update_native_dialogs()
@@ -9907,7 +9998,7 @@ function ma_lmm119_check_updates()
     local ok,err=pcall(function()
         if not log_tools.updates then
             local loader=assert(loadfile(join_path(LMM_BASE_DIRECTORY,"LMM_UI_119/core_updates.lua")))
-            log_tools.updates=loader().new({current="1.1.9rc2",path=join_path(LOG_DIRECTORY_PATH,log_tools.native_ui.force_compatibility and ".lmm-update-compatibility.txt" or ".lmm-update-standard.txt"),
+            log_tools.updates=loader().new({current="1.1.9rc4",path=join_path(LOG_DIRECTORY_PATH,log_tools.native_ui.force_compatibility and ".lmm-update-compatibility.txt" or ".lmm-update-standard.txt"),
                 variant=log_tools.native_ui.force_compatibility and "Compatibility" or "Standard"})
         end
         log_tools.updates:tick()
@@ -9934,7 +10025,7 @@ if type(do_on_exit) == "function" then do_on_exit("ma_lmm118_shutdown()") end
 
 if logMsg then
     logMsg(string.format(
-        "[StarLux LMM] v1.1.9rc2 loaded successfully with %d direct XPLM DataRefs, persistent apt.dat indexing and optional control capture.",
+        "[StarLux LMM] v1.1.9rc4 loaded successfully with %d direct XPLM DataRefs, persistent apt.dat indexing and optional control capture.",
         #LMM_DATAREF_SPECS
     ))
 end

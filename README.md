@@ -1,15 +1,14 @@
-# StarLux Landing Meter · 1.1.9rc2
+# StarLux Landing Meter · 1.1.9rc4
 
-**1.1.9rc2 于 2026-09-25 正式公开发行。** 修复旧 FlyWithLua 设置界面的 Lua stopped，新增同步姿态仪与 Windows 游戏内更新提示，内置安装器 **1.0.2**。
+**1.1.9rc4 公开维护版 · 2026-09-30，内置安装器 1.0.3。** 包含机场识别修复、图表可见区间缩放、油门/N1 合并覆盖层、YAW 对齐与平飘测试规则，以及安装器文件清单、完全卸载、详细输出和事务恢复改进。
 
-**[下载 / Download RC2](https://github.com/Starlux531/StarLux-Landing-Meter/releases/tag/v1.1.9rc2)** · [安装说明](README_1.1.9.md) · [发行说明 / Release notes](RELEASE_NOTES_v1.1.9rc2.md) · [更新记录](CHANGELOG.md) · [路线图](ROADMAP.md)
+**[下载 / Download RC4](https://github.com/Starlux531/StarLux-Landing-Meter/releases/tag/v1.1.9rc4)** · [安装说明](README_1.1.9.md) · [发行说明 / Release notes](RELEASE_NOTES_v1.1.9rc4.md) · [更新记录](CHANGELOG.md) · [路线图](ROADMAP.md)
 
-- 国内包：StarLux_LMM_Installer_1.1.9rc2_CN.zip；海外包：StarLux_LMM_Installer_1.1.9rc2_EN.zip（全部使用英文/ASCII 路径）。均内置安装器 1.0.2 和四种 UI/语言载荷。
-- Standard：Windows x64、XP 12.4.4+、FlyWithLua NG+。Compatibility：旧 XP 12 的传统界面与数字覆盖层；本次重新提供 RC2 修复包。旧 v1.1.9 兼容附件仍撤回；XP 12.4.3 原用户实机反馈尚待确认。
-- 旧安装器先完成自身更新，再检查 RC2；完整安装保留配置与记录，不要混用主脚本及 UI 模块。1.1.10-beta2 测试用户需手动选择 RC2。
-- 保留全程记录、滑跑评分、风与 ILS 分析、可拖动/缩放/折叠覆盖层及反推显示；大盘分析仍为独立验证模块，不含 AP/AT 监测。
+- 国内包：`StarLux_LMM_Installer_1.1.9rc4_CN.zip`；海外包：`StarLux_LMM_Installer_1.1.9rc4_EN.zip`（纯英文/ASCII 路径）。均内置安装器 1.0.3 和四种 UI/语言载荷。
+- 旧安装器先更新自身，再检查插件更新。Standard 面向 XP 12.4.4+；Compatibility 使用传统界面和数字覆盖层，XP 12.4.3 原反馈用户的实机验证仍待确认。
+- 安装器 1.0.3 继承已测试的 1.0.2rc4 修复，使用纯数字版本号，让已公开的 1.0.2 能识别自更新。插件编号仍为 1.1.9rc4。
 
-**Public maintenance release 1.1.9rc2**, marked Latest. Adds legacy SliderInt fixes, the ASCII Chinese label, synchronized attitude replay and background Windows update notices. Use the **EN** bundle for ASCII filenames. Both bundles include installer **1.0.2** and all four plugin variants. Update older installers first. RC2 Compatibility is available again; affected-user XP 12.4.3 validation remains pending. The original v1.1.9 Compatibility assets stay withdrawn.
+**Public maintenance release 1.1.9rc4**, bundled with installer **1.0.3**. Update the installer first, then the plugin. CN and ASCII-only EN bundles include all four UI/language variants. Installer 1.0.3 promotes the tested recovery fixes to a numeric version discoverable by older installers. Experimental float-grading thresholds are not airline QAR standards; aircraft-specific flight validation remains necessary.
 
 | 文件或目录 | 用途 |
 | --- | --- |

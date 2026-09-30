@@ -5,23 +5,23 @@
     {
       "file": "LMMUI-Regular.otf",
       "source_sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
-      "sha256": "c38ae5700304648f0e07eecf4069b6792cccddabf9bab9edc05b87ba98f4b22d",
-      "bytes": 336288,
-      "glyphs": 899
+      "sha256": "127440c696cb514240eca49a4b84ffbc46bcfbb1a1e963aa02d8f0b05a8b225a",
+      "bytes": 336780,
+      "glyphs": 901
     },
     {
       "file": "LMMUI-Medium.otf",
       "source_sha256": "ca094f6b0001fb048ca39ddd797a0cdb0179e1e55c6561e111c49c3e6a61d7b7",
-      "sha256": "21fec67143dd4d6119cce0758f1e88006c299a13cae2247082958a54006bdc14",
-      "bytes": 335260,
-      "glyphs": 899
+      "sha256": "d14d56055ee6b9c17d9b798f3c7923736adfbb434bd6067bf7286ca9c09f61b8",
+      "bytes": 335756,
+      "glyphs": 901
     },
     {
       "file": "LMMUI-Bold.otf",
       "source_sha256": "b5f0d1a190a7f9b43c310a8850630af12553df32c4c050543f9059732d9b4c0a",
-      "sha256": "8def122a4b03ec5c830d64c07d6f48cfc356c41bf5eb0c954a5539caa6923659",
-      "bytes": 344624,
-      "glyphs": 899
+      "sha256": "fe8971d16dc03a0e939dc9ac25f2c6266c5ec0f11e3d6fa0794e32473f2883e6",
+      "bytes": 345144,
+      "glyphs": 901
     }
   ]
 }

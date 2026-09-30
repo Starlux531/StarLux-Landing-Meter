@@ -4,10 +4,11 @@ import hashlib
 import json
 import shutil
 import zipfile
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 meta = json.loads((ROOT / 'development.json').read_text(encoding='utf-8'))
-assert meta['channel'] == 'stable' and meta['version'] in ('1.1.9','1.1.9rc2')
+assert (meta['channel'] == 'stable' and meta['version'] in ('1.1.9','1.1.9rc2','1.1.9rc4')) or (meta['channel'] == 'unpublished' and re.fullmatch(r'1\.1\.9rc[2-9][0-9]*',meta['version']))
 version = meta['version']
 release = ROOT / 'dist' / version
 bundle = release / f'StarLux_LMM_Installer_{version}.zip'

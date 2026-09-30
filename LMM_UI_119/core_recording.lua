@@ -1,4 +1,5 @@
 -- Versioned, bounded streaming recorder. No synthetic samples across loading gaps.
+local Flare=...
 local M={}; M.__index=M
 local ils_keys={"ils_version","ils_model","ils_source","ils_status","ils_airport","ils_runway",
 "ils_loc_id","ils_loc_lat","ils_loc_lon","ils_loc_course_true","ils_loc_frequency_mhz",
@@ -90,7 +91,8 @@ function M:start(s,reason)
     if not f then self.error=tostring(e); self.phase="INCOMPLETE"; self.retry_after=s.t+10; return false end
     self.file=f; self.spool=base..".part"; self.phase="APPROACH_RECORDING"
     self.start_time=s.t; self.start_agl=s.agl; self.missing=s.agl<2450; self.touch_time=nil; self.touch_agl=nil
-    self.summary_dirty=false
+    self.summary_dirty=false;self.reason=nil
+    self.flare=Flare and Flare.new() or nil
     self.rollout_pending={};self.rollout_front_missing=false
     self.pending={}; self.queued=0; self.samples=0; self.next_sample=s.t; self.next_wind=s.t
     self.wind=nil; self.route=nil; self.last=nil; self.climb_since=nil; self.low_speed_since=nil; self.gaps=0; self.done=false
@@ -117,6 +119,14 @@ function M:stop(reason,complete)
     self:wind_row()
     self.phase=complete and "COMPLETE" or "INCOMPLETE"; self.reason=reason; self.done=true
     if reason=="manual_end" then self.manual_hold=true end
+    if self.flare then
+        self:emit("META",{"flare_rule",self.flare.rule})
+        self:emit("META",{"flare_flat_distance_m",self.flare.flat_distance})
+        self:emit("META",{"flare_flat_seconds",self.flare.flat_seconds})
+        self:emit("META",{"flare_rise_ft",self.flare.rise_ft})
+        self:emit("META",{"flare_rise_seconds",self.flare.rise_seconds})
+        self:emit("META",{"flare_height_source",self.flare.source or "unavailable"})
+    end
     if self.route then
         self:emit("META",{"runway_heading_true",self.route.heading_true})
         self:emit("META",{"rollout_rule",self.route.rule})
@@ -213,6 +223,7 @@ function M:tick(s,wind_interval,route,ils_reference)
         self.previous=nil; return
     end
     if s.paused then
+        if self.flare then self.flare:break_segment() end
         if self.file and not self.pause_at then self:emit("E",{s.t,"pause"}) end
         if self.file and not self.pause_at then self:rollout_sample({break_segment=true},route) end
         self.pause_at=s.t; self.low_speed_since=nil; self.climb_since=nil; return
@@ -242,6 +253,7 @@ function M:tick(s,wind_interval,route,ils_reference)
     -- (handled above), but clear an explicitly lost reference within this flight.
     if self.file then self:update_ils_reference(ils_reference) end
     if self.file then
+        if self.flare and (s.ground==1 or s.t+1e-7>=self.next_sample) then self.flare:update(s) end
         if not self.touch_time and prev and prev.ground==0 and s.ground==1 and s.t>prev.t and s.t-prev.t<=1 then
             self.touch_time=s.t; self.touch_agl=s.agl; self.phase="ROLLOUT"; self:emit("E",{s.t,"touchdown"})
         elseif self.touch_time and prev and prev.ground~=s.ground then

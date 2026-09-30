@@ -266,7 +266,7 @@ html[data-layout="horizontal"] .analysis-column>.context-detail{grid-template-co
 <body>
 <div class="app">
   <header class="topbar">
-    <div class="brand">STARLUX LANDING METRICS MONITOR · 分析器 <small id="analyzerBuild" style="font-size:10px;opacity:.75;margin-left:8px">1.1.9rc2</small></div>
+    <div class="brand">STARLUX LANDING METRICS MONITOR · 分析器 <small id="analyzerBuild" style="font-size:10px;opacity:.75;margin-left:8px">1.1.9rc4</small></div>
     <div class="top-actions">
       <div class="privacy">完全本地读取 · 数据不会上传</div>
       <details class="theme-lab" id="themeLab"><summary class="theme-panel-toggle">RGB 配色</summary><div class="theme-popover">
@@ -2003,14 +2003,14 @@ function metricRangeText(metric,scale){
   return`${scale.min.toFixed(metric.decimals)}–${scale.max.toFixed(metric.decimals)} ${metric.unit}`
 }
 function metricRange(report,metric,rows){
-  const cache=report?(report.metricRanges??={}):{};if(cache[metric.key])return cache[metric.key];
+  // Only the visible window contributes to the scale. Hover never calls this.
   let min=Infinity,max=-Infinity;for(const p of rows||[]){const v=metricPointValue(metric,p);if(Number.isFinite(v)){min=Math.min(min,v);max=Math.max(max,v)}}
-  return cache[metric.key]=[min,max].filter(Number.isFinite);
+  return [min,max].filter(Number.isFinite);
 }
 function buildMetricSeries(metrics,data,compareData,report,comparisonReport){
   const domain=chartTimeDomain(report,comparisonReport,data,compareData);
-  return metrics.map(metric=>{const mainSource=metric.source==="control"?(report?.controlTrace||[]):data,compareSource=metric.source==="control"?(comparisonReport?.controlTrace||[]):compareData;
-    return{metric,range:[...metricRange(report,metric,metric.source==="control"?report?.controlTrace:report?.trajectory??mainSource),...metricRange(comparisonReport,metric,metric.source==="control"?comparisonReport?.controlTrace:comparisonReport?.trajectory??compareSource)],main:recordingEnvelope(timeWindowPoints(mainSource,domain),metric.key),compare:recordingEnvelope(timeWindowPoints(compareSource,domain),metric.key)}
+  return metrics.map(metric=>{const main=timeWindowPoints(metric.source==="control"?(report?.controlTrace||[]):data,domain),compare=timeWindowPoints(metric.source==="control"?(comparisonReport?.controlTrace||[]):compareData,domain);
+    return{metric,range:[...metricRange(null,metric,main),...metricRange(null,metric,compare)],main:recordingEnvelope(main,metric.key),compare:recordingEnvelope(compare,metric.key)}
   }).filter(item=>item.main.some(p=>Number.isFinite(p[item.metric.key]))||item.compare.some(p=>Number.isFinite(p[item.metric.key])));
 }
 function buildMetricScales(series){
@@ -2027,7 +2027,8 @@ function buildMetricScales(series){
     if(bucket.group==="throttle"){bucket.min=min<-101?-200:min<0?-100:0;bucket.max=100;continue}
     if(bucket.group==="n1"){bucket.min=0;bucket.max=Math.max(110,Math.ceil(Math.max(0,max)/10)*10);continue}
     if(bucket.group==="verticalSpeed"){max=Math.max(0,max)}
-    if(bucket.group==="altitude"||bucket.group==="attitude"){min=Math.min(0,min);max=Math.max(0,max)}
+    if(bucket.group==="attitude"){min=Math.min(0,min);max=Math.max(0,max)}
+    if(bucket.group==="altitude"){const center=(min+max)/2;const half=Math.max(5,(max-min)/2);min=center-half;max=center+half}
     let span=max-min;
     if(!Number.isFinite(span)||span===0){const center=Number.isFinite(min)?min:0;span=Math.max(2,Math.abs(center)*.2);min=center-span/2;max=center+span/2}
     const pad=span*.08;bucket.min=min-pad;bucket.max=max+pad

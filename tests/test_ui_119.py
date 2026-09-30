@@ -549,7 +549,11 @@ class RecorderTests(unittest.TestCase):
                  'reset_bounce_state','begin_bounce_monitor','process_bounce_monitor',
                  'finish_flare_trace','finish_second_touch_analysis','apply_bounce_score',
                  # beta8: report explains graded rollout; test_rollout_grading.py.
-                 'status_explanation'}
+                 'status_explanation',
+                 # RC3: bounded nearby land-airport retry replaces heliport-first
+                 # lookup. Geometry and grading covered in test_rc3.py.
+                 'process_landing_jobs','log_tools.select_cached_touchdown_runway',
+                 'resolve_landing_context','log_tools.process_runway_resolver','log_tools.probe_prefetch_airport'}
         # Report writer & dictionary version changes are normalized, not excused
         # as arbitrary recorder changes.
         version=json.loads((ROOT/'development.json').read_text(encoding='utf-8'))['version']

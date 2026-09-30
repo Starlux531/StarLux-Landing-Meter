@@ -45,10 +45,15 @@ public record PreparedPackage(PackageManifest Manifest, string Root);
 public record InstalledState(string Version, string Details, bool HasFlyWithLua);
 public sealed class Journal
 {
+    public string Id { get; set; } = "";
+    public List<JournalEntry> ResultFiles { get; set; } = [];
+    public string PreviousPending { get; set; } = "";
     public string Target { get; set; } = "";
     public string Status { get; set; } = "prepared";
     public string Version { get; set; } = "";
     public List<JournalEntry> Entries { get; set; } = [];
+    public string Failure { get; set; } = "";
+    public string RollbackFailure { get; set; } = "";
 }
 public record JournalEntry(string Path, bool Existed, string Sha256 = "");
 
@@ -89,7 +94,7 @@ public static partial class Core
             // Historical project naming: bare 1.1.9rc2+ is a maintenance revision
             // after 1.1.9; ordinary -rc prerelease ordering remains unchanged.
             int rank=m.Groups[4].Value.ToLowerInvariant() switch { "alpha" => 0, "beta" => 1, "rc" => 2, _ => 3 };
-            if(Regex.IsMatch(ExtractVersion(s),@"^1\.1\.9rc\d+$",RegexOptions.IgnoreCase) && N(5)>=2) rank=4;
+            if(Regex.IsMatch(ExtractVersion(s),@"^(1\.1\.9|1\.0\.2)rc\d+$",RegexOptions.IgnoreCase) && N(5)>=2) rank=4;
             return ([N(1), N(2), N(3)], rank, N(5));
         }
         var x = Parse(a); var y = Parse(b);
@@ -200,12 +205,13 @@ public static partial class Core
                 if (m.Product != "StarLux_LMM" || m.Schema != 1 || ExtractVersion(m.Version) == "") throw new IOException(U.T("无效清单","Invalid manifest"));
                 result.Add(new Release { Version = m.Version, Build = m.Build, UiVariant = m.UiVariant, DefaultLanguage = m.DefaultLanguage, LocalDirectory = dir });
             }
-            catch (Exception e) { log(U.T("本地版本忽略：", "Local package skipped: ") + f + ": " + e.Message); }
+            catch (Exception e) { InstallerTrace.Fault("Read local manifest "+f,e);log(U.T("本地版本忽略：", "Local package skipped: ") + f + ": " + e.Message); }
         }
         return result.OrderByDescending(r => r.Version, Comparer<string>.Create(CompareVersion)).ToList();
     }
     public static void ExtractZip(string zip, string destination)
     {
+        InstallerTrace.Event("EXTRACT_ARCHIVE",new {zip,destination});
         using var archive = ZipFile.OpenRead(zip);
         long total = 0; var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (archive.Entries.Count > 20000) throw new IOException(U.T("ZIP 文件过多","Too many ZIP entries"));
@@ -220,7 +226,7 @@ public static partial class Core
             total += entry.Length;
             if (entry.Length > 256L * 1024 * 1024 || total > 512L * 1024 * 1024) throw new IOException(U.T("ZIP 超出大小限制","ZIP size limit"));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            entry.ExtractToFile(target, false);
+            InstallerTrace.Step(U.T("提取文件","Extract file"),entry.FullName+" -> "+target,()=>entry.ExtractToFile(target,false));
         }
     }
     public static PreparedPackage Prepare(string directory, string version = "")
@@ -228,6 +234,7 @@ public static partial class Core
         var manifestFile = Path.Combine(directory, "manifest.json");
         if (File.Exists(manifestFile))
         {
+            InstallerTrace.Session?.Snapshot("package-manifest.json",manifestFile);
             var manifest = JsonSerializer.Deserialize<PackageManifest>(File.ReadAllText(manifestFile), Json) ?? throw new IOException(U.T("空清单","Empty manifest"));
             var prepared = new PreparedPackage(manifest, Path.Combine(directory, "payload")); ValidatePackage(prepared);
             if (version.Length > 0 && CompareVersion(version, manifest.Version) != 0) throw new IOException(U.T("所选版本与清单不一致","Manifest version mismatch"));
@@ -262,7 +269,12 @@ public static partial class Core
         {
             if (f == null || string.IsNullOrEmpty(f.Path) || string.IsNullOrEmpty(f.Sha256) || !seen.Add(f.Path.Replace('\\', '/')) || !Allowed(m.Kind, f.Path)) throw new IOException(U.T("不允许的载荷文件","Disallowed payload: ") + f?.Path);
             var path = SafePath(package.Root, f.Path);
-            if (!Regex.IsMatch(f.Sha256, "^[a-fA-F0-9]{64}$") || !File.Exists(path) || !Hash(path).Equals(f.Sha256, StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("文件校验失败","SHA256 mismatch: ") + f.Path);
+            InstallerTrace.Step(U.T("校验载荷文件","Verify payload file"),path,()=>{
+                if(!File.Exists(path))throw new FileNotFoundException(U.T("安装包缺少文件。","Package file missing."),path);
+                var actual=Hash(path);
+                if(!Regex.IsMatch(f.Sha256,"^[a-fA-F0-9]{64}$") || !actual.Equals(f.Sha256,StringComparison.OrdinalIgnoreCase))
+                    throw new DiagnosticFailure("PACKAGE_HASH_MISMATCH",U.T("安装包文件校验失败。","Package checksum mismatch.")+$"\nExpected: {f.Sha256}\nActual: {actual}",U.T("重新完整解压或重新下载对应发行包；不会应用校验失败的载荷。","Re-extract or re-download the complete release; an invalid payload will not be applied."),path);
+            });
         }
         if (m.Kind == "flywithlua" && m.Files.Count(f => MainLua(f.Path)) != 1) throw new IOException(U.T("必须只有一个主脚本","Exactly one main script required"));
         if (m.Kind == "flywithlua")
@@ -311,100 +323,182 @@ public static partial class Core
         foreach (var path in plan.Keys) SafePath(target, path);
         return plan;
     }
-    public static string Install(string baseDir, string target, PreparedPackage package, string? fwlRoot, Action<string> log, Action<int> progress, bool checkRunning = true, int failAfter = -1, bool clean = false)
+    public static string Install(string baseDir, string target, PreparedPackage package, string? fwlRoot, Action<string> log, Action<int> progress, bool checkRunning = true, int failAfter = -1, bool clean = false, IReadOnlyCollection<string>? reviewedPaths = null, string rebuildPendingHash = "")
     {
         if (checkRunning) CheckNotRunning();
         target = NormalizeDirectory(target);
         using var targetLease = new TargetLease(target);
+        if(rebuildPendingHash!="")ValidateRebuild(target,rebuildPendingHash);
+        else { FinalizePending(target,baseDir,log); CheckPending(target,baseDir); }
         ValidateCompatibility(target, package.Manifest);
         var originalRoot = package.Root;
         package = PreparePreferences(target, package, clean);
         try
         {
-            var plan = Plan(target, package, fwlRoot);
+            var plan = InstallerTrace.Step(U.T("计算安装与清理计划","Build install and cleanup plan"),target,()=>Plan(target, package, fwlRoot),log);
             if (clean) { plan[Scripts + "/LMM_Settings.cfg"] = ""; plan[Scripts + "/LMM_Log/LMM_Viewer.html"] = ""; plan[Scripts + "/LMM_Log/LMM_Viewer_Data.js"] = ""; }
-            return ExecutePlan(baseDir, target, plan, package.Manifest, log, progress, checkRunning, failAfter);
+            if (reviewedPaths != null && !reviewedPaths.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(plan.Keys.Append(Receipt)))
+                throw new IOException(U.T("安装范围在确认后发生变化，请重新检查文件清单。", "The installation scope changed after approval. Review the file list again."));
+            return ExecutePlan(baseDir, target, plan, package.Manifest, log, progress, checkRunning, failAfter, rebuildPendingHash);
         }
         finally { if (package.Root != originalRoot) { NoLinks(package.Root); Directory.Delete(package.Root, true); } }
     }
-    static string ExecutePlan(string baseDir, string target, Dictionary<string,string> plan, PackageManifest? manifest, Action<string> log, Action<int> progress, bool checkRunning, int failAfter)
+
+    public static void CheckPending(string target, string? installerDirectory = null)
+    {
+        var marker=SafePath(target,"Resources/plugins/StarLux_LMM.install.pending.json");
+        if(!File.Exists(marker))return;
+        InstallerTrace.CaptureTarget(target);
+        string backup="";
+        try
+        {
+            using var json=JsonDocument.Parse(File.ReadAllText(marker));
+            backup=json.RootElement.GetProperty("backup").GetString()??"";
+            if(string.IsNullOrWhiteSpace(backup))throw new JsonException("Empty backup path");
+        }
+        catch(Exception e)
+        {
+            throw new DiagnosticFailure("PENDING_INVALID",U.T("未完成安装标记无法解析。","Cannot parse the pending installation marker."),
+                U.T("保留标记和备份，导出诊断包；不要删除标记后强行安装。","Keep the marker/backups and export diagnostics; do not bypass recovery by deleting the marker."),marker,e);
+        }
+        var found=FindPendingBackup(target,installerDirectory ?? AppContext.BaseDirectory);
+        var exists=found!=""; if(exists)backup=found;
+        throw new DiagnosticFailure(exists?"RECOVERY_REQUIRED":"RECOVERY_BACKUP_MISSING",
+            U.T("上次操作未完成，需要先恢复对应备份。","An unfinished operation requires recovery.")+"\n"+
+            U.T("备份目录：","Backup directory: ")+backup+"\n"+U.T("事务清单：","Transaction: ")+Path.Combine(backup,"transaction.json")+"\n"+
+            (exists?U.T("事务清单存在；恢复时还会校验备份文件。","Transaction exists; recovery will also verify backup files."):U.T("该路径下的备份目录或事务清单不存在。","The backup directory or transaction file is missing at this path.")),
+            exists?U.T("点击“恢复备份”，选择上述 transaction.json，恢复成功后重新安装。","Choose Restore backup and select the transaction.json above, then reinstall after recovery."):
+            U.T("如果移动或重新解压过安装器，请找回原 backup 文件夹；保留现状并导出诊断包。","If the installer was moved/re-extracted, locate its original backup folder. Preserve the current state and export diagnostics."),marker);
+    }
+    static string ExecutePlan(string baseDir, string target, Dictionary<string,string> plan, PackageManifest? manifest, Action<string> log, Action<int> progress, bool checkRunning, int failAfter, string rebuildPendingHash = "")
     {
         var backupRoot = Path.Combine(baseDir, "backup"); NoLinks(backupRoot);
-        // Keep recovery data outside the simulator tree; user must move an installer placed inside XP.
         if (Path.GetFullPath(backupRoot).StartsWith(target.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("请将安装器移到 X-Plane 文件夹外，再安装。","Keep installer/backup outside X-Plane."));
+        if(rebuildPendingHash!="")ValidateRebuild(target,rebuildPendingHash);
+        else { FinalizePending(target,baseDir,log); CheckPending(target,baseDir); }
         var backup = Path.Combine(backupRoot, DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8]);
-        // A portable installer may have been moved. Also check an in-target marker from an interrupted run.
+        PreflightTargets(target, plan.Keys, log);
         var marker = SafePath(target, "Resources/plugins/StarLux_LMM.install.pending.json");
-        if (File.Exists(marker)) throw new IOException(U.T("发现未完成的安装，请先恢复标记中指定的备份","Restore incomplete installation first: ") + File.ReadAllText(marker));
-        Directory.CreateDirectory(backup);
-        if (manifest != null) { var receiptSource = Path.Combine(backup, "new-receipt.json"); File.WriteAllText(receiptSource, JsonSerializer.Serialize(manifest, Json)); plan[Receipt] = receiptSource; }
+        InstallerTrace.Step(U.T("创建备份目录","Create backup directory"),backup,()=>Directory.CreateDirectory(backup),log);
+        if (manifest != null) { var receiptSource = Path.Combine(backup, "new-receipt.json"); InstallerTrace.Step(U.T("生成安装清单","Generate installation receipt"),receiptSource,()=>File.WriteAllText(receiptSource, JsonSerializer.Serialize(manifest, Json)),log); plan[Receipt] = receiptSource; }
         else plan[Receipt] = "";
-        var journal = new Journal { Target = target, Version = manifest?.Version ?? "uninstall" };
+        var journal = new Journal { Id=Guid.NewGuid().ToString("N"), Target = target, Version = manifest?.Version ?? "uninstall", PreviousPending=rebuildPendingHash!=""?File.ReadAllText(marker):"" };
+        if(journal.PreviousPending!="")File.WriteAllText(Path.Combine(backup,"superseded-pending.json"),journal.PreviousPending);
+        journal.ResultFiles=plan.Select(p=>new JournalEntry(p.Key,p.Value!="",p.Value!=""?Hash(p.Value):"")).ToList();
         var journalPath = Path.Combine(backup, "transaction.json");
-        void Save() { File.WriteAllText(journalPath + ".tmp", JsonSerializer.Serialize(journal, Json)); File.Move(journalPath + ".tmp", journalPath, true); }
-        // All originals are copied BEFORE any target writes. Backup failure leaves target untouched.
+        void Save() => InstallerTrace.Step(U.T("保存事务记录","Save transaction"),journalPath,()=>{File.WriteAllText(journalPath + ".tmp", JsonSerializer.Serialize(journal, Json));File.Move(journalPath + ".tmp", journalPath, true);},log);
+        InstallerTrace.Event("PLAN",new {target,backup,version=journal.Version,count=plan.Count});
         foreach (var relative in plan.Keys)
         {
             var path = SafePath(target, relative); var exists = File.Exists(path);
-            var hash = exists ? Hash(path) : "";
+            var hash = exists ? InstallerTrace.Step(U.T("计算原文件校验值","Hash original"),path,()=>Hash(path),log) : "";
             journal.Entries.Add(new(relative, exists, hash));
-            if (exists) { var dest = SafePath(Path.Combine(backup, "files"), relative); Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(path, dest, false); if (Hash(dest) != hash) throw new IOException(U.T("备份校验失败，未修改目标","Backup verification failed; target unchanged")); }
+            if (exists)
+            {
+                var dest = SafePath(Path.Combine(backup, "files"), relative);
+                InstallerTrace.Step(U.T("备份并校验原文件","Back up and verify original"),path+" -> "+dest,()=>{
+                    Directory.CreateDirectory(Path.GetDirectoryName(dest)!);File.Copy(path,dest,false);
+                    if(Hash(dest)!=hash)throw new DiagnosticFailure("BACKUP_HASH_MISMATCH",U.T("备份校验失败，尚未写入目标。","Backup verification failed; target not yet changed."),U.T("保留诊断包并检查磁盘和文件占用。","Retain diagnostics and check disk/file access."),dest);
+                },log);
+            }
+            else log(U.T("安装前不存在：","Not present before installation: ")+path);
         }
-        Save(); log(U.T("备份","Backup: ") + backup);
+        Save(); log(U.T("备份已完成：","Backup complete: ")+backup);
+        InstallerTrace.Session?.Snapshot("transaction-prepared.json",journalPath);
+        if(rebuildPendingHash!="")ValidateRebuild(target,rebuildPendingHash);
+        bool committed=false, markerStarted=false;
         try
         {
             if (checkRunning) CheckNotRunning();
-            File.WriteAllText(marker, JsonSerializer.Serialize(new { backup }, Json));
+            InstallerTrace.Step(U.T("写入未完成标记","Write pending marker"),marker,()=>WriteTextAtomic(marker, JsonSerializer.Serialize(new PendingRecovery { Backup=backup, TransactionId=journal.Id, OriginalStateHash=StateHash(journal) }, Json)),log);
+            markerStarted=true;
             journal.Status = "installing"; Save(); int count = 0;
             foreach (var (relative, source) in plan)
             {
                 var dest = SafePath(target, relative);
-                if (source.Length == 0) File.Delete(dest);
-                else { Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(source, dest, true); if (Hash(source) != Hash(dest)) throw new IOException(U.T("写入后校验失败","Write verification failed: ") + relative); }
-                if (++count == failAfter) throw new IOException("Injected test failure");
+                if (source.Length == 0) InstallerTrace.Step(U.T("清理旧文件","Remove obsolete file"),dest,()=>File.Delete(dest),log);
+                else InstallerTrace.Step(U.T("部署并校验文件","Deploy and verify file"),source+" -> "+dest,()=>{
+                    Directory.CreateDirectory(Path.GetDirectoryName(dest)!);File.Copy(source,dest,true);
+                    var expected=Hash(source);var actual=Hash(dest);
+                    if(expected!=actual)throw new DiagnosticFailure("WRITE_HASH_MISMATCH",U.T("写入后校验失败。","Post-write checksum mismatch.")+$"\nExpected: {expected}\nActual: {actual}",U.T("将执行回滚；请保留诊断日志。","Rollback will be attempted; retain the diagnostic log."),dest);
+                },log);
+                if (++count == failAfter) {var injected=new IOException("Injected test failure");injected.Data["LMM.Step"]="After deployment";injected.Data["LMM.Path"]=dest;throw injected;}
                 progress(count * 100 / plan.Count);
             }
-            PruneEmptyUiDirectories(target);
-            journal.Status = "completed"; Save(); File.Delete(marker); return backup;
+            InstallerTrace.Step(U.T("清理旧 UI 空目录","Prune empty UI directories"),target,()=>PruneEmptyUiDirectories(target),log);
+            var logDirectory = SafePath(target, Scripts + "/LMM_Log");
+            if (Directory.Exists(logDirectory) && !Directory.EnumerateFileSystemEntries(logDirectory).Any()) Directory.Delete(logDirectory, false);
+            journal.Status = "completed"; Save(); committed=true;
+            InstallerTrace.Step(U.T("清除未完成标记","Clear pending marker"),marker,()=>File.Delete(marker),log);
+            InstallerTrace.Session?.Snapshot("transaction-completed.json",journalPath);
+            InstallerTrace.CaptureTarget(target);return backup;
         }
         catch (Exception installError)
         {
-            try { Restore(backup, target, false); log(U.T("安装失败，原文件已恢复","Failed; originals restored")); }
-            catch (Exception restoreError) { throw new IOException(U.T("安装失败且回滚未完成，请保留备份：", "Recovery required: ") + $"{backup}\n{installError.Message}\n{restoreError.Message}"); }
+            if(committed)throw new DiagnosticFailure("FINALIZE_REQUIRED",U.T("安装已完成，但事务收尾失败；没有回退已完成的安装。", "Installation completed but finalization failed; the completed installation was not rolled back."),U.T("重新运行安装器，核对文件后重试收尾。", "Run the installer again to verify files and retry finalization."),marker,installError);
+            // Record the original failure BEFORE rollback, retaining both exception stacks if recovery fails.
+            log(InstallerTrace.Fault(U.T("安装首次失败","Original installation failure"),installError));
+            journal.Status="failed";journal.Failure=installError.ToString();
+            try {Save();}catch(Exception journalError){InstallerTrace.Fault("Save failed transaction",journalError);}
+            if(!markerStarted)throw; // No target files were changed; leave any prior pending marker intact.
+            try { Restore(backup, target, false,log);log(U.T("安装失败，原文件已恢复。","Installation failed; original files restored.")); }
+            catch (Exception restoreError)
+            {
+                log(InstallerTrace.Fault(U.T("自动回滚失败","Automatic rollback failed"),restoreError));
+                journal.RollbackFailure=restoreError.ToString();try{Save();}catch(Exception saveError){InstallerTrace.Fault("Save rollback failure",saveError);}
+                InstallerTrace.Session?.Snapshot("transaction-recovery-required.json",journalPath);
+                throw new DiagnosticFailure("ROLLBACK_FAILED",U.T("安装失败且回滚未完成。","Installation failed and rollback did not finish.")+
+                    "\n"+U.T("首次错误：","Original error: ")+installError.Message+"\n"+U.T("回滚错误：","Rollback error: ")+restoreError.Message,
+                    U.T("保留此备份，导出诊断包后排查：","Keep this backup and export diagnostics: ")+backup,backup,new AggregateException(installError,restoreError));
+            }
             throw;
         }
     }
-    public static void Restore(string backup, string expectedTarget, bool checkRunning = true)
+    public static void Restore(string backup, string expectedTarget, bool checkRunning = true,Action<string>? log=null)
     {
         if (checkRunning) CheckNotRunning();
         using var targetLease = new TargetLease(expectedTarget);
         NoLinks(backup);
         var file = Path.Combine(backup, "transaction.json");
-        var journal = JsonSerializer.Deserialize<Journal>(File.ReadAllText(file), Json) ?? throw new IOException(U.T("无效备份","Invalid backup"));
-        if (!NormalizeDirectory(journal.Target).Equals(NormalizeDirectory(expectedTarget), StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("备份属于其他 X-Plane 目录","Backup target mismatch"));
+        InstallerTrace.Session?.Snapshot("transaction-before-restore.json",file);
+        var journal = InstallerTrace.Step(U.T("读取恢复事务","Read recovery transaction"),file,()=>ReadJournal(backup,expectedTarget),log);
+        var pendingPath=SafePath(expectedTarget,Pending);
+        var pendingHash=File.Exists(pendingPath)?Hash(pendingPath):"";
+        if(pendingHash!="" && !MatchesPending(ReadPending(expectedTarget),backup,journal))throw new DiagnosticFailure("WRONG_RECOVERY_TRANSACTION",U.T("所选备份不是当前未完成事务，尚未更改任何文件。", "This backup does not match the pending transaction. No files changed."),U.T("选择当前提示对应的备份，旧备份不能替代本次恢复。", "Select the backup matching the pending transaction, not an unrelated older backup."),file);
+        if (!NormalizeDirectory(journal.Target).Equals(NormalizeDirectory(expectedTarget), StringComparison.OrdinalIgnoreCase)) throw new DiagnosticFailure("BACKUP_TARGET_MISMATCH",U.T("备份属于其他 X-Plane 目录。","Backup belongs to a different simulator.")+$"\nBackup target: {journal.Target}\nSelected target: {expectedTarget}",U.T("选择属于当前 X-Plane 目录的事务，不要修改备份清单。","Select a transaction for this simulator; do not edit the journal."),file);
         ValidateTarget(journal.Target);
-        // Validate the full journal before touching any file, including manually altered journals.
+        // Validate every original BEFORE restoring any file.
         foreach (var entry in journal.Entries)
         {
             var rel = entry.Path.Replace('\\', '/');
-            if (!(rel.StartsWith(Fwl + "/", StringComparison.OrdinalIgnoreCase) || rel.StartsWith("Resources/plugins/StarLux_LMM/", StringComparison.OrdinalIgnoreCase) || rel == Receipt)) throw new IOException(U.T("非法备份路径","Invalid backup path"));
-            SafePath(journal.Target, rel);
-            if (entry.Existed && !File.Exists(SafePath(Path.Combine(backup, "files"), rel))) throw new IOException(U.T("备份缺失","Missing backup file: ") + rel);
-            if (entry.Existed && entry.Sha256.Length > 0 && !Hash(SafePath(Path.Combine(backup, "files"), rel)).Equals(entry.Sha256, StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("备份文件校验失败","Backup file checksum mismatch: ") + rel);
+            InstallerTrace.Step(U.T("验证恢复文件","Verify recovery file"),rel,()=>{
+                if (!(rel.StartsWith(Fwl + "/", StringComparison.OrdinalIgnoreCase) || rel.StartsWith("Resources/plugins/StarLux_LMM/", StringComparison.OrdinalIgnoreCase) || rel == Receipt)) throw new IOException(U.T("非法备份路径","Invalid backup path"));
+                SafePath(journal.Target, rel);
+                var saved=SafePath(Path.Combine(backup,"files"),rel);
+                if (entry.Existed && !File.Exists(saved)) throw new FileNotFoundException(U.T("备份文件缺失，尚未开始恢复。","Backup file missing; restore has not started."),saved);
+                if (entry.Existed && entry.Sha256.Length > 0 && !Hash(saved).Equals(entry.Sha256, StringComparison.OrdinalIgnoreCase)) throw new DiagnosticFailure("BACKUP_HASH_MISMATCH",U.T("备份文件校验失败。","Backup checksum mismatch."),U.T("请保留整个备份并导出诊断包。","Keep the entire backup and export diagnostics."),saved);
+            },log);
         }
+        if((File.Exists(pendingPath)?Hash(pendingPath):"")!=pendingHash)throw new IOException("Pending transaction changed during validation");
+        PreflightTargets(expectedTarget,journal.Entries.Select(e=>e.Path),log ?? InstallerTrace.Write);
         foreach (var entry in journal.Entries.AsEnumerable().Reverse())
         {
             var dest = SafePath(journal.Target, entry.Path);
-            if (entry.Existed) { Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(SafePath(Path.Combine(backup, "files"), entry.Path), dest, true); }
-            else File.Delete(dest);
+            InstallerTrace.Step(entry.Existed?U.T("恢复原文件","Restore original file"):U.T("移除本次新增文件","Remove newly installed file"),dest,()=>{
+                if (entry.Existed) { Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(SafePath(Path.Combine(backup, "files"), entry.Path), dest, true);
+                    if(entry.Sha256.Length>0 && !Hash(dest).Equals(entry.Sha256,StringComparison.OrdinalIgnoreCase))throw new IOException("Restored file checksum mismatch: "+dest);
+                }
+                else File.Delete(dest);
+            },log);
         }
-        journal.Status = "restored"; File.WriteAllText(file, JsonSerializer.Serialize(journal, Json));
+        journal.Status = "restored"; InstallerTrace.Step(U.T("保存恢复结果","Save recovery result"),file,()=>WriteTextAtomic(file, JsonSerializer.Serialize(journal, Json)),log);
         var marker = SafePath(journal.Target, "Resources/plugins/StarLux_LMM.install.pending.json");
         if (File.Exists(marker))
         {
-            // Never clear a different pending transaction when the user selected an older backup.
-            using var m = JsonDocument.Parse(File.ReadAllText(marker));
-            if (m.RootElement.TryGetProperty("backup", out var b) && Path.GetFullPath(b.GetString() ?? "").Equals(Path.GetFullPath(backup), StringComparison.OrdinalIgnoreCase)) File.Delete(marker);
+            if (MatchesPending(ReadPending(journal.Target),backup,journal))
+                InstallerTrace.Step(U.T("完成对应事务恢复","Finalize matching recovery"),marker,()=> { if(journal.PreviousPending!="")WriteTextAtomic(marker,journal.PreviousPending);else File.Delete(marker); },log);
+            else InstallerTrace.Write("A different pending transaction remains; its marker was preserved.");
         }
+        InstallerTrace.Session?.Snapshot("transaction-restored.json",file);InstallerTrace.CaptureTarget(journal.Target);
     }
 }

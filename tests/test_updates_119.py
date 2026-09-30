@@ -13,7 +13,7 @@ class UpdatesTests(unittest.TestCase):
 
     def test_versions_and_invalid_tags(self):
         l=self.module()
-        for newer,old,expected in [('1.1.9rc2','1.1.9',True),('1.1.9','1.1.9rc2',False),('1.1.9rc3','1.1.9rc2',True),('1.1.10','1.1.9rc2',True),('1.1.10-beta2','1.1.9rc2',True),('1.1.9rc2','1.1.10-beta2',False),('installer-9.0.0','1.1.9rc2',False),('1.1.9-rc2','1.1.9',False)]:
+        for newer,old,expected in [('1.1.9rc2','1.1.9',True),('1.1.9','1.1.9rc2',False),('1.1.9rc3','1.1.9rc2',True),('1.1.9rc4','1.1.9rc3',True),('1.1.9rc3','1.1.9rc4',False),('1.1.10','1.1.9rc2',True),('1.1.10-beta2','1.1.9rc2',True),('1.1.9rc2','1.1.10-beta2',False),('installer-9.0.0','1.1.9rc2',False),('1.1.9-rc2','1.1.9',False)]:
             self.assertEqual(l.globals().updates.newer(newer,old),expected)
 
     def test_cache_interval_failure_and_persistent_notice(self):

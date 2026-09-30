@@ -91,13 +91,13 @@ function M:mouse(w,x,y,status)
     local resize=not shortcut and hx and (hx~=0 or hy~=0)
     if status==1 and resize then
         w.drag={resize=true,x=x,y=y,left=w.x,bottom=w.y,w=w.w,h=w.h,hx=hx,hy=hy,
-            size=self.model.config[w.id.."_size"] or self.model.config.size}
+            size=w.id=="throttle" and self.model.config.engine_combined and w.w or self.model.config[w.id.."_size"] or self.model.config.size}
         return 1
     elseif (status==2 or status==3) and w.drag and w.drag.resize then
         local cfg=self.model.config;local bounds=self.bounds;local d=w.drag
         local extra=w.id=="stick" and self.model.debug and 50 or 0
         local limit=math.min(360,bounds[3]-bounds[1],bounds[2]-bounds[4]-extra)
-        cfg[w.id.."_size"]=math.floor(math.max(math.min(120,limit),math.min(limit,d.size*self.host.resize_factor(d,x,y)))+.5)
+        cfg[w.id.."_size"]=math.floor(math.max(math.min(w.id=="throttle" and cfg.engine_combined and 180 or 120,limit),math.min(limit,d.size*self.host.resize_factor(d,x,y)))+.5)
         local size=cfg[w.id.."_size"]
         local width=math.min(extra>0 and math.max(240,size) or size,bounds[3]-bounds[1])
         local height=math.min(size+extra,bounds[2]-bounds[4])
@@ -155,10 +155,10 @@ function M:draw(w)
         else text(h,w,7,11,w.id=="settings" and (m.en and "S" or "设") or (m.en and "R" or "录"),14,ink) end
         return
     end
-    if w.collapsed then text(h,w,8,9,title(w.id,m.en).." +",11,color(.82,.93,1,hover and .96 or .5));return end
+    if w.collapsed then text(h,w,8,9,(w.id=="throttle" and cfg.engine_combined and "THR + N1" or title(w.id,m.en)).." +",11,color(.82,.93,1,hover and .96 or .5));return end
     self:rect(w.x+w.w-10,w.y+3,7,1,color(r,g,b,.45))
     self:rect(w.x+w.w-4,w.y+3,1,7,color(r,g,b,.45))
-    text(h,w,8,w.h-17,w.id=="stick" and (m.en and "INPUT" or "操纵输入") or w.id=="throttle" and (m.en and "THROTTLE %" or "油门 %") or "N1 %")
+    text(h,w,8,w.h-17,w.id=="stick" and (m.en and "INPUT" or "操纵输入") or w.id=="throttle" and (cfg.engine_combined and (m.en and "THR / N1 %" or "油门 / N1 %") or m.en and "THROTTLE %" or "油门 %") or "N1 %")
     self:rect(w.x+w.w-23,w.y+w.h-16,11,2,color(r,g,b,hover and .95 or .55))
     if w.id=="stick" then
         -- ILS belongs only in post-flight analysis, never in the live overlay.
@@ -211,9 +211,10 @@ function M:draw(w)
             self:rect(px-3,py-3,6,6,green)
         else text(h,w,12,cy,m.en and "Input unavailable" or "输入不可用") end
         if not m.debug then
-            local yaw=m.inputs.axes.yaw; local length=w.w-60
-            text(h,w,8,7,"YAW",10); self:rect(w.x+46,w.y+12,length,1,color(r,g,b,.35))
-            if yaw.valid then self:rect(w.x+46+(yaw.value+1)*length/2-2,w.y+9,4,6,color(r,g,b,1)) end
+            local yaw=m.inputs.axes.yaw; local length=span;local left=cx-span/2
+            text(h,w,8,2,"YAW",8); self:rect(w.x+left,w.y+16,length,1,color(r,g,b,.35))
+            self:rect(w.x+cx-.5,w.y+13,1,7,color(r,g,b,.45))
+            if yaw.valid then self:rect(w.x+left+(yaw.value+1)*length/2-2,w.y+13,4,6,color(r,g,b,1)) end
         end
         if m.debug then
             for i,axis in ipairs(axes) do
@@ -224,6 +225,25 @@ function M:draw(w)
     else
         local count=math.min(4,m.engine_count or 0)
         if count==0 then text(h,w,10,20,m.en and "Unavailable" or "不可用") end
+        if w.id=="throttle" and cfg.engine_combined then
+            local cols=math.min(2,math.max(1,count));local rows=math.ceil(math.max(1,count)/cols)
+            local cw=(w.w-20)/cols;local ch=(w.h-32)/rows
+            for i=1,count do
+                local x=10+((i-1)%cols)*cw;local y=6+(rows-1-math.floor((i-1)/cols))*ch
+                local reverse=visual and visual.reverse[i]
+                text(h,w,x,y+ch-12,(reverse and "R " or "ENG ")..i,10,reverse and red or nil)
+                for j,key in ipairs({"throttle_","n1_"}) do
+                    local valid=m.engine[key..i.."_valid"];local raw=m.engine[key..i..(j==1 and "_ratio" or "_percent")] or 0
+                    local value=j==1 and raw*100 or raw;local ink=j==1 and color(r,g,b,.95) or reverse and red or green
+                    local bx=x+(j-1)*cw/2;local bw=math.max(6,cw/2-8);local bh=math.max(3,ch-49)
+                    self:rect(w.x+bx,w.y+y+26,bw,bh,color(r,g,b,.12))
+                    if valid then self:rect(w.x+bx,w.y+y+26,bw,bh*math.max(0,math.min(1,value/(j==1 and 100 or 110))),ink) end
+                    text(h,w,bx,y+14,j==1 and "THR" or "N1",9,ink)
+                    text(h,w,bx,y+2,valid and string.format(j==1 and "%.0f" or "%.1f",value) or "--",10,ink)
+                end
+            end
+            return
+        end
         for i=1,math.min(4,count) do
             local name=w.id=="n1" and "n1_"..i.."_percent" or "throttle_"..i.."_ratio"
             local valid=m.engine[name:gsub("_percent$","_valid"):gsub("_ratio$","_valid")]
@@ -248,11 +268,13 @@ function M:tick()
     for _,id in ipairs({"settings","records","stick","throttle","n1"}) do
         local edge=id=="settings" or id=="records"
         local visible=edge and cfg.edge or not edge and (cfg[id] or id=="stick" and self.model.debug)
+        if cfg.engine_combined and (id=="throttle" or id=="n1") then visible=id=="throttle" and (cfg.throttle or cfg.n1) end
         local w=self.windows[id]
         if visible and not w then w=self:create(id) end
         if w then
             if not visible then w.drag=nil;w.fold_pressed=nil end
             local size=cfg[id.."_size"] or cfg.size
+            if id=="throttle" and cfg.engine_combined then size=math.max(180,size) end
             local width=edge and 32 or (id=="stick" and self.model.debug and math.max(240,size) or size)
             local height=edge and 36 or size+(id=="stick" and self.model.debug and 50 or 0)
             width=math.min(width,right-left); height=math.min(height,top-bottom)

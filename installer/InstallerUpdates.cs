@@ -52,7 +52,7 @@ public sealed partial class Network
                     {
                         if (release.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.True || release.TryGetProperty("prerelease", out var pre) && pre.ValueKind == JsonValueKind.True) continue;
                         var tag = release.GetProperty("tag_name").GetString() ?? "";
-                        var match = Regex.Match(tag, @"^installer-v(\d+\.\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
+                        var match = Regex.Match(tag, @"^installer-v(\d+\.\d+(?:\.\d+)?(?:rc\d+)?)$", RegexOptions.IgnoreCase);
                         if (!match.Success || !release.TryGetProperty("assets", out var assets)) continue;
                         if (assets.ValueKind == JsonValueKind.Object && assets.TryGetProperty("links", out var links)) assets = links;
                         if (assets.ValueKind != JsonValueKind.Array) continue;
@@ -80,7 +80,7 @@ public sealed partial class Network
                 return (true, list);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-            catch (Exception e) { log(U.T("安装器更新源暂不可用：", "Installer update source unavailable: ") + name + " · " + e.Message); return (false, list); }
+            catch (Exception e) { InstallerTrace.Fault(name+" installer catalog",e);log(U.T("安装器更新源暂不可用：", "Installer update source unavailable: ") + name + " · " + e.Message); return (false, list); }
         }
         var results = await Task.WhenAll(Source("GitHub", "https://api.github.com/repos/Starlux531/StarLux-Landing-Meter/releases"), Source("Gitee", "https://gitee.com/api/v5/repos/starlux531/starluxlmm/releases"));
         var merged = results.SelectMany(r => r.Item2).GroupBy(r => r.Version).Where(g => g.SelectMany(r => r.Sources).Select(s => s.Sha256).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1).Select(g => new InstallerRelease { Version = g.Key, Sources = g.SelectMany(r => r.Sources).ToList() }).OrderByDescending(r => r.Version, Comparer<string>.Create(Core.CompareVersion)).ToList();
@@ -91,7 +91,9 @@ public sealed partial class Network
 public static class SelfUpdater
 {
     // Independent from the plugin's 1.x release line and the old preview installer numbering.
-    public static string Version => typeof(SelfUpdater).Assembly.GetName().Version!.ToString(3);
+    public static string Version => typeof(SelfUpdater).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+        .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion.Split('+')[0]
+        ?? typeof(SelfUpdater).Assembly.GetName().Version!.ToString(3);
     public static string DisplayVersion => Version.EndsWith(".0", StringComparison.Ordinal) ? Version[..^2] : Version;
     public const string ExecutableName = "StarLux_LMM_installer_安装器.exe";
     public static InstallerUpdateManifest ValidatePayload(string directory, string expectedVersion)
@@ -118,9 +120,9 @@ public static class SelfUpdater
         if (Core.CompareVersion(expectedVersion, Version) <= 0) throw new IOException(U.T("没有更高的安装器版本", "No newer installer version"));
         target ??= Environment.ProcessPath!; Core.NoLinks(target);
         var dir = Directory.CreateTempSubdirectory("StarLux-installer-update-").FullName;
-        File.Copy(Core.SafePath(unpacked, ExecutableName), Path.Combine(dir, "replacement.exe"));
+        InstallerTrace.Step("Stage replacement executable",dir,()=>File.Copy(Core.SafePath(unpacked, ExecutableName), Path.Combine(dir, "replacement.exe")));
         // Use this version's helper protocol, not code from an unstarted downloaded app.
-        File.Copy(Environment.ProcessPath!, Path.Combine(dir, "helper.exe"));
+        InstallerTrace.Step("Stage self-update helper",dir,()=>File.Copy(Environment.ProcessPath!, Path.Combine(dir, "helper.exe")));
         using var parent = Process.GetCurrentProcess();
         var request = new UpdateRequest { ParentPid = parent.Id, ParentStarted = parent.StartTime.ToUniversalTime().Ticks, Target = Path.GetFullPath(target), OriginalHash = Core.Hash(target), Version = expectedVersion, NewHash = manifest.Sha256 };
         var file = Path.Combine(dir, "request.json"); File.WriteAllText(file, JsonSerializer.Serialize(request, Core.Json)); return file;
@@ -134,6 +136,7 @@ public static class SelfUpdater
     }
     public static int Apply(string requestFile, bool probe = false, bool failProbe = false)
     {
+        using var trace=InstallerTrace.Begin("self-update-helper",new {requestFile});
         var dir = Path.GetDirectoryName(Path.GetFullPath(requestFile))!;
         string backup = "", target = "", swap = ""; bool replaced = false, originalVerified = false;
         Process? child = null;
@@ -158,7 +161,8 @@ public static class SelfUpdater
             originalVerified = true;
             backup = target + ".previous-" + Guid.NewGuid().ToString("N") + ".exe";
             swap = target + ".update-" + Guid.NewGuid().ToString("N") + ".exe";
-            File.Copy(replacement, swap); File.Replace(swap, target, backup); replaced = true;
+            InstallerTrace.Step("Copy self-update replacement",replacement+" -> "+swap,()=>File.Copy(replacement,swap));
+            InstallerTrace.Step("Replace installer with backup",target+" -> "+backup,()=>File.Replace(swap,target,backup));replaced = true;
             if (Core.Hash(target) != r.NewHash.ToLowerInvariant()) throw new IOException("Updated executable verification failed");
             var health = Path.Combine(dir, "ready.json");
             var start = new ProcessStartInfo(target) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(target)! };
@@ -170,22 +174,24 @@ public static class SelfUpdater
             if (!File.Exists(health)) { if (!child.HasExited) { child.Kill(); child.WaitForExit(10000); } throw new IOException("Updated installer did not become ready"); }
             using var ack = JsonDocument.Parse(File.ReadAllText(health));
             if (ack.RootElement.GetProperty("version").GetString() != r.Version || ack.RootElement.GetProperty("pid").GetInt32() != child.Id) throw new IOException("Invalid update readiness acknowledgement");
-            File.WriteAllText(Path.Combine(dir, "result.json"), JsonSerializer.Serialize(new { success = true, target, backup }, Core.Json)); return 0;
+            InstallerTrace.Event("SELF_UPDATE_READY",new {target,version=r.Version,pid=child.Id});
+            File.WriteAllText(Path.Combine(dir, "result.json"), JsonSerializer.Serialize(new { success = true, target, backup,log=InstallerTrace.LogPath }, Core.Json)); return 0;
         }
         catch (Exception e)
         {
+            InstallerTrace.Fault("Self-update helper failure",e);
             string recovery = "";
-            if (child != null) try { if (!child.HasExited) { child.Kill(); child.WaitForExit(10000); } } catch { }
-            if (replaced) try { File.Copy(backup, target, true); } catch (Exception restore) { recovery = restore.Message; }
-            try { File.WriteAllText(Path.Combine(dir, "result.json"), JsonSerializer.Serialize(new { success = false, error = e.Message, recovery, target, backup }, Core.Json)); } catch { }
+            if (child != null) try { if (!child.HasExited) { child.Kill(); child.WaitForExit(10000); } } catch(Exception stopError) { InstallerTrace.Fault("Stop failed updated process",stopError); }
+            if (replaced) try { InstallerTrace.Step("Restore previous installer",backup+" -> "+target,()=>File.Copy(backup,target,true)); } catch (Exception restore) { recovery = restore.ToString();InstallerTrace.Fault("Self-update rollback failure",restore); }
+            try { File.WriteAllText(Path.Combine(dir, "result.json"), JsonSerializer.Serialize(new { success = false, error = e.ToString(), recovery, target, backup,log=InstallerTrace.LogPath }, Core.Json)); } catch(Exception saveError) {InstallerTrace.Fault("Save updater result",saveError);}
             if (originalVerified && recovery == "" && !probe) try
                 {
                     var restart = new ProcessStartInfo(target) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(target)! };
                     restart.ArgumentList.Add("--update-result"); restart.ArgumentList.Add(Path.Combine(dir, "result.json")); Process.Start(restart);
                 }
-                catch { }
+                catch(Exception restartError) { InstallerTrace.Fault("Restart previous installer",restartError); }
             return 1;
         }
-        finally { child?.Dispose(); if (swap.Length > 0 && File.Exists(swap)) try { File.Delete(swap); } catch { } }
+        finally { child?.Dispose(); if (swap.Length > 0 && File.Exists(swap)) try { File.Delete(swap); } catch(Exception cleanupError) { InstallerTrace.Fault("Clean self-update staging file",cleanupError); } }
     }
 }

@@ -1,4 +1,21 @@
-# StarLux LMM 1.1.9rc2 · 正式公开发行 / Public release
+# StarLux LMM 1.1.9rc4 · 公开维护版 / Public maintenance release
+
+2026-09-30：整合此前 RC3 插件功能与安装器 **1.0.3**，统一插件主脚本、报告、网页分析器、版本检查和安装清单为 **1.1.9rc4**。修复安装器反复重装、移动备份与未完成事务的处理；保留当前设置/飞行记录重装有完整备份和范围确认。此次整合不另行调整飞行评分规则。
+
+RC4 combines the latest plugin functionality with installer **1.0.3**. Plugin, report, analyzer and package metadata now consistently use **1.1.9rc4**. Recovery supports relocated backups and an explicitly confirmed reinstall that preserves existing settings and flight records. Flight-grading rules are unchanged by this consolidation.
+
+继承 RC3：修复邻近直升机场干扰跑道识别；图表按可见时间段自适应纵轴；新增可选油门/N1 合并覆盖层；YAW 与十字横轴对齐。首次触地前长平飘/拉飘黄色降级测试规则保留，已有红色保持。整合说明见 `docs/1.1.9rc4_整合验证.md`，原功能验证见 `docs/1.1.9rc3_开发验证.md`。
+
+长平飘：20 ft 以下，平滑垂直趋势绝对值 ≤150 fpm，连续至少 5 秒，距离超过可用跑道长度 15%（300–600 m）。拉飘：平滑后回升至少 3 ft，持续上升至少 1 秒。需可靠跑道；排除触地后弹跳和已确认复飞。这些是插件测试规则，非航空公司 QAR 标准。合并覆盖层请在设置中勾选“合并油门与 N1”；独立组件保持可选。
+
+Inherited from the RC3 test build: nearby-airport runway matching, visible-window chart scales, optional paired throttle/N1 overlays and aligned YAW. Experimental pre-touchdown long-float/balloon rules force yellow without overriding an existing red rating. Long float: below 20 ft, smoothed vertical trend within +/-150 fpm, at least 5 seconds and distance greater than 15% of usable runway length, bounded to 300–600 m. Balloon: at least 3 ft of sustained rise over at least 1 second. Reliable runway geometry is required; post-touchdown bounces are excluded. These are plugin test thresholds, not an airline QAR standard.
+
+内置诊断安装器 **1.0.3**。完整解压后选择本地 **1.1.9rc4** 安装，保留配置；不要只复制 Lua。已公开发布，仍需实机验证，旧 TXT 原始机场字段不会自动重写。
+
+Includes diagnostic installer **1.0.3**. Extract the complete bundle and select local **1.1.9rc4**, keeping settings. Do not copy only the Lua script. Public release; simulator flight validation pending. Original airport fields in old TXT files are not automatically rewritten.
+
+---
+## 已发布基线 / Published baseline: StarLux LMM 1.1.9rc2 · 正式公开发行 / Public release
 
 2026-09-25：**1.1.9rc2** 正式公开发布，GitHub 标记为 Latest。保留 beta2 对旧 FlyWithLua 设置 SliderInt 格式参数缺失导致 Lua stopped 的修复，以及模块缺失/损坏的启动保护。恢复提供 RC2 Compatibility 修复包；旧 v1.1.9 兼容附件继续撤回。XP 12.4.3 原用户实机反馈尚待确认。
 

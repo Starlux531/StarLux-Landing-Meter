@@ -43,7 +43,14 @@ public sealed partial class Network : IDisposable
         for (int i = 0; i < 6; i++)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(25));
-            var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            var endpoint=uri.GetLeftPart(UriPartial.Path);InstallerTrace.Event("HTTP_REQUEST",new {endpoint,redirect=i});
+            var elapsed=System.Diagnostics.Stopwatch.StartNew();HttpResponseMessage response;
+            try {response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, timeout.Token);}
+            catch(OperationCanceledException e) when(!token.IsCancellationRequested)
+            {throw new DiagnosticFailure("NETWORK_TIMEOUT",U.T("连接请求超时：","Connection request timed out: ")+endpoint,U.T("检查网络连接；可切换下载源或使用完整本地安装包。","Check connectivity; use another source or a complete local bundle."),endpoint,e);}
+            catch(HttpRequestException e)
+            {throw new DiagnosticFailure("NETWORK_CONNECTION",U.T("网络请求失败：","Network request failed: ")+e.Message,U.T("检查网络、代理或 TLS 错误；可使用其他源或本地包。","Check connectivity, proxy or TLS errors; another source or a local bundle may work."),endpoint,e);}
+            InstallerTrace.Event("HTTP_RESPONSE",new {endpoint,status=(int)response.StatusCode,milliseconds=elapsed.ElapsedMilliseconds});
             if ((int)response.StatusCode is >= 300 and < 400)
             {
                 var location = response.Headers.Location; response.Dispose();
@@ -52,7 +59,8 @@ public sealed partial class Network : IDisposable
                 if (!TrustedRedirect(uri)) throw new IOException(U.T("下载重定向到未信任站点","Untrusted redirect: ") + uri.Host);
                 continue;
             }
-            if (!response.IsSuccessStatusCode) { var status = (int)response.StatusCode; response.Dispose(); throw new IOException("HTTP " + status); }
+            if (!response.IsSuccessStatusCode) { var status = (int)response.StatusCode; response.Dispose(); throw new DiagnosticFailure("HTTP_"+status,"HTTP " + status+" | "+endpoint,
+                U.T("该下载源返回错误；这本身不代表插件文件损坏。可等待重试、切换来源或使用本地包。","This source returned an error; it does not itself indicate damaged plugin files. Retry later, change source or use a local bundle."),endpoint); }
             return response;
         }
         throw new IOException(U.T("过多下载重定向","Too many redirects"));
@@ -102,7 +110,7 @@ public sealed partial class Network : IDisposable
                 PluginCatalogAvailable = true;
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-            catch (Exception e) { log(name + U.T(": 暂不可用，继续使用其他源与本地版本：", ": unavailable; using other sources and local packages: ") + e.Message); }
+            catch (Exception e) { InstallerTrace.Fault(name+" plugin catalog",e);log(name + U.T(": 暂不可用，继续使用其他源与本地版本：", ": unavailable; using other sources and local packages: ") + e.Message); }
             return list;
         }
         var results = await Task.WhenAll(Source("GitHub", "https://api.github.com/repos/Starlux531/StarLux-Landing-Meter/releases"), Source("Gitee", "https://gitee.com/api/v5/repos/starlux531/starluxlmm/releases"));
@@ -132,6 +140,7 @@ public sealed partial class Network : IDisposable
             try
             {
                 log(U.T("下载","Download: ") + source.Name + " · " + source.Url); progress(0);
+                InstallerTrace.Event("DOWNLOAD_BEGIN",new {source=source.Name,url=source.Url,destination});
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromMinutes(8));
                 using var response = await Open(source.Url, deadline.Token);
                 var length = response.Content.Headers.ContentLength;
@@ -139,12 +148,13 @@ public sealed partial class Network : IDisposable
                 using (var input = await response.Content.ReadAsStreamAsync(deadline.Token))
                 using (var output = File.Create(destination)) await CopyBounded(input, output, 256L * 1024 * 1024, deadline.Token, length, progress);
                 var expected = source.Sha256.Length > 0 ? source.Sha256 : sharedHash;
-                if (expected.Length > 0 && !Core.Hash(destination).Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new IOException(U.T("SHA256 校验失败","SHA256 mismatch"));
+                var actual=Core.Hash(destination);InstallerTrace.Event("DOWNLOAD_HASH",new {destination,expected,actual});
+                if (expected.Length > 0 && !actual.Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new DiagnosticFailure("DOWNLOAD_HASH_MISMATCH",U.T("下载文件 SHA256 校验失败。","Downloaded archive SHA256 mismatch.")+$"\nExpected: {expected}\nActual: {actual}",U.T("文件不会安装，将尝试同版本备用源；若重复失败请导出诊断包。","The file will not be installed; a same-version fallback source will be tried. Export diagnostics if repeated."),destination);
                 using (var zip = System.IO.Compression.ZipFile.OpenRead(destination)) { if (zip.Entries.Count == 0) throw new IOException(U.T("空 ZIP","Empty ZIP")); }
-                progress(100); return destination;
+                progress(100); InstallerTrace.Event("DOWNLOAD_COMPLETE",new {source=source.Name,destination,bytes=new FileInfo(destination).Length});return destination;
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-            catch (Exception e) { errors.Add(source.Name + ": " + e.Message); log(U.T("切换备用源","Trying fallback: ") + e.Message); }
+            catch (Exception e) { InstallerTrace.Fault(source.Name+" download",e);errors.Add(source.Name + ": " + e.Message); log(U.T("切换备用源","Trying fallback: ") + e.Message); }
         }
         throw new IOException(U.T("所有下载源均不可用","All sources failed\n") + string.Join("\n", errors));
     }

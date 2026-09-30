@@ -1,6 +1,41 @@
-# StarLux LMM 安装器 v1.0 使用说明
+# StarLux LMM 安装器 v1.0.3 使用说明
 
 安装器版本从 v1.0 开始独立维护，与插件版本分别更新。支持 Windows 10/11 x64 和 X-Plane 12，程序自带 .NET 运行库。
+
+## 1.0.3：未完成事务恢复
+
+- 检测到未完成操作后，点击“安装 / 更新插件”或“修复插件”，先进入恢复选择窗口，不再只弹错误后退出。
+- 优先查找标记中的原备份，以及当前安装器 `backup/` 中的对应备份。RC4 事务带唯一编号和原始状态校验值，移动或重命名备份仍可匹配；旧事务移动后需保留原日期-编号目录名，并校验模拟器目标和全部备份文件。
+- **恢复对应备份 / 定位原备份**：恢复旧文件后再继续安装。当前有未完成事务时，不能用另一笔历史备份覆盖它。
+- **保留数据重新安装**：旧备份遗失或不可用时，从完整安装包重新部署。先备份当前受影响文件，归档原标记，再建立新事务；保留现有设置和飞行记录。此操作无法找回已经删除的旧文件。取消、下载失败或载荷校验失败时不改旧标记；部署失败则恢复本次操作前的文件和旧标记。
+- 安装已完成、仅清除标记失败时，不再回退整个安装。下一次操作会核对事务预期文件状态，只有逐项一致才清除遗留标记。
+- 模拟器目录本身被移动时，旧备份不会自动写回旧目录或被当作其他模拟器的备份；可选择保留当前数据重新安装。
+
+## 维护清单与简洁输出（沿用 RC3）
+
+安装器 1.0.3 为公开维护版，继承 1.0.2rc4 的恢复修复；采用纯数字版本号以兼容旧安装器的自更新识别。本次离线包内置 **插件 1.1.9rc4** 的标准版/兼容版、中英文四种安装包；安装器自身版本为 **1.0.3**，两者独立维护。
+
+- **输出详细**默认关闭并记住选择。关闭时只显示状态、完成结果、关键提醒与错误；开启后显示逐文件检查、暂存、备份、写入和内部诊断。切换时重新显示近期记录，磁盘诊断日志始终保留完整过程。
+- **文件清单 / 原因**列出相关程序、设置、缓存、飞行记录、缺失文件和受保护的未知文件。选中一行可以查看完整路径、校验状态及清单/实际 SHA-256。可以复制清单和原因。
+- 修复优先使用已安装版本，确认窗口明确显示“当前版本 → 修复目标”。需要升级时使用“安装 / 更新插件”。缺少安装清单表示无法验证，文件校验不同也可能来自手工替换，并不直接证明文件损坏。
+- 下载/暂存完成后，展示最终新增、替换、清理及保留清单；确认后先检查现有目标是否只读或被占用，再备份与写入。确认后若安装范围变化，停止并要求重新检查。
+- **卸载**保留个人设置、缓存与飞行记录。**完全卸载**同时清除已识别的插件设置和缓存；飞行记录、未完成录制及其备份仅在勾选“同时删除飞行记录”后移除。具体范围以确认表中的“删除”行为准。
+- 未知文件、共用 README/LICENSE、其他插件、FlyWithLua、浏览器中的偏好及安装器自身均不删除。安装器旁的 `backup/` 保留恢复副本，因此完全卸载不是数据不可恢复擦除。LMM 空目录会清理，含受保护文件的目录保留。
+- 存在未完成事务时先选择对应备份恢复或保留数据重新安装；卸载不会绕过它。恢复窗口优先定位对应备份目录。
+
+## 操作记录与故障诊断（沿用 RC2）
+
+沿用安装器 RC2 的诊断功能；本次离线载荷已更新为插件 **1.1.9rc4**。
+
+- 开启“输出详细”后，窗口显示目录检查、安装选择、下载与切换源、校验、暂存、逐文件备份/复制/删除及回滚过程。确认窗口中的选择、语言与下载源选择也会记录。
+- 每次启动新建独立日志，带时间、操作编号、进程/线程编号和步骤耗时。切换语言、关闭后重新启动不会清除之前的日志。界面只保留近期文本，磁盘日志保留本次完整过程。
+- 错误提示尽可能列出错误类别、失败步骤、具体路径、系统错误码和处理建议；完整异常与内部错误堆栈写入日志。原因无法确认时明确说明，不把未知错误一概归因于网络或杀毒软件。
+- 安装失败时先记录首次错误，再尝试回滚；回滚失败单独记录，保留原始错误、事务清单和未完成标记。原备份被移动或删除时，明确指出所需位置，不自动删除标记或绕过恢复。
+- 点击底部 **打开日志** 查看本次会话目录；点击 **导出诊断包** 保存 ZIP，交给开发者。包含当前及同一日志根目录最近四次会话和相关安装清单，不包含配置文件内容、飞行 TXT 或备份中的程序文件。包中有本机路径与用户名，发送前可检查。
+
+默认日志位于安装器旁 `logs/会话编号/installer.log`。无法写入时依次尝试 `%LOCALAPPDATA%/StarLux_LMM_Installer/logs`、`%TEMP%/StarLux_LMM_Installer/logs`。若这些位置均不可写，只能保留内存中的近期记录；请在关闭前导出诊断包。
+
+**给反馈问题用户的操作：** 退出 X-Plane 和旧安装器，将新版 EXE 放回原安装器文件夹替换旧 EXE，保留原有 `version/`、`backup/`；运行后重现一次问题，点击“导出诊断包”发送 ZIP。原安装器 1.0.2 没有持久日志，新版不能补回此前已经丢失的首次错误。若提示原备份缺失，请同时说明是否移动、重新解压或删除过安装器文件夹。
 
 ## 开始使用
 
@@ -45,6 +80,8 @@
 自更新从安装器 v1.0 的独立发布通道开始。尚未支持此协议的旧预览安装器需要先手动替换为 v1.0。联网更新需要发布方将对应版本的正式更新资产上传至官方 GitHub/Gitee；本地构建完成不等于已上线。
 
 ## English guide
+
+**1.0.2rc2 diagnostic build:** persistent per-session logs record user choices, download attempts, validation, per-file backup/deployment, recovery and full exception stacks. Use **Open logs** or **Export diagnostics** at the bottom. Export includes the current and four recent sessions from the same log root, plus installation metadata; it excludes flight reports and configuration contents, but contains local paths/usernames. If all log locations are unwritable, export the recent in-memory log before closing. To test, close X-Plane and the old installer, replace only the EXE in its original folder, keep `version/` and `backup/`, reproduce the issue and send the diagnostic ZIP. Missing errors from the old 1.0.2 session cannot be reconstructed. This local build embeds the unchanged published plugin **1.1.9rc2** and has not been published to the update channel.
 
 Extract the portable bundle to a writable folder outside X-Plane and run the EXE. Use the top-right button for a fully English installer interface. Select the simulator root, package and installation mode. Installer language and plugin default language are independent.
 

@@ -4,8 +4,8 @@ $repo = Split-Path $PSScriptRoot -Parent
 $utf8 = [Text.UTF8Encoding]::new($false)
 $development = Get-Content -LiteralPath (Join-Path $repo 'development.json') -Raw | ConvertFrom-Json
 $developmentVersion = [string]$development.version
-$stable = $development.channel -eq 'stable' -and $developmentVersion -in @('1.1.9','1.1.9rc2')
-if (!$stable -and ($development.channel -ne 'unpublished' -or $developmentVersion -notmatch '^(1\.1\.(9|10)-beta[1-9][0-9]*|1\.1\.9rc2)$')) { throw 'Use stable 1.1.9 or an explicit unpublished 1.1.9rc2 / 1.1.9-betaN / 1.1.10-betaN in development.json.' }
+$stable = $development.channel -eq 'stable' -and $developmentVersion -in @('1.1.9','1.1.9rc2','1.1.9rc4')
+if (!$stable -and ($development.channel -ne 'unpublished' -or $developmentVersion -notmatch '^(1\.1\.(9|10)-beta[1-9][0-9]*|1\.1\.9rc[2-9][0-9]*)$')) { throw 'Use stable 1.1.9 or an explicit unpublished 1.1.9rcN / 1.1.9-betaN / 1.1.10-betaN in development.json.' }
 $mainSource = [IO.File]::ReadAllText((Join-Path $repo 'StarLux_LMM_v1.1.9.lua'))
 if (!$mainSource.StartsWith("-- StarLux 落地率插件 v$developmentVersion`n") -and !$mainSource.StartsWith("-- StarLux 落地率插件 v$developmentVersion`r`n")) { throw 'Main source header must match development.json.' }
 # Local packaging for 1.1.9; this script does not publish to GitHub.
@@ -31,6 +31,9 @@ if ($InstallerPath) {
     if ($LASTEXITCODE -ne 0) { throw 'Installer publish failed' }
 }
 if (!(Test-Path -LiteralPath (Join-Path $bundle 'StarLux_LMM_installer_安装器.exe'))) { throw 'Build installer first' }
+$expectedInstaller = ([xml](Get-Content -LiteralPath (Join-Path $repo 'installer/StarLux.Installer.csproj') -Raw)).Project.PropertyGroup.InformationalVersion
+$actualInstaller = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $bundle 'StarLux_LMM_installer_安装器.exe'))
+if ($actualInstaller.ProductName -ne 'StarLux LMM Installer' -or ($actualInstaller.ProductVersion -split '\+')[0] -ne $expectedInstaller) { throw 'Installer executable does not match the current installer project version.' }
 foreach ($variant in @('Standard','Compatibility')) {
     foreach ($locale in @('CN','International')) {
         $id = "$developmentVersion-$variant-$locale"
@@ -79,9 +82,10 @@ foreach ($name in @('Starlux_Analyzer_落地分析器.html','README_1.1.9.md')) 
 }
 Copy-Item -LiteralPath (Join-Path $repo '发行预设/analyzer-presets.json') -Destination $extras -Force
 Copy-Item -LiteralPath (Join-Path $repo '发行预设/analyzer-presets.json') -Destination $release -Force
+Copy-Item -LiteralPath (Join-Path $repo 'installer/USER_GUIDE.md') -Destination (Join-Path $extras 'Installer_Guide.md') -Force
 # A locally used installer can create its own recovery folder. Keep it in place;
 # the archive below explicitly contains only the executable and version payloads.
-$rootNames = @(Get-ChildItem -LiteralPath $bundle | Where-Object { !($_.PSIsContainer -and $_.Name -eq 'backup') } | ForEach-Object Name)
+$rootNames = @(Get-ChildItem -LiteralPath $bundle | Where-Object { !($_.PSIsContainer -and $_.Name -in @('backup','logs')) } | ForEach-Object Name)
 if ($rootNames.Count -ne 2 -or $rootNames -notcontains 'version' -or $rootNames -notcontains 'StarLux_LMM_installer_安装器.exe') { throw 'Bundle root must contain only installer and version' }
 Compress-Archive -LiteralPath (Join-Path $bundle 'StarLux_LMM_installer_安装器.exe'),$extras -DestinationPath ($bundle+'.zip') -Force
 Copy-Item -LiteralPath (Join-Path $bundle 'StarLux_LMM_installer_安装器.exe') -Destination $release -Force

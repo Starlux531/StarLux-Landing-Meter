@@ -31,6 +31,11 @@ public sealed partial class MainForm : Form
     readonly string preferenceFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarLux_LMM_Installer", "preferences.json");
     readonly ComboBox target = Combo(false), releases = Combo(true), sources = Combo(true);
     readonly Button language = MakeButton(), browse = MakeButton(), detect = MakeButton(), refresh = MakeButton(), install = MakeButton(true), repair = MakeButton(), uninstall = MakeButton(), restore = MakeButton(), cancel = MakeButton(), selfUpdate = MakeButton();
+    readonly Button openLogs=MakeButton(), exportLogs=MakeButton();
+    readonly Button inventory = MakeButton(), completeUninstall = MakeButton();
+    readonly CheckBox verbose = new() { AutoSize = true, ForeColor = Color.FromArgb(223,239,252), BackColor = Color.Transparent, Margin = new(0,9,12,0) };
+    readonly Queue<string> recentLog = new();
+    int lastLoggedPercent=-1;
     readonly Label title = Label(22, true), subtitle = Label(10), pathTitle = Label(11, true), versionTitle = Label(11, true), status = Label(10), selection = Label(10), stage = Label(10), foot = Label(9);
     readonly StateCard pluginCard = new(), healthCard = new(), installerCard = new();
     readonly TextBox logBox = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = Color.FromArgb(10, 25, 44), ForeColor = Color.FromArgb(158, 197, 230), Margin = new(0, 10, 0, 0) };
@@ -69,49 +74,104 @@ public sealed partial class MainForm : Form
         var paths = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 3, BackColor = Color.Transparent, Margin = Padding.Empty };
         paths.ColumnStyles.Add(new(SizeType.Percent, 100)); paths.ColumnStyles.Add(new(SizeType.AutoSize)); paths.ColumnStyles.Add(new(SizeType.AutoSize)); paths.Controls.Add(target, 0, 0); paths.Controls.Add(browse, 1, 0); paths.Controls.Add(detect, 2, 0); body.Controls.Add(paths, 0, 4);
         status.MaximumSize = new(1010, 70); body.Controls.Add(status, 0, 5); body.Controls.Add(versionTitle, 0, 6); body.Controls.Add(releases, 0, 7);
-        sources.Dock = DockStyle.None; sources.Width = 173; sources.DropDownWidth = 200; body.Controls.Add(Flow(sources, refresh, selfUpdate, selection), 0, 8);
-        body.Controls.Add(Flow(install, repair, uninstall, restore, cancel), 0, 9); body.Controls.Add(progress, 0, 10); body.Controls.Add(logBox, 0, 11); body.Controls.Add(Flow(stage, foot), 0, 12); background.Controls.Add(body); Controls.Add(background);
+        sources.Dock = DockStyle.None; sources.Width = 173; sources.DropDownWidth = 200; body.Controls.Add(Flow(sources, refresh, selfUpdate, inventory, selection), 0, 8);
+        body.Controls.Add(Flow(install, repair, uninstall, completeUninstall, restore, cancel), 0, 9); body.Controls.Add(progress, 0, 10); body.Controls.Add(logBox, 0, 11); body.Controls.Add(Flow(stage, verbose, openLogs, exportLogs, foot), 0, 12); background.Controls.Add(body); Controls.Add(background);
         foreach (var combo in new[] { releases, sources })
         {
             combo.DrawMode = DrawMode.OwnerDrawFixed; combo.ItemHeight = 29;
             combo.DrawItem += (_, e) => { using var brush = new SolidBrush((e.State & DrawItemState.Selected) != 0 ? Color.FromArgb(39, 88, 136) : combo.BackColor); e.Graphics.FillRectangle(brush, e.Bounds); var item = e.Index >= 0 ? combo.Items[e.Index] : null; TextRenderer.DrawText(e.Graphics, item is Release r ? U.ReleaseName(r) : item?.ToString() ?? "", combo.Font, Rectangle.Inflate(e.Bounds, -6, 0), combo.ForeColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis); };
         }
+        if(!preview && InstallerTrace.Session is {} session) session.Line+=AppendLog;
         if (!preview) LoadPreferences(); local = Core.LocalReleases(baseDir, Log); ApplyLanguage(); LoadReleases();
         target.TextChanged += (_, _) => { inspectGeneration++; inspectDelay.Stop(); inspectDelay.Start(); };
         inspectDelay.Tick += async (_, _) => { inspectDelay.Stop(); await InspectTarget(); };
         releases.SelectedIndexChanged += (_, _) => ShowSelection();
-        language.Click += async (_, _) => { U.Language = U.Language == "zh" ? "en" : "zh"; logBox.Clear(); ApplyLanguage(); SavePreferences(); await InspectTarget(); };
-        browse.Click += async (_, _) => { using var d = new FolderBrowserDialog { Description = U.T("选择包含 X-Plane.exe 的根目录", "Select the folder containing X-Plane.exe"), UseDescriptionForTitle = true, SelectedPath = target.Text }; if (d.ShowDialog(this) == DialogResult.OK) { target.Text = d.SelectedPath; SavePreferences(); await InspectTarget(); } };
+        releases.SelectionChangeCommitted += (_,_) => InstallerTrace.Event("USER_PACKAGE",releases.SelectedItem is Release r ? new {r.Version,r.UiVariant,r.DefaultLanguage,r.LocalDirectory,r.Variant}:null);
+        sources.SelectionChangeCommitted += (_,_) => InstallerTrace.Event("USER_SOURCE",new {source=Preferred});
+        language.Click += async (_, _) => { U.Language = U.Language == "zh" ? "en" : "zh"; InstallerTrace.Event("USER_LANGUAGE",new {language=U.Language}); ApplyLanguage(); SavePreferences(); await InspectTarget(); };
+        browse.Click += async (_, _) => { InstallerTrace.Event("USER_BROWSE"); using var d = new FolderBrowserDialog { Description = U.T("选择包含 X-Plane.exe 的根目录", "Select the folder containing X-Plane.exe"), UseDescriptionForTitle = true, SelectedPath = target.Text }; if (d.ShowDialog(this) == DialogResult.OK) { target.Text = d.SelectedPath; SavePreferences(); await InspectTarget(); } };
         detect.Click += async (_, _) => await Detect(); refresh.Click += async (_, _) => await CheckOnline(); install.Click += async (_, _) => await Install(false); repair.Click += async (_, _) => await Install(true);
-        uninstall.Click += async (_, _) => await Uninstall(); restore.Click += async (_, _) => await Restore(); selfUpdate.Click += async (_, _) => await UpdateInstaller(); cancel.Click += (_, _) => operation?.Cancel();
+        uninstall.Click += async (_, _) => await Uninstall(); restore.Click += async (_, _) => await Restore(); selfUpdate.Click += async (_, _) => await UpdateInstaller(); cancel.Click += (_, _) => {InstallerTrace.Event("USER_CANCEL_DOWNLOAD"); operation?.Cancel();};
+        openLogs.Click += (_,_) => OpenLogs(); exportLogs.Click += (_,_) => ExportLogs();
+        inventory.Click += async (_,_) => await ShowInventory(); completeUninstall.Click += async (_,_) => await Uninstall(true);
+        verbose.CheckedChanged += (_,_) => { logBox.Text = string.Concat(recentLog.Select(s=>LogPresentation.Render(s,verbose.Checked))); logBox.SelectionStart=logBox.TextLength;logBox.ScrollToCaret(); SavePreferences(); };
         blink.Tick += (_, _) => { pulse = !pulse; pluginCard.Pulse(pulse); installerCard.Pulse(pulse); }; blink.Start();
-        Shown += async (_, _) => { if (!preview) { await Detect(); await CheckOnline(); } };
-        FormClosing += (_, e) => { if (busy && !closingForUpdate) { e.Cancel = true; Prompt(U.T("请等待", "Please wait"), applying ? U.T("正在写入或恢复文件，请等待操作完成。", "Files are being applied or restored. Wait for completion.") : U.T("请先取消下载并等待结束。", "Cancel the download and wait for it to stop.")); } else catalogCancellation?.Cancel(); };
-        FormClosed += (_, _) => { blink.Dispose(); inspectDelay.Dispose(); };
+        Shown += async (_, _) => { if (!preview) { Log(U.T("诊断日志：","Diagnostic log: ")+InstallerTrace.LogPath);if(!string.IsNullOrEmpty(InstallerTrace.Session?.StorageWarning))Log(InstallerTrace.Session.StorageWarning); await Detect(); await CheckOnline(); } };
+        FormClosing += (_, e) => { if (busy && !closingForUpdate) { e.Cancel = true; Prompt(U.T("请等待", "Please wait"), applying ? U.T("正在写入或恢复文件，请等待操作完成。", "Files are being applied or restored. Wait for completion.") : U.T("请先取消下载并等待结束。", "Cancel the download and wait for it to stop.")); } else {InstallerTrace.Event("USER_CLOSE",new {closingForUpdate}); catalogCancellation?.Cancel();} };
+        FormClosed += (_, _) => { if(InstallerTrace.Session is {} session)session.Line-=AppendLog; blink.Dispose(); inspectDelay.Dispose(); };
     }
     void ApplyLanguage()
     {
         Text = U.T("StarLux LMM 安装器 v", "StarLux LMM Installer v") + SelfUpdater.DisplayVersion; title.Text = U.T("STARLUX  安装器", "STARLUX  INSTALLER"); subtitle.Text = "v" + SelfUpdater.DisplayVersion + U.T("  /  安装、更新与维护，一处完成", "  /  Install, update and maintain in one place"); language.Text = U.Language == "zh" ? "English" : "简体中文";
         pathTitle.Text = U.T("01   选择模拟器", "01   YOUR SIMULATOR"); versionTitle.Text = U.T("02   选择插件版本", "02   PLUGIN VERSION"); browse.Text = U.T("浏览目录", "Browse"); detect.Text = U.T("重新检测", "Detect"); refresh.Text = U.T("检查全部更新", "Check updates"); selfUpdate.Text = U.T("更新安装器", "Update installer"); install.Text = U.T("安装 / 更新插件", "Install / update"); repair.Text = U.T("修复插件", "Repair plugin"); uninstall.Text = U.T("卸载插件", "Uninstall"); restore.Text = U.T("恢复备份", "Restore backup"); cancel.Text = U.T("取消下载", "Cancel download");
         var index = sources.SelectedIndex; sources.Items.Clear(); sources.Items.AddRange([U.T("自动切换下载源", "Automatic source"), U.T("优先 Gitee", "Prefer Gitee"), U.T("优先 GitHub", "Prefer GitHub")]); sources.SelectedIndex = Math.Max(0, index);
-        stage.Text = U.T("就绪", "Ready"); foot.Text = U.T("操作前请退出 X-Plane · 飞行记录始终保留", "Close X-Plane before changes · Flight reports are always preserved"); releases.Invalidate(); UpdateCards(); ShowSelection();
+        openLogs.Text=U.T("打开日志","Open logs");exportLogs.Text=U.T("导出诊断包","Export diagnostics");
+        inventory.Text=U.T("文件清单 / 原因","Files / findings");completeUninstall.Text=U.T("完全卸载","Full uninstall");verbose.Text=U.T("输出详细","Detailed output");
+        stage.Text = U.T("就绪", "Ready"); foot.Text = U.T("操作前退出 X-Plane · 诊断文件保留完整过程", "Close X-Plane · Full trace saved in diagnostics"); releases.Invalidate(); UpdateCards(); ShowSelection();
     }
-    void LoadPreferences() { try { if (File.Exists(preferenceFile)) { var p = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(preferenceFile)); target.Text = p?.GetValueOrDefault("target") ?? ""; var lang = p?.GetValueOrDefault("language"); if (lang is "zh" or "en") U.Language = lang; } } catch { } }
-    void SavePreferences() { if (preview) return; try { Directory.CreateDirectory(Path.GetDirectoryName(preferenceFile)!); File.WriteAllText(preferenceFile, JsonSerializer.Serialize(new { target = target.Text, language = U.Language })); } catch { } }
-    void Log(string text) { if (IsDisposed) return; if (InvokeRequired) { BeginInvoke(() => Log(text)); return; } logBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {text}\r\n"); }
-    void Percent(int value) { if (InvokeRequired) { BeginInvoke(() => Percent(value)); return; } progress.Value = Math.Clamp(value, 0, 100); stage.Text = U.T(applying ? "正在应用 " : "正在下载 ", applying ? "Applying " : "Downloading ") + value + "%"; }
+    void LoadPreferences() { try { if (File.Exists(preferenceFile)) { var p = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(preferenceFile)); target.Text = p?.GetValueOrDefault("target") ?? ""; verbose.Checked = p?.GetValueOrDefault("detailedOutput") == "true"; var lang = p?.GetValueOrDefault("language"); if (lang is "zh" or "en") U.Language = lang; } } catch(Exception e) {InstallerTrace.Fault("Load installer preferences",e);} }
+    void SavePreferences() { if (preview) return; try { Directory.CreateDirectory(Path.GetDirectoryName(preferenceFile)!); File.WriteAllText(preferenceFile, JsonSerializer.Serialize(new { target = target.Text, language = U.Language, detailedOutput = verbose.Checked ? "true" : "false" })); } catch(Exception e) {InstallerTrace.Fault("Save installer preferences",e);} }
+    void Log(string text) { if(InstallerTrace.Session!=null)InstallerTrace.Write(text);else AppendLog(text+Environment.NewLine); }
+    void AppendLog(string text)
+    {
+        if(IsDisposed||Disposing)return;
+        if(InvokeRequired){try{BeginInvoke(()=>AppendLog(text));}catch(InvalidOperationException){}return;}
+        recentLog.Enqueue(text); while(recentLog.Count>800)recentLog.Dequeue();
+        text=LogPresentation.Render(text,verbose.Checked); if(text.Length==0)return;
+        if(logBox.TextLength>500000){logBox.Select(0,logBox.TextLength-350000);logBox.SelectedText="";}
+        logBox.AppendText(text);logBox.SelectionStart=logBox.TextLength;logBox.ScrollToCaret();
+    }
+    void Error(string context,Exception e,bool dialog=true)
+    {
+        var message=InstallerTrace.Fault(context,e);
+        if(dialog){stage.Text=U.T("操作未完成","Operation not completed");Prompt(U.T("操作未完成","Operation not completed"),message);}
+    }
+    void OpenLogs()
+    {
+        InstallerTrace.Event("USER_OPEN_LOGS");
+        try
+        {
+            var path=InstallerTrace.Session?.DirectoryPath;
+            if(string.IsNullOrEmpty(path))throw new IOException(InstallerTrace.Session?.StorageWarning??"No diagnostic session");
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path){UseShellExecute=true});
+        }
+        catch(Exception e){Error("Open diagnostic directory",e);}
+    }
+    void ExportLogs()
+    {
+        InstallerTrace.Event("USER_EXPORT_DIAGNOSTICS");InstallerTrace.CaptureTarget(target.Text.Trim());
+        using var file=new SaveFileDialog{Filter="ZIP|*.zip",FileName="StarLux_Installer_Diagnostics_"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".zip",OverwritePrompt=true};
+        if(file.ShowDialog(this)!=DialogResult.OK){InstallerTrace.Event("EXPORT_CANCELLED");return;}
+        try
+        {
+            // Write a new temporary archive first; never truncate an existing diagnostic archive on failure.
+            var temp=file.FileName+"."+Guid.NewGuid().ToString("N")+".tmp";
+            try{InstallerTrace.Session!.Export(temp);File.Move(temp,file.FileName,true);}
+            finally{if(File.Exists(temp))File.Delete(temp);}
+            InstallerTrace.Event("EXPORT_COMPLETE",new {path=file.FileName});
+            Prompt(U.T("诊断包已保存","Diagnostics saved"),file.FileName+"\n\n"+U.T("包含安装操作、路径、错误堆栈和事务清单；不包含飞行记录或配置文件内容。","Includes installer operations, paths, exception stacks and transaction metadata; excludes flight logs and configuration contents."));
+        }
+        catch(Exception e){Error("Export diagnostics",e);}
+    }
+    void Percent(int value)
+    {
+        if(InvokeRequired){BeginInvoke(()=>Percent(value));return;}
+        progress.Value=Math.Clamp(value,0,100);
+        if(value/10!=lastLoggedPercent){lastLoggedPercent=value/10;InstallerTrace.Event("PROGRESS",new {stage=applying?"apply":"download",percent=value});}
+        stage.Text=U.T(applying?"正在应用 ":"正在下载 ",applying?"Applying ":"Downloading ")+value+"%";
+    }
     async Task Detect()
     {
-        detect.Enabled = false;
+        using var trace=InstallerTrace.Begin("detect");detect.Enabled = false;
         try { var found = await Task.Run(() => Core.Discover(baseDir)); if (busy || IsDisposed) return; var previous = target.Text; target.Items.Clear(); target.Items.AddRange(found.Cast<object>().ToArray()); target.Text = Core.IsXPlane(previous) ? previous : found.Count == 1 ? found[0] : ""; Log(U.T("检测到模拟器目录：", "Simulator folders detected: ") + found.Count); await InspectTarget(); }
-        catch (Exception e) { Log(e.Message); }
+        catch (Exception e) { Error("Detect simulator",e,false); }
         finally { if (!IsDisposed) detect.Enabled = !busy; }
     }
     async Task InspectTarget()
     {
         var generation = ++inspectGeneration; var path = target.Text.Trim();
-        try { var result = await Task.Run(() => Core.Diagnose(path)); if (generation != inspectGeneration || IsDisposed) return; diagnosis = result; if(diagnosis.Issues.Count > 2) Log(diagnosis.Describe()); }
-        catch (Exception e) { if (generation != inspectGeneration || IsDisposed) return; diagnosis = new(); Log(e.Message); }
+        try { var result = await Task.Run(() => Core.Diagnose(path)); if (generation != inspectGeneration || IsDisposed) return; diagnosis = result; InstallerTrace.Event("INSPECT",new {target=path,description=diagnosis.Describe()});InstallerTrace.CaptureTarget(path); }
+        catch (Exception e) { if (generation != inspectGeneration || IsDisposed) return; diagnosis = new(); Error("Inspect simulator "+path,e,false); }
         UpdateCards(); SetBusy(busy);
     }
     void LoadReleases() { var selected = releases.SelectedItem as Release; releases.Items.Clear(); releases.Items.AddRange(Core.LabelReleases(local.Concat(online)).Cast<object>().ToArray()); if (selected != null && releases.Items.Contains(selected)) releases.SelectedItem = selected; else if (releases.Items.Count > 0) releases.SelectedItem = Core.RepairRelease(releases.Items.Cast<Release>(), diagnosis) ?? releases.Items[0]; ShowSelection(); }
@@ -122,16 +182,17 @@ public sealed partial class MainForm : Form
         healthCard.Set(U.T("插件状态", "PLUGIN HEALTH"), diagnosis.Verified ? U.T("文件完整 · 兼容", "Verified & compatible") : diagnosis.HasPlugin ? U.T("需要检查 / 修复", "Check / repair needed") : U.T("等待安装", "Ready to install"), diagnosis.SimulatorVersion == "" ? U.T("等待识别 X-Plane 版本", "X-Plane version not identified") : "X-Plane " + diagnosis.SimulatorVersion + " · " + (diagnosis.HasFlyWithLua ? "FlyWithLua ✓" : U.T("缺少 FlyWithLua", "FlyWithLua missing")), diagnosis.Verified ? Good : diagnosis.HasPlugin ? Warning : Neutral);
         var updateRelease = installerCatalog?.Releases.FirstOrDefault(); var newer = updateRelease != null && Core.CompareVersion(updateRelease.Version, SelfUpdater.Version) > 0; var current = installerCatalog?.Available == true && updateRelease != null && Core.CompareVersion(updateRelease.Version, SelfUpdater.Version) == 0;
         installerCard.Set(U.T("安装器更新", "INSTALLER UPDATE"), newer ? U.T("有新版本  ", "Update available  ") + updateRelease!.Version : current ? U.T("已是最新版本", "Up to date") : "v" + SelfUpdater.DisplayVersion, checking ? U.T("正在检查独立更新通道…", "Checking installer release channel…") : updateRelease != null ? U.T("当前版本：", "Current version: ") + SelfUpdater.Version : installerCatalog?.Available == true ? U.T("尚无正式更新包", "No installer release package published") : U.T("更新状态待确认", "Update status unconfirmed"), newer ? Alert : current ? Good : Neutral, newer);
-        status.Text = diagnosis.Describe(); if (diagnosis.Issues.Count > 2) status.Text = string.Join("\n", diagnosis.Describe().Split('\n').Take(3)) + U.T("（完整诊断见日志）", " (see log for full diagnosis)");
+        status.Text = diagnosis.Describe(); if (diagnosis.Issues.Count > 2) status.Text = string.Join("\n", diagnosis.Describe().Split('\n').Take(2)) + "\n" + U.T("共有 ", "Total: ") + diagnosis.Issues.Count + U.T(" 项原因，点击“文件清单 / 原因”查看全部。", " findings. Open Files / findings for details.");
+        inventory.Enabled = !busy && diagnosis.ValidTarget; completeUninstall.Enabled = !busy && (diagnosis.HasPlugin || diagnosis.HasRelatedFiles);
         selfUpdate.Enabled = !busy && newer; uninstall.Enabled = !busy && diagnosis.HasPlugin; repair.Enabled = !busy && diagnosis.HasPlugin && releases.Items.Count > 0;
     }
     void ShowSelection() { selection.Text = releases.SelectedItem is Release r ? U.Compatibility(r) : U.T("无安装包，请检查更新", "No package; check updates"); install.Enabled = !busy && releases.SelectedItem != null; }
     async Task CheckOnline()
     {
-        if (checking || busy) return; checking = true; refresh.Enabled = false; catalogCancellation = new(); UpdateCards();
+        if (checking || busy) return; using var trace=InstallerTrace.Begin("check-updates");checking = true; refresh.Enabled = false; catalogCancellation = new(); UpdateCards();
         try { using var net = new Network(Log); var plugin = net.Catalog(catalogCancellation.Token); var updater = net.InstallerCatalog(catalogCancellation.Token); await Task.WhenAll(plugin, updater); if (IsDisposed) return; pluginOnlineVerified = net.PluginCatalogAvailable; if(pluginOnlineVerified) online = await plugin; var result = await updater; installerCatalog = !result.Available && installerCatalog != null ? new(false, installerCatalog.Releases) : result; if (!busy) LoadReleases(); }
-        catch (OperationCanceledException) { }
-        catch (Exception e) { Log(e.Message); }
+        catch (OperationCanceledException) { InstallerTrace.Event("CATALOG_CANCELLED"); }
+        catch (Exception e) { Error("Check online releases",e,false); }
         finally { checking = false; catalogCancellation?.Dispose(); catalogCancellation = null; if (!IsDisposed) { refresh.Enabled = !busy; UpdateCards(); } }
     }
     void SetBusy(bool value) { busy = value; foreach (var c in new Control[] { browse, detect, restore, target, releases, sources, language }) c.Enabled = !value; refresh.Enabled = !value && !checking; cancel.Enabled = value && !applying; UpdateCards(); ShowSelection(); }
@@ -142,7 +203,11 @@ public sealed partial class MainForm : Form
         var content = new TextBox { Text = text, Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = d.BackColor, ForeColor = d.ForeColor, ScrollBars = ScrollBars.Vertical };
         var row = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new(0, 16, 0, 0) };
         if (choices.Length == 0) choices = [(U.T("确定", "OK"), DialogResult.OK)]; foreach (var (label, result) in choices.Reverse()) { var b = MakeButton(); b.Text = label; b.DialogResult = result; row.Controls.Add(b); if (result == DialogResult.Cancel) d.CancelButton = b; }
-        d.Controls.Add(content); d.Controls.Add(row); return d.ShowDialog(this);
+        d.Controls.Add(content); d.Controls.Add(row);
+        InstallerTrace.Event("DIALOG_SHOWN",new {heading,text});
+        var answer=d.ShowDialog(this);
+        InstallerTrace.Event("DIALOG_CHOICE",new {heading,result=answer.ToString(),label=choices.FirstOrDefault(c=>c.Item2==answer).Item1});
+        return answer;
     }
     (string, DialogResult) Yes => (U.T("继续", "Continue"), DialogResult.OK);
     (string, DialogResult) No => (U.T("取消", "Cancel"), DialogResult.Cancel);

@@ -1,4 +1,6 @@
-# StarLux LMM Installer v1.0
+# StarLux LMM Installer v1.0.3
+
+Public maintenance release: **1.0.3**, bundled with plugin **1.1.9rc4**. This promotes the tested 1.0.2rc4 recovery implementation to a numeric version discoverable by existing 1.0.2 installers. The offline bundle includes plugin **1.1.9rc4**, with Standard/Compatibility and Chinese/English variants. RC4 adds relocation-aware transaction matching, recovery before reinstall, an explicitly approved keep-data rebuild when an old backup is unavailable, and verified finalization of completed operations. A failed rebuild restores its pre-operation files and previous marker. Unrelated historical backups cannot overwrite a pending transaction. Existing file inventory, full uninstall and compact/detailed logging remain available. See `USER_GUIDE.md` and `../docs/1.1.9rc4_公开发布验证.md`.
 
 The installer has its own version line, starting at **1.0.0** (displayed as **v1.0**). Plugin versions remain independent: plugin **1.1.9** is stable as of 2026-09-23. Its offline bundles include installer **1.0.1** with obsolete LMM file cleanup. The existing standalone installer update release remains `installer-v1.0.0`; plugin release tags do not advance that channel.
 
@@ -25,7 +27,7 @@ dotnet restore installer/StarLux.Installer.csproj
 ./installer/build.ps1 -NoRestore -PluginVersionDirectory 'D:/release/1.1.8/version'
 ```
 
-Output: `dist/installer/1.0.0/`. The offline bundle has the EXE and `version/` at its root. No plugin development source is automatically promoted or packaged. `-SkipPublish` reuses `.tools/installer-v1/published/` after checking its product and version.
+Output: `dist/installer/<InformationalVersion or Version>/` (currently `1.0.2rc2`). The offline bundle has the EXE and `version/` at its root. No plugin development source is automatically promoted or packaged. `-SkipPublish` reuses `.tools/installer-v1/published/` after checking its product and version.
 
 For future plugin 1.1.9 packaging, use `tools/prepare_release_119.ps1` separately.
 
@@ -42,7 +44,7 @@ Publish the following files from the build output under **`installer-v1.0.0`** o
 
 The internal update manifest identifies `StarLux_LMM_Installer`, the version, the fixed executable filename and its SHA256. The release metadata hashes the entire ZIP. Downloads must originate at the configured repositories over HTTPS; redirects, paths and sizes are checked. Product/version metadata in the PE must match the selected update. Conflicting mirror digests are excluded. These integrity checks do not replace publisher code signing.
 
-Future versions increment the installer project's `<Version>` and publish the matching `installer-v...` tag and filenames. Both repositories should serve identical bytes. The current local work has not uploaded these assets; an unpublished channel displays “No installer release package published”, not “Up to date”.
+Future versions increment the installer project's `<Version>` and publish the matching `installer-v...` tag and filenames. When using a display-only bare RC maintenance name, update `<InformationalVersion>` and `<FileVersion>` too. For this build the SDK version is `1.0.2-rc2`, displayed/product version is `1.0.2rc2`, and file version is `1.0.2.2`. The new reader understands bare installer RC tags; existing public 1.0.2 only recognizes numeric installer tags, so this diagnostic build should be handed to users for manual EXE replacement. No update-channel promotion is implied by a local build. Both repositories should serve identical bytes.
 
 Self-update keeps a previous executable beside the target and a staging `result.json` for recovery. Failure to restart returns to the original executable where filesystem permissions permit. Browser preferences cannot be restored from file backups after a clean reset has already run in the browser.
 

@@ -24,9 +24,10 @@ if(args.Length==3 && args[1]=="--catalog-json") {
     var catalog=Core.LabelReleases(await network.Catalog(default));
     var current=catalog.Where(r=>r.Version==version).ToList();
     Check(current.Count==4 && current.All(r=>r.IsLatest),"published stable release not discovered as four Latest variants");
-    if(version=="1.1.9rc2") {
+    if(version is "1.1.9rc2" or "1.1.9rc4") {
         var installers=await network.InstallerCatalog(default);
-        Check(installers.Available && installers.Releases.First().Version=="1.0.2","installer 1.0.2 self-update not discovered");
+        var expectedInstaller=version=="1.1.9rc4" ? "1.0.3" : "1.0.2";
+        Check(installers.Available && installers.Releases.First().Version==expectedInstaller,"installer self-update not discovered");
         Check(catalog.Where(r=>r.Version=="1.1.9").All(r=>Core.Variant(r)=="sdk440"),"withdrawn original Compatibility returned");
     }
     foreach(var item in current) {

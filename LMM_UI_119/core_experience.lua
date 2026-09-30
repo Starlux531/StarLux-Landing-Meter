@@ -2,7 +2,7 @@ local directory=... or ""
 local Inputs=assert(loadfile(directory.."core_inputs.lua"))()
 local VisualState=assert(loadfile(directory.."core_visual_state.lua"))()
 local M={}; M.__index=M
-local defaults={edge=true,edge_right=false,edge_alpha=24,stick=false,stick_wind=true,throttle=false,n1=false,
+local defaults={edge=true,edge_right=false,edge_alpha=24,stick=false,stick_wind=true,throttle=false,n1=false,engine_combined=false,
     edge_settings_y=-1,edge_records_y=-1,stick_collapsed=false,throttle_collapsed=false,n1_collapsed=false,
     edit=false,size=180,stick_size=180,throttle_size=180,n1_size=180,alpha=65,red=86,green=180,blue=235,
     stick_x=.05,stick_y=.22,throttle_x=.23,throttle_y=.22,n1_x=.41,n1_y=.22,wind_interval=1,appearance=1,popup_free_x=-1,popup_free_y=-1}
@@ -126,7 +126,7 @@ end
 function M:settings(gui,tr,debug,save)
     gui.TextUnformatted(tr("实时覆盖层与快捷入口","Live overlays and edge shortcuts"))
     for _,row in ipairs({{"edge","贴边快捷按钮","Edge shortcuts"},{"edge_right","贴右侧","Right edge"},
-        {"stick","摇杆组件","Input widget"},{"stick_wind","实时风向叠加","Live wind overlay"},{"throttle","油门组件","Throttle widget"},{"n1","N1 组件","N1 widget"},{"edit","编辑布局（拖动标题）","Edit layout (drag titles)"}}) do
+        {"stick","摇杆组件","Input widget"},{"stick_wind","实时风向叠加","Live wind overlay"},{"throttle","油门组件","Throttle widget"},{"n1","N1 组件","N1 widget"},{"engine_combined","合并油门与 N1（使用油门组件位置）","Combine throttle + N1 (throttle position)"},{"edit","编辑布局（拖动标题）","Edit layout (drag titles)"}}) do
         local changed,v=gui.Checkbox(tr(row[2],row[3]).."##live_"..row[1],self.config[row[1]])
         if changed then self.config[row[1]]=v; save() end
     end
@@ -183,6 +183,11 @@ function M:settings(gui,tr,debug,save)
     end
     if self.notice then gui.TextUnformatted(self.notice) end
 end
+function M:visible(id,debug)
+    if id=="settings" or id=="records" then return self.config.edge end
+    if self.config.engine_combined and (id=="throttle" or id=="n1") then return id=="throttle" and (self.config.throttle or self.config.n1) end
+    return self.config[id] or id=="stick" and debug
+end
 function M:present(host,debug,en)
     self.debug,self.en=debug,en
     if host and host.ready then
@@ -196,11 +201,11 @@ function M:present(host,debug,en)
         if not SUPPORTS_FLOATING_WINDOWS then return end
         for _,id in ipairs({"settings","records","stick","throttle","n1"}) do
             local edge=id=="settings" or id=="records"
-            local visible=edge and self.config.edge or not edge and (self.config[id] or id=="stick" and debug)
+            local visible=self:visible(id,debug)
             local w=self.legacy[id]
             local collapsed=not edge and self.config[id..'_collapsed']
             local width=edge and 52 or collapsed and 126 or 245
-            local height=edge and 42 or collapsed and 32 or (debug and 210 or 120)
+            local height=edge and 42 or collapsed and 32 or (id=="throttle" and self.config.engine_combined and math.max(120,40+32*(self.engine_count or 2)) or debug and 210 or 120)
             if visible and not w then
                 w=float_wnd_create(width,height,0,true)
                 self.legacy[id]=w; float_wnd_set_imgui_builder(w,"ma_live_"..id)
@@ -275,14 +280,21 @@ function M:legacy_build(id)
             if self.debug and g.Button((input.selected and input.selected.id or "unavailable").."##"..axis) then self:cycle(axis) end
         end
     else
-        g.TextUnformatted(id:upper())
+        g.TextUnformatted(id=="throttle" and self.config.engine_combined and "THR % / N1 %" or id:upper())
         for i=1,self.engine_count or 0 do
+            if id=="throttle" and self.config.engine_combined then
+                local thr=self.engine["throttle_"..i.."_valid"] and string.format("%.0f",(self.engine["throttle_"..i.."_ratio"] or 0)*100) or "--"
+                local n1=self.engine["n1_"..i.."_valid"] and string.format("%.1f",self.engine["n1_"..i.."_percent"] or 0) or "--"
+                g.TextUnformatted("ENG "..i.."  THR "..thr.."%")
+                styled(visual.reverse[i] and 0xFF3838FF or 0xF5FFEFD1,function() g.TextUnformatted("  N1 "..n1.."%"..(visual.reverse[i] and " R" or "")) end)
+            else
             local key=id=="n1" and "n1_"..i.."_percent" or "throttle_"..i.."_ratio"
             local valid=self.engine[key:gsub("_percent$","_valid"):gsub("_ratio$","_valid")]
             local reverse=id=='n1' and visual.reverse[i]
             styled(reverse and 0xFF3838FF or 0xF5FFEFD1,function()
                 g.TextUnformatted((reverse and 'R ' or 'ENG ')..i..": "..(valid and string.format("%.1f",self.engine[key]*(id=="n1" and 1 or 100)) or "--"))
             end)
+            end
         end
     end
 end

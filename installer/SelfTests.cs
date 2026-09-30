@@ -193,6 +193,9 @@ static class SelfTests
                 Reject(() => net.Download([new("GitHub", Network.GithubRepo + "/x.zip")], Path.Combine(root, "redirect.zip"), "Auto", _ => { }, default).GetAwaiter().GetResult());
             });
             MaintenanceTests.Run(Test, root);
+            DiagnosticsTests.Run(Test, root);
+            LifecycleTests.Run(Test, root);
+            RecoveryTests.Run(Test, root);
             if (args.Length > 2 && !args[2].StartsWith("--"))
             {
                 Test("bundled real stable payload verifies", () => { var p = Core.Prepare(args[2]); Assert(Core.ExtractVersion(p.Manifest.Version) == p.Manifest.Version && p.Manifest.Files.Any(f => f.Path.EndsWith("LMMUI-Regular.otf")), "real package missing UI/fonts"); });
