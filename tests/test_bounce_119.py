@@ -51,10 +51,15 @@ class BounceTests(unittest.TestCase):
             ui.recording.closed=true;ui.recording.summary='old no-bounce snapshot'
             ui.recording.report_path='preserved.txt'
             ui.recording.begin_export=function(self)
-                exported=self.summary;export_path=self.report_path
+                exported=type(self.summary)=='table' and table.concat(self.summary) or self.summary;export_path=self.report_path
             end
             ui.recording.tick=function() end
-            ui.record_frame({t=230,lat=0,lon=0,agl=0,ground=1,gs=20})
+            for i=1,2000 do
+                ui.work:begin_frame(230+i/60,1/60,false)
+                ui.record_frame({t=230+i/60,lat=0,lon=0,agl=0,ground=1,gs=20})
+                ui.process_report_build()
+                if exported then break end
+            end
             assert(exported:find('弹跳检测: 发生弹跳',1,true))
             assert(export_path=='preserved.txt' and not ui.recording.summary_dirty)
         ''')
@@ -110,7 +115,7 @@ class BounceTests(unittest.TestCase):
             rec.closed=true;rec.summary='original';rec.summary_dirty=true;rec.report_path='original.txt'
             builds=0;ui.build_landing_log_payload=function() builds=builds+1;error('fixture failure') end
             rec.tick=function() end
-            for i=1,4 do ui.record_frame({t=i}) end
+            for i=1,4 do ui.work:begin_frame(i,1/60,false);ui.record_frame({t=i});ui.process_report_build() end
             assert(builds==1 and rec.export_failed and rec.summary=='original' and rec.saved_path==nil)
         ''')
 

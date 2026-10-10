@@ -4,7 +4,7 @@ import test_ui_119 as baseline
 from test_legacy_compat_119 import LEGACY
 
 CORE = ('core_inputs.lua', 'core_visual_state.lua', 'core_experience.lua',
-        'core_recording.lua', 'core_rollout.lua', 'core_ils.lua')
+        'core_recording.lua', 'core_rollout.lua', 'core_ils.lua','core_touchdown.lua','core_live.lua','core_work.lua')
 CAPTURE = r'''
     frame_callbacks={}; draw_callbacks={}; diagnostic=''; diagnostic_closed=false
     function do_every_frame(s) frame_callbacks[#frame_callbacks+1]=s end

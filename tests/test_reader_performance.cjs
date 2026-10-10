@@ -6,7 +6,8 @@ const frame=page=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame((
  page.on('pageerror',e=>errors.push(e.message));
  try{
   await page.goto(pathToFileURL(path.resolve('LMM_Report_Reader.html')).href);
-  await page.evaluate(async raw=>{await importFiles([new File([raw],'LMM_perf.txt')],'main');setLanguage('zh');setThemeSeed('#26103C',false);setChartMode('separated');focusTimeView('full');setPlaybackTime(100)},ilsFixture('none'));
+  // Exercise the original SVG/LOC performance path explicitly; launch defaults now use OSM/wind.
+  await page.evaluate(async raw=>{await importFiles([new File([raw],'LMM_perf.txt')],'main');planMap.setEnabled(false);state.profileMode='loc';setLanguage('zh');setThemeSeed('#26103C',false);setChartMode('separated');focusTimeView('full');setPlaybackTime(100)},ilsFixture('none'));
   await page.waitForTimeout(240);await frame(page);
   assert(await page.locator('#windProfile svg').isVisible(),'vertical view remains without ILS');
   assert.equal(await page.evaluate(()=>$('windProfile')._kind),'center');assert(await page.locator('#inputLoc').isVisible());assert.equal(await page.locator('#inputLocInop').getAttribute('visibility'),'visible');

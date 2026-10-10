@@ -40,6 +40,7 @@ static class Program
             File.WriteAllText(args[1], JsonSerializer.Serialize(Core.Discover(AppContext.BaseDirectory), Core.Json)); return 0;
         }
         ApplicationConfiguration.Initialize();
+        if (args.Length == 2 && args[0] == "--ui-test") return UiTests.Run(args[1]);
         var language = Array.IndexOf(args, "--language");
         if (language >= 0 && language + 1 < args.Length && args[language + 1] is "zh" or "en") U.Language = args[language + 1];
         var rendering = args.Length >= 2 && args[0] == "--render";
@@ -47,6 +48,13 @@ static class Program
         using var form = new MainForm(rendering || probe);
         if (rendering)
         {
+            if(args.Contains("--preview-mode"))
+            {
+                using var dialog = form.BuildPrompt(U.T("安装插件", "Install plugin"), U.T("目标：D:\\Games\\X-Plane 12\n\n保留配置：保留插件设置和分析器偏好。\n纯净重装：重置插件设置及随插件分析器偏好。\n两种方式都保留飞行记录、机场缓存和其他插件。", "Target: D:\\Games\\X-Plane 12\n\nKeep settings: preserve plugin and analyzer preferences.\nClean reinstall: reset plugin and bundled analyzer preferences.\nBoth modes preserve flight reports, airport caches and other plugins."),
+                    (U.T("保留配置", "Keep settings"), DialogResult.Yes), (U.T("纯净重装", "Clean reinstall"), DialogResult.No), (U.T("取消", "Cancel"), DialogResult.Cancel));
+                dialog.StartPosition = FormStartPosition.Manual; dialog.Location = new(-30000,-30000); dialog.Show(); Application.DoEvents();
+                using var shot = new Bitmap(dialog.Width,dialog.Height); dialog.DrawToBitmap(shot,new Rectangle(Point.Empty,shot.Size)); shot.Save(args[1]); return 0;
+            }
             if(args.Contains("--preview-files") || args.Contains("--preview-uninstall") || args.Contains("--preview-install"))
             {
                 var d = new Diagnosis { ValidTarget=true,HasPlugin=true,Version="1.1.9rc2",SimulatorVersion="12.4.3",
@@ -67,6 +75,7 @@ static class Program
             if (args.Contains("--preview-updates") || args.Contains("--preview-current")) form.PreviewState(args.Contains("--preview-updates"));
             form.StartPosition = FormStartPosition.Manual; form.Location = new(-30000, -30000); form.ShowInTaskbar = false;
             form.Show(); Application.DoEvents(); using var bitmap = new Bitmap(form.Width, form.Height);
+            if(args.Contains("--preview-splash")) { var splash = new StartupScene(); _ = splash.PlayAsync(form); splash.Preview(750); Application.DoEvents(); }
             form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size)); bitmap.Save(args[1]); return 0;
         }
         if (args.Length >= 2 && args[0] == "--update-health")

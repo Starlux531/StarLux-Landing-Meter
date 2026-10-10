@@ -1,10 +1,12 @@
-# StarLux LMM Installer v1.0.3
+# StarLux LMM Installer v1.0.4
 
-Public maintenance release: **1.0.3**, bundled with plugin **1.1.9rc4**. This promotes the tested 1.0.2rc4 recovery implementation to a numeric version discoverable by existing 1.0.2 installers. The offline bundle includes plugin **1.1.9rc4**, with Standard/Compatibility and Chinese/English variants. RC4 adds relocation-aware transaction matching, recovery before reinstall, an explicitly approved keep-data rebuild when an old backup is unavailable, and verified finalization of completed operations. A failed rebuild restores its pre-operation files and previous marker. Unrelated historical backups cannot overwrite a pending transaction. Existing file inventory, full uninstall and compact/detailed logging remain available. See `USER_GUIDE.md` and `../docs/1.1.9rc4_公开发布验证.md`.
+Current public release (2026-10-10): **1.0.4**, bundled with plugin **1.1.9RC9**. Includes the actionable update card, colored confirmation buttons, sortable/foldable file review, and a 1.5-second startup animation followed by a persistent frosted photo background. See [1.0.4 release notes](RELEASE_NOTES_1.0.4.md). The installer self-update tag is `installer-v1.0.4`; plugin Latest is `v1.1.9RC9`.
 
-The installer has its own version line, starting at **1.0.0** (displayed as **v1.0**). Plugin versions remain independent: plugin **1.1.9** is stable as of 2026-09-23. Its offline bundles include installer **1.0.1** with obsolete LMM file cleanup. The existing standalone installer update release remains `installer-v1.0.0`; plugin release tags do not advance that channel.
+Previous public maintenance release: **1.0.3**, bundled with plugin **1.1.9rc4**. This promotes the tested 1.0.2rc4 recovery implementation to a numeric version discoverable by existing 1.0.2 installers. The offline bundle includes plugin **1.1.9rc4**, with Standard/Compatibility and Chinese/English variants. RC4 adds relocation-aware transaction matching, recovery before reinstall, an explicitly approved keep-data rebuild when an old backup is unavailable, and verified finalization of completed operations. A failed rebuild restores its pre-operation files and previous marker. Unrelated historical backups cannot overwrite a pending transaction. Existing file inventory, full uninstall and compact/detailed logging remain available. See `USER_GUIDE.md` and `../docs/1.1.9rc4_公开发布验证.md`.
 
-The public **1.1.9rc2** bundle includes installer **1.0.2**. It treats the project's bare `1.1.9rc2` (and later `1.1.9rcN`) maintenance naming as newer than `1.1.9`; normal `1.1.9-rc2` prerelease ordering is unchanged. Moving from the earlier `1.1.10-beta2` test build requires manual selection of the local rc2 package. The installer self-update release is **installer-v1.0.2**, published alongside RC2 without replacing the plugin Latest release.
+The installer has its own version line, starting at **1.0.0** (displayed as **v1.0**). Plugin versions remain independent: plugin **1.1.9** is stable as of 2026-09-23. Its offline bundles include installer **1.0.1** with obsolete LMM file cleanup. That historical installer-v1.0.0 release is retained; the current self-update channel uses installer-v1.0.4. Plugin tags do not advance the installer channel.
+
+The public **1.1.9rc2** bundle includes installer **1.0.2**. It treats the project's bare `1.1.9rc2` (and later `1.1.9rcN`) maintenance naming as newer than `1.1.9`; normal `1.1.9-rc2` prerelease ordering is unchanged. Moving from the earlier `1.1.10-beta2` test build requires manual selection of the local rc2 package. The historical installer self-update release was **installer-v1.0.2**, published alongside RC2 without replacing the plugin Latest release.
 
 ## Implemented lifecycle
 
@@ -27,7 +29,7 @@ dotnet restore installer/StarLux.Installer.csproj
 ./installer/build.ps1 -NoRestore -PluginVersionDirectory 'D:/release/1.1.8/version'
 ```
 
-Output: `dist/installer/<InformationalVersion or Version>/` (currently `1.0.2rc2`). The offline bundle has the EXE and `version/` at its root. No plugin development source is automatically promoted or packaged. `-SkipPublish` reuses `.tools/installer-v1/published/` after checking its product and version.
+Output: `dist/installer/<InformationalVersion or Version>/` (currently `1.0.4`). The offline bundle has the EXE and `version/` at its root. No plugin development source is automatically promoted or packaged. `-SkipPublish` reuses `.tools/installer-v1/published/` after checking its product and version.
 
 For future plugin 1.1.9 packaging, use `tools/prepare_release_119.ps1` separately.
 

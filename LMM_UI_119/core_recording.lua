@@ -183,20 +183,44 @@ function M:begin_export(prefix)
         (zh and "前段缺失: " or "front missing: ")..tostring(self.missing).."; "..
         (zh and "间隙: " or "gaps: ")..self.gaps.."\n\n"
     local fallback="StarLux LMM v"..(self.version or "1.1.9")..(zh and " - 片段记录\n没有已确认的接地分析。\n" or " - partial recording\nNo verified touchdown analysis available.\n")
-    self.export={source=source,out=out,path=target,prefix=status..(prefix or self.summary or fallback)..(zh and "\n完整记录\n" or "\nFull recording\n"),offset=1}
+    local pages={status}
+    local summary=prefix or self.summary or fallback
+    if type(summary)=='table' then for _,p in ipairs(summary)do pages[#pages+1]=p end else pages[#pages+1]=summary end
+    pages[#pages+1]=zh and "\n完整记录\n" or "\nFull recording\n"
+    self.export={source=source,out=out,path=target,pages=pages,page=1,offset=1}
 end
 function M:export_step()
+    if not self.export or self.work and not self.work:claim() then return end
+    local started=self.work and self.work.clock()
+    local ok,err=pcall(self.export_slice,self)
+    if self.work then self.work:record('export',started) end
+    if not ok then error(err) end
+end
+function M:export_slice()
     local e=self.export; if not e then return end
+    local size=self.work and self.work.bytes or 8192
+    if e.phase=='close' then
+        e.source:close();local ok,err=e.out:close()
+        if not ok then self.error=tostring(err);self.export=nil;self.export_failed=true;return end
+        e.phase='commit';return
+    end
+    if e.phase~='commit' then
     local chunk
-    if e.offset<=#e.prefix then chunk=e.prefix:sub(e.offset,e.offset+8191); e.offset=e.offset+#chunk
-    else chunk=e.source:read(8192) end
+    if e.pages[e.page] then
+        if self.work and self.work.page_chunk then
+            chunk,e.page,e.offset=self.work:page_chunk(e.pages,e.page,e.offset)
+        else
+            local page=e.pages[e.page];chunk=page:sub(e.offset,e.offset+size-1);e.offset=e.offset+#chunk
+            if e.offset>#page then e.page=e.page+1;e.offset=1 end
+        end
+    else chunk=e.source:read(size) end
     if chunk then
         local ok,err=e.out:write(chunk)
         if not ok then self.error=tostring(err); e.source:close(); e.out:close(); self.export=nil; self.export_failed=true end
         return
     end
-    e.source:close(); local ok,err=e.out:close()
-    if not ok then self.error=tostring(err); self.export=nil; self.export_failed=true; return end
+    e.phase='close';return
+    end
     local old=io.open(e.path,"rb"); local backup=false
     if old then
         old:close()
@@ -318,7 +342,10 @@ function M:rollout_sample(s,route)
 end
 function M:shutdown()
     if self.file then self:stop("plugin_shutdown",false) end
-    if self.export then self.export.source:close(); self.export.out:close(); self.export=nil; self.export_failed=true end
+    if self.export then
+        if self.export.phase~='commit' then self.export.source:close();self.export.out:close() end
+        self.export=nil;self.export_failed=true
+    end
 end
 M.fields=fields
 return M

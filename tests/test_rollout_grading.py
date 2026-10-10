@@ -109,9 +109,12 @@ class RolloutGradingTests(unittest.TestCase):
             assert(built.content:find('offset_7; T+0.10 s',1,true))
             ui.recording.done=true;ui.recording.phase='COMPLETE';ui.recording.closed=true
             ui.recording.summary='earlier snapshot';ui.recording.report_path='test.txt'
-            ui.recording.begin_export=function(self) exported=self.summary end
+            ui.recording.begin_export=function(self) exported=type(self.summary)=='table' and table.concat(self.summary) or self.summary end
             ui.recording.tick=function() end
-            ui.record_frame({t=110})
+            for i=1,2000 do
+                ui.work:begin_frame(110+i/60,1/60,false);ui.record_frame({t=110+i/60});ui.process_report_build()
+                if exported then break end
+            end
             assert(exported:find('滑跑考核状态: COMPLETE',1,true))
             assert(exported:find('滑跑评分等级: ATTENTION',1,true))
             ui.set_global_language('en');local ok,out=ui.build_landing_log_payload('test.txt');assert(ok);english=out.content

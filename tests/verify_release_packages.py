@@ -6,12 +6,13 @@ sys.path.insert(0,str(ROOT/'.tools/python'))
 from lupa.luajit21 import LuaRuntime
 development=json.loads((ROOT/'development.json').read_text(encoding='utf-8'))
 version=development['version']
-assert (development['channel']=='stable' and version in ('1.1.9','1.1.9rc2','1.1.9rc4')) or (development['channel']=='unpublished' and (re.fullmatch(r'1\.1\.9rc[2-9][0-9]*',version) or version.startswith(('1.1.9-beta','1.1.10-beta'))))
+assert (development['channel']=='stable' and version in ('1.1.9','1.1.9rc2','1.1.9rc4','1.1.9RC7','1.1.9RC9')) or (development['channel']=='unpublished' and (re.fullmatch(r'1\.1\.9rc[2-9][0-9]*',version,re.I) or version.startswith(('1.1.9-beta','1.1.10-beta'))))
 release=ROOT/'dist'/version
 expected_files={f'StarLux_LMM_v{version}.lua','LMM_Report_Reader.html','README_1.1.9.md','LICENSE'}
-expected_files.update('LMM_UI_119/'+name for name in ('native_popup.lua','layout.lua','dialog.lua','overlays.lua','core_inputs.lua','core_experience.lua','core_visual_state.lua','core_recording.lua','core_rollout.lua','core_ils.lua','core_updates.lua'))
+expected_files.update('LMM_UI_119/'+name for name in ('native_popup.lua','layout.lua','dialog.lua','overlays.lua','core_inputs.lua','core_experience.lua','core_visual_state.lua','core_recording.lua','core_rollout.lua','core_ils.lua','core_updates.lua','core_touchdown.lua','core_live.lua'))
 expected_files.update('LMM_UI_119/fonts/'+name for name in ('LMMUI-Regular.otf','LMMUI-Medium.otf','LMMUI-Bold.otf','OFL.txt','manifest.json'))
 if (ROOT/'LMM_UI_119/core_flare.lua').exists(): expected_files.add('LMM_UI_119/core_flare.lua')
+expected_files.add('LMM_UI_119/core_work.lua')
 source=(ROOT/'StarLux_LMM_v1.1.9.lua').read_text(encoding='utf-8')
 for variant in ('Standard','Compatibility'):
     for language in ('CN','International'):

@@ -9,6 +9,15 @@ import zipfile
 import test_ui_119 as baseline
 from test_ui_119 import ROOT
 
+def frozen_compatibility_package(version):
+    filename=f'StarLux_LMM_v{version}-Compatibility-CN.zip'
+    for folder in ('dist', '旧版备份/2026-10-09_RC9稳定阶段整理/历史发行',
+                   '旧版备份/2026-09-30_RC4整合/历史测试发行'):
+        candidate=ROOT/folder/version/filename
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f'Frozen compatibility fixture missing: {filename}')
+
 LEGACY = r'''
 SUPPORTS_FLOATING_WINDOWS=1
 api.XPLMGetVersions=function(x,s,h) x[0]=12430;s[0]=430;h[0]=1 end
@@ -18,16 +27,21 @@ local function num(v) assert(type(v)=='number' and v==v, 'numeric argument expec
 local function wnd(v) assert(windows[v] and not windows[v].destroyed,'invalid window handle');return windows[v] end
 function float_wnd_create(w,h,decoration,imgui)
     num(w);num(h);num(decoration);assert(type(imgui)=='boolean')
-    local id={};windows[id]={w=w,h=h};return id
+    local id={};windows[id]={w=w,h=h,imgui=imgui};return id
 end
 function float_wnd_set_imgui_builder(w,b) wnd(w).builder=b;assert(type(b)=='string') end
+function float_wnd_set_ondraw(w,b) wnd(w).draw=b;assert(type(b)=='string') end
+function float_wnd_set_onclick(w,b) wnd(w).click=b;assert(type(b)=='string') end
 function float_wnd_set_onclose(w,b) wnd(w).close=b end
 function float_wnd_set_title(w,t) wnd(w).title=t;assert(type(t)=='string') end
-function float_wnd_set_position(w,x,y) wnd(w);num(x);num(y) end
-function float_wnd_set_geometry(w,l,t,r,b) wnd(w);num(l);num(t);num(r);num(b);assert(r>l and t>b) end
+function float_wnd_set_position(w,x,y) local v=wnd(w);num(x);num(y);v.x=x;v.y=y end
+function float_wnd_set_geometry(w,l,t,r,b) local v=wnd(w);num(l);num(t);num(r);num(b);assert(r>l and t>b);v.w=r-l;v.h=t-b;v.x=l;v.y=b end
 function float_wnd_destroy(w) wnd(w).destroyed=true end
 local function string_arg(s) assert(type(s)=='string');gui_calls=gui_calls+1 end
 imgui={constant={Col={Text=0,Button=21,ButtonHovered=22,ButtonActive=23}},
+    GetContentRegionAvail=function()return 600,800 end,
+    Columns=function(n,id,border)num(n);assert(n>=1 and type(id)=='string' and type(border)=='boolean')end,
+    NextColumn=function()end,SetNextItemWidth=function(n)num(n)end,
     PushStyleColor=function(i,c) num(i);num(c);assert(c>=0 and c<=4294967295 and c==math.floor(c));stack=stack+1 end,
     PopStyleColor=function() assert(stack>0);stack=stack-1 end,
     Button=function(s,w,h) string_arg(s);if w then num(w);num(h) end;return false end,
@@ -43,9 +57,12 @@ imgui={constant={Col={Text=0,Button=21,ButtonHovered=22,ButtonActive=23}},
     GetCursorPosX=function()return 8 end,GetCursorPosY=function()return 8 end,
     SetCursorPosX=num,SetCursorPosY=num,SameLine=function()end,Separator=function()end}
 function draw_legacy_windows()
-    for w,v in pairs(windows) do if not v.destroyed and v.builder then
+    for w,v in pairs(windows) do if not v.destroyed then
+        if v.draw then _G[v.draw](w,v.x or 0,v.y or 0) end
+        if v.builder then
         assert(type(_G[v.builder])=='function',v.builder)
         _G[v.builder](w,0,0);assert(stack==0,'unbalanced ImGui colors')
+        end
     end end
 end
 '''
@@ -94,7 +111,8 @@ class LegacyCompatibilityTests(unittest.TestCase):
         # Use both frozen main AND matching module bytes, not current modules.
         for version in ('1.1.9','1.1.10-beta1'):
             with self.subTest(version=version):
-                with zipfile.ZipFile(ROOT/f'dist/{version}/StarLux_LMM_v{version}-Compatibility-CN.zip') as z:
+                frozen=frozen_compatibility_package(version)
+                with zipfile.ZipFile(frozen) as z:
                     source=z.read(f'payload/StarLux_LMM_v{version}.lua').decode('utf-8')
                     module=z.read('payload/LMM_UI_119/core_experience.lua').decode('utf-8')
                 # Lua long string keeps source literal without quote escaping.
@@ -121,19 +139,19 @@ class LegacyCompatibilityTests(unittest.TestCase):
                     strict(label,value,lo,hi,format)
                     assert(format=='%d')
                     slider_labels[label]=true
-                    if label:find('##live_edge_alpha',1,true) then return true,42 end
+                    if label:find('##live_compat_edge_alpha',1,true) then return true,42 end
                     if label:find('##lmm_font_px',1,true) then return true,22 end
                     return false,value
                 end
-                for appearance=1,4 do
+                for appearance=1,6 do
                     ui.dev.config.appearance=appearance
                     ma_build_settings_window(nil,0,0,imgui)
                     ui.dev:settings(imgui,function(zh,en)return en end,true,function()end)
                 end
-                assert(ui.dev.config.edge_alpha==42 and ui.popup_style.font_px==22)
+                assert(ui.dev.config.compat_edge_alpha==42 and ui.popup_style.font_px==22)
                 assert(#settings_writes>0)
                 local count=0;for _ in pairs(slider_labels)do count=count+1 end
-                assert(count==21,'all 8 basic, 12 per-widget style and 1 font controls covered')
+                assert(count==33,'compatibility edge controls, per-widget style and font controls covered')
             ''')
 
     def test_new_required_modules_explain_main_script_only_upgrade_failure(self):
@@ -150,7 +168,7 @@ class LegacyCompatibilityTests(unittest.TestCase):
         old=old.replace('force_compatibility = false','force_compatibility = true')
         old_runtime=baseline.RecorderTests().load_recorder(source=old,setup=setup)
         old_runtime.execute('ui.native_initialize();assert(#macros==2 and not ui.native_ui.instance)')
-        with zipfile.ZipFile(ROOT/'dist/1.1.9/StarLux_LMM_v1.1.9-Compatibility-CN.zip') as z:
+        with zipfile.ZipFile(frozen_compatibility_package('1.1.9')) as z:
             new=z.read('payload/StarLux_LMM_v1.1.9.lua').decode('utf-8')
         with self.assertRaisesRegex(Exception,r'core_experience\.lua.*No such file'):
             baseline.RecorderTests().load_recorder(source=new,setup=setup)

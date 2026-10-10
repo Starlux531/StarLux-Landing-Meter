@@ -20,8 +20,23 @@ public sealed class StateCard : BluePanel
     readonly Label caption = new() { Dock = DockStyle.Fill, ForeColor = Color.FromArgb(190, 216, 241), BackColor = Color.Transparent };
     public bool Flash { get; private set; }
     Color tone;
-    public StateCard() { Dock = DockStyle.Fill; Padding = new(16, 13, 16, 10); Margin = new(0, 0, 10, 0); Controls.Add(caption); Controls.Add(value); Controls.Add(heading); }
-    public void Set(string title, string text, string detail, Color color, bool flash = false) { heading.Text = title; value.Text = text; caption.Text = detail; tone = color; Flash = flash; value.ForeColor = color; }
+    internal bool ActionEnabled { get; private set; }
+    internal event EventHandler? Activated;
+    internal void SetAction(bool available)
+    {
+        ActionEnabled = available; TabStop = available; Cursor = available ? Cursors.Hand : Cursors.Default;
+        AccessibleRole = available ? AccessibleRole.PushButton : AccessibleRole.StaticText;
+        AccessibleName = VisibleText; Invalidate();
+    }
+    void Activate() { if (ActionEnabled) Activated?.Invoke(this, EventArgs.Empty); }
+    protected override void OnClick(EventArgs e) { base.OnClick(e); Activate(); }
+    protected override bool IsInputKey(Keys key) => key is Keys.Enter or Keys.Space || base.IsInputKey(key);
+    protected override void OnKeyDown(KeyEventArgs e) { base.OnKeyDown(e); if (e.KeyCode is Keys.Enter or Keys.Space) { Activate(); e.Handled = true; } }
+    protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+    protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+    protected override void OnPaint(PaintEventArgs e) { base.OnPaint(e); if (Focused && ActionEnabled) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -3, -3)); }
+    public StateCard() { SetStyle(ControlStyles.Selectable, true); TabStop = false; foreach (var label in new[] { heading, value, caption }) label.Click += (_, _) => Activate(); Dock = DockStyle.Fill; Padding = new(16, 13, 16, 10); Margin = new(0, 0, 10, 0); Controls.Add(caption); Controls.Add(value); Controls.Add(heading); }
+    public void Set(string title, string text, string detail, Color color, bool flash = false) { heading.Text = title; value.Text = text; caption.Text = detail; value.Height = flash ? 60 : 37; value.AutoEllipsis = !flash; tone = color; Flash = flash; value.ForeColor = color; }
     public void Pulse(bool bright) { value.ForeColor = Flash ? (bright ? Color.FromArgb(255, 87, 107) : Color.FromArgb(168, 47, 69)) : tone; }
     internal string VisibleText => heading.Text + " " + value.Text + " " + caption.Text;
 }
@@ -30,7 +45,7 @@ public sealed partial class MainForm : Form
     readonly string baseDir = AppContext.BaseDirectory;
     readonly string preferenceFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarLux_LMM_Installer", "preferences.json");
     readonly ComboBox target = Combo(false), releases = Combo(true), sources = Combo(true);
-    readonly Button language = MakeButton(), browse = MakeButton(), detect = MakeButton(), refresh = MakeButton(), install = MakeButton(true), repair = MakeButton(), uninstall = MakeButton(), restore = MakeButton(), cancel = MakeButton(), selfUpdate = MakeButton();
+    readonly Button language = MakeButton(), browse = MakeButton(), detect = MakeButton(), refresh = MakeButton(), install = MakeButton(true), repair = MakeButton(), uninstall = MakeButton(), restore = MakeButton(), cancel = MakeButton();
     readonly Button openLogs=MakeButton(), exportLogs=MakeButton();
     readonly Button inventory = MakeButton(), completeUninstall = MakeButton();
     readonly CheckBox verbose = new() { AutoSize = true, ForeColor = Color.FromArgb(223,239,252), BackColor = Color.Transparent, Margin = new(0,9,12,0) };
@@ -62,7 +77,7 @@ public sealed partial class MainForm : Form
     {
         this.preview = preview; Font = new("Microsoft YaHei UI", 10); AutoScaleMode = AutoScaleMode.Dpi; DoubleBuffered = true;
         ClientSize = new(1120, 870); MinimumSize = new(1030, 810); StartPosition = FormStartPosition.CenterScreen;
-        var background = new BluePanel { Dock = DockStyle.Fill, Padding = new(28, 22, 28, 20), TopColor = Color.FromArgb(8, 22, 42), BottomColor = Color.FromArgb(44, 103, 155) };
+        var background = new FrostedBackground { Dock = DockStyle.Fill, Padding = new(28, 22, 28, 20), TopColor = Color.FromArgb(8, 22, 42), BottomColor = Color.FromArgb(44, 103, 155) };
         var body = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, ColumnCount = 1, RowCount = 13 };
         for (int i = 0; i < 13; i++) body.RowStyles.Add(new(i == 11 ? SizeType.Percent : SizeType.AutoSize, i == 11 ? 100 : 0));
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, BackColor = Color.Transparent, Margin = Padding.Empty };
@@ -74,7 +89,7 @@ public sealed partial class MainForm : Form
         var paths = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 3, BackColor = Color.Transparent, Margin = Padding.Empty };
         paths.ColumnStyles.Add(new(SizeType.Percent, 100)); paths.ColumnStyles.Add(new(SizeType.AutoSize)); paths.ColumnStyles.Add(new(SizeType.AutoSize)); paths.Controls.Add(target, 0, 0); paths.Controls.Add(browse, 1, 0); paths.Controls.Add(detect, 2, 0); body.Controls.Add(paths, 0, 4);
         status.MaximumSize = new(1010, 70); body.Controls.Add(status, 0, 5); body.Controls.Add(versionTitle, 0, 6); body.Controls.Add(releases, 0, 7);
-        sources.Dock = DockStyle.None; sources.Width = 173; sources.DropDownWidth = 200; body.Controls.Add(Flow(sources, refresh, selfUpdate, inventory, selection), 0, 8);
+        sources.Dock = DockStyle.None; sources.Width = 173; sources.DropDownWidth = 200; body.Controls.Add(Flow(sources, refresh, inventory, selection), 0, 8);
         body.Controls.Add(Flow(install, repair, uninstall, completeUninstall, restore, cancel), 0, 9); body.Controls.Add(progress, 0, 10); body.Controls.Add(logBox, 0, 11); body.Controls.Add(Flow(stage, verbose, openLogs, exportLogs, foot), 0, 12); background.Controls.Add(body); Controls.Add(background);
         foreach (var combo in new[] { releases, sources })
         {
@@ -91,19 +106,19 @@ public sealed partial class MainForm : Form
         language.Click += async (_, _) => { U.Language = U.Language == "zh" ? "en" : "zh"; InstallerTrace.Event("USER_LANGUAGE",new {language=U.Language}); ApplyLanguage(); SavePreferences(); await InspectTarget(); };
         browse.Click += async (_, _) => { InstallerTrace.Event("USER_BROWSE"); using var d = new FolderBrowserDialog { Description = U.T("选择包含 X-Plane.exe 的根目录", "Select the folder containing X-Plane.exe"), UseDescriptionForTitle = true, SelectedPath = target.Text }; if (d.ShowDialog(this) == DialogResult.OK) { target.Text = d.SelectedPath; SavePreferences(); await InspectTarget(); } };
         detect.Click += async (_, _) => await Detect(); refresh.Click += async (_, _) => await CheckOnline(); install.Click += async (_, _) => await Install(false); repair.Click += async (_, _) => await Install(true);
-        uninstall.Click += async (_, _) => await Uninstall(); restore.Click += async (_, _) => await Restore(); selfUpdate.Click += async (_, _) => await UpdateInstaller(); cancel.Click += (_, _) => {InstallerTrace.Event("USER_CANCEL_DOWNLOAD"); operation?.Cancel();};
+        uninstall.Click += async (_, _) => await Uninstall(); restore.Click += async (_, _) => await Restore(); installerCard.Activated += async (_, _) => await UpdateInstaller(); cancel.Click += (_, _) => {InstallerTrace.Event("USER_CANCEL_DOWNLOAD"); operation?.Cancel();};
         openLogs.Click += (_,_) => OpenLogs(); exportLogs.Click += (_,_) => ExportLogs();
         inventory.Click += async (_,_) => await ShowInventory(); completeUninstall.Click += async (_,_) => await Uninstall(true);
         verbose.CheckedChanged += (_,_) => { logBox.Text = string.Concat(recentLog.Select(s=>LogPresentation.Render(s,verbose.Checked))); logBox.SelectionStart=logBox.TextLength;logBox.ScrollToCaret(); SavePreferences(); };
         blink.Tick += (_, _) => { pulse = !pulse; pluginCard.Pulse(pulse); installerCard.Pulse(pulse); }; blink.Start();
-        Shown += async (_, _) => { if (!preview) { Log(U.T("诊断日志：","Diagnostic log: ")+InstallerTrace.LogPath);if(!string.IsNullOrEmpty(InstallerTrace.Session?.StorageWarning))Log(InstallerTrace.Session.StorageWarning); await Detect(); await CheckOnline(); } };
+        Shown += async (_, _) => { if (!preview) { using (var splash = new StartupScene()) await splash.PlayAsync(this); if (IsDisposed) return; Log(U.T("诊断日志：","Diagnostic log: ")+InstallerTrace.LogPath);if(!string.IsNullOrEmpty(InstallerTrace.Session?.StorageWarning))Log(InstallerTrace.Session.StorageWarning); await Detect(); await CheckOnline(); } };
         FormClosing += (_, e) => { if (busy && !closingForUpdate) { e.Cancel = true; Prompt(U.T("请等待", "Please wait"), applying ? U.T("正在写入或恢复文件，请等待操作完成。", "Files are being applied or restored. Wait for completion.") : U.T("请先取消下载并等待结束。", "Cancel the download and wait for it to stop.")); } else {InstallerTrace.Event("USER_CLOSE",new {closingForUpdate}); catalogCancellation?.Cancel();} };
         FormClosed += (_, _) => { if(InstallerTrace.Session is {} session)session.Line-=AppendLog; blink.Dispose(); inspectDelay.Dispose(); };
     }
     void ApplyLanguage()
     {
         Text = U.T("StarLux LMM 安装器 v", "StarLux LMM Installer v") + SelfUpdater.DisplayVersion; title.Text = U.T("STARLUX  安装器", "STARLUX  INSTALLER"); subtitle.Text = "v" + SelfUpdater.DisplayVersion + U.T("  /  安装、更新与维护，一处完成", "  /  Install, update and maintain in one place"); language.Text = U.Language == "zh" ? "English" : "简体中文";
-        pathTitle.Text = U.T("01   选择模拟器", "01   YOUR SIMULATOR"); versionTitle.Text = U.T("02   选择插件版本", "02   PLUGIN VERSION"); browse.Text = U.T("浏览目录", "Browse"); detect.Text = U.T("重新检测", "Detect"); refresh.Text = U.T("检查全部更新", "Check updates"); selfUpdate.Text = U.T("更新安装器", "Update installer"); install.Text = U.T("安装 / 更新插件", "Install / update"); repair.Text = U.T("修复插件", "Repair plugin"); uninstall.Text = U.T("卸载插件", "Uninstall"); restore.Text = U.T("恢复备份", "Restore backup"); cancel.Text = U.T("取消下载", "Cancel download");
+        pathTitle.Text = U.T("01   选择模拟器", "01   YOUR SIMULATOR"); versionTitle.Text = U.T("02   选择插件版本", "02   PLUGIN VERSION"); browse.Text = U.T("浏览目录", "Browse"); detect.Text = U.T("重新检测", "Detect"); refresh.Text = U.T("检查全部更新", "Check updates"); install.Text = U.T("安装 / 更新插件", "Install / update"); repair.Text = U.T("修复插件", "Repair plugin"); uninstall.Text = U.T("卸载插件", "Uninstall"); restore.Text = U.T("恢复备份", "Restore backup"); cancel.Text = U.T("取消下载", "Cancel download");
         var index = sources.SelectedIndex; sources.Items.Clear(); sources.Items.AddRange([U.T("自动切换下载源", "Automatic source"), U.T("优先 Gitee", "Prefer Gitee"), U.T("优先 GitHub", "Prefer GitHub")]); sources.SelectedIndex = Math.Max(0, index);
         openLogs.Text=U.T("打开日志","Open logs");exportLogs.Text=U.T("导出诊断包","Export diagnostics");
         inventory.Text=U.T("文件清单 / 原因","Files / findings");completeUninstall.Text=U.T("完全卸载","Full uninstall");verbose.Text=U.T("输出详细","Detailed output");
@@ -181,10 +196,11 @@ public sealed partial class MainForm : Form
         pluginCard.Set(U.T("插件更新", "PLUGIN UPDATE"), hasUpdate ? U.T("有新版本  ", "Update available  ") + latest!.Version : isLatest ? U.T("已是最新版本", "Up to date") : diagnosis.HasPlugin ? U.T("已安装  ", "Installed  ") + diagnosis.Version : U.T("尚未安装", "Not installed"), checking ? U.T("正在检查在线版本…", "Checking online releases…") : latest != null ? U.T("线上版本：", "Online version: ") + latest.Version : U.T("在线状态未知，仍可使用本地包", "Online status unknown; local packages work"), hasUpdate ? Alert : isLatest ? Good : Neutral, hasUpdate);
         healthCard.Set(U.T("插件状态", "PLUGIN HEALTH"), diagnosis.Verified ? U.T("文件完整 · 兼容", "Verified & compatible") : diagnosis.HasPlugin ? U.T("需要检查 / 修复", "Check / repair needed") : U.T("等待安装", "Ready to install"), diagnosis.SimulatorVersion == "" ? U.T("等待识别 X-Plane 版本", "X-Plane version not identified") : "X-Plane " + diagnosis.SimulatorVersion + " · " + (diagnosis.HasFlyWithLua ? "FlyWithLua ✓" : U.T("缺少 FlyWithLua", "FlyWithLua missing")), diagnosis.Verified ? Good : diagnosis.HasPlugin ? Warning : Neutral);
         var updateRelease = installerCatalog?.Releases.FirstOrDefault(); var newer = updateRelease != null && Core.CompareVersion(updateRelease.Version, SelfUpdater.Version) > 0; var current = installerCatalog?.Available == true && updateRelease != null && Core.CompareVersion(updateRelease.Version, SelfUpdater.Version) == 0;
-        installerCard.Set(U.T("安装器更新", "INSTALLER UPDATE"), newer ? U.T("有新版本  ", "Update available  ") + updateRelease!.Version : current ? U.T("已是最新版本", "Up to date") : "v" + SelfUpdater.DisplayVersion, checking ? U.T("正在检查独立更新通道…", "Checking installer release channel…") : updateRelease != null ? U.T("当前版本：", "Current version: ") + SelfUpdater.Version : installerCatalog?.Available == true ? U.T("尚无正式更新包", "No installer release package published") : U.T("更新状态待确认", "Update status unconfirmed"), newer ? Alert : current ? Good : Neutral, newer);
+        installerCard.Set(U.T("安装器更新", "INSTALLER UPDATE"), newer ? U.T("安装器有新版本，点击此处更新安装器", "New installer available. Click here to update") : current ? U.T("已是最新版本", "Up to date") : "v" + SelfUpdater.DisplayVersion, checking ? U.T("正在检查独立更新通道…", "Checking installer release channel…") : updateRelease != null ? U.T("当前版本：", "Current version: ") + SelfUpdater.Version + (newer ? " → " + updateRelease!.Version : "") : installerCatalog?.Available == true ? U.T("尚无正式更新包", "No installer release package published") : U.T("更新状态待确认", "Update status unconfirmed"), newer ? Alert : current ? Good : Neutral, newer);
+        if (busy || checking) installerCard.Pulse(false);
         status.Text = diagnosis.Describe(); if (diagnosis.Issues.Count > 2) status.Text = string.Join("\n", diagnosis.Describe().Split('\n').Take(2)) + "\n" + U.T("共有 ", "Total: ") + diagnosis.Issues.Count + U.T(" 项原因，点击“文件清单 / 原因”查看全部。", " findings. Open Files / findings for details.");
         inventory.Enabled = !busy && diagnosis.ValidTarget; completeUninstall.Enabled = !busy && (diagnosis.HasPlugin || diagnosis.HasRelatedFiles);
-        selfUpdate.Enabled = !busy && newer; uninstall.Enabled = !busy && diagnosis.HasPlugin; repair.Enabled = !busy && diagnosis.HasPlugin && releases.Items.Count > 0;
+        installerCard.SetAction(!busy && !checking && newer); uninstall.Enabled = !busy && diagnosis.HasPlugin; repair.Enabled = !busy && diagnosis.HasPlugin && releases.Items.Count > 0;
     }
     void ShowSelection() { selection.Text = releases.SelectedItem is Release r ? U.Compatibility(r) : U.T("无安装包，请检查更新", "No package; check updates"); install.Enabled = !busy && releases.SelectedItem != null; }
     async Task CheckOnline()
@@ -197,13 +213,20 @@ public sealed partial class MainForm : Form
     }
     void SetBusy(bool value) { busy = value; foreach (var c in new Control[] { browse, detect, restore, target, releases, sources, language }) c.Enabled = !value; refresh.Enabled = !value && !checking; cancel.Enabled = value && !applying; UpdateCards(); ShowSelection(); }
     string Preferred => sources.SelectedIndex switch { 1 => "Gitee", 2 => "GitHub", _ => "Auto" };
+    internal Form BuildPrompt(string heading, string text, params (string, DialogResult)[] choices)
+    {
+        var d = new Form { Text = heading, Font = Font, ClientSize = new(680, 385), MinimumSize = new(680, 385), StartPosition = FormStartPosition.CenterParent, ShowInTaskbar = false, BackColor = Color.FromArgb(14, 34, 57), ForeColor = Color.FromArgb(223, 239, 252), Padding = new(22) };
+        var content = new TextBox { Text = text.Replace("\r\n", "\n").Replace("\n", "\r\n"), Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = d.BackColor, ForeColor = d.ForeColor, ScrollBars = ScrollBars.Vertical };
+        var row = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new(0, 16, 0, 0) };
+        if (choices.Length == 0) choices = [(U.T("确定", "OK"), DialogResult.OK)]; foreach (var (label, result) in choices.Reverse()) { var modeChoice = choices.Length == 3 && choices.Any(c => c.Item1 == U.T("保留配置", "Keep settings"));
+            Button b = result == DialogResult.Cancel ? new AccentButton(label, result, Alert) : modeChoice ? new AccentButton(label, result, result == DialogResult.Yes ? Good : Color.FromArgb(255,161,64)) : MakeButton(); b.Text = label; b.DialogResult = result; row.Controls.Add(b); if (result == DialogResult.Cancel) d.CancelButton = b; }
+        d.Controls.Add(content); d.Controls.Add(row);
+        d.Shown += (_, _) => content.Select(0, 0);
+        return d;
+    }
     DialogResult Prompt(string heading, string text, params (string, DialogResult)[] choices)
     {
-        using var d = new Form { Text = heading, Font = Font, ClientSize = new(680, 385), MinimumSize = new(680, 385), StartPosition = FormStartPosition.CenterParent, ShowInTaskbar = false, BackColor = Color.FromArgb(14, 34, 57), ForeColor = Color.FromArgb(223, 239, 252), Padding = new(22) };
-        var content = new TextBox { Text = text, Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = d.BackColor, ForeColor = d.ForeColor, ScrollBars = ScrollBars.Vertical };
-        var row = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new(0, 16, 0, 0) };
-        if (choices.Length == 0) choices = [(U.T("确定", "OK"), DialogResult.OK)]; foreach (var (label, result) in choices.Reverse()) { var b = MakeButton(); b.Text = label; b.DialogResult = result; row.Controls.Add(b); if (result == DialogResult.Cancel) d.CancelButton = b; }
-        d.Controls.Add(content); d.Controls.Add(row);
+        using var d = BuildPrompt(heading, text, choices);
         InstallerTrace.Event("DIALOG_SHOWN",new {heading,text});
         var answer=d.ShowDialog(this);
         InstallerTrace.Event("DIALOG_CHOICE",new {heading,result=answer.ToString(),label=choices.FirstOrDefault(c=>c.Item2==answer).Item1});

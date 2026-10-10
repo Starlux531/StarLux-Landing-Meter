@@ -14,6 +14,7 @@ local colors = {
 }
 
 function M:area()
+    if self.grid then return self.grid.x+(self.grid.column-1)*(self.grid.w+12),self.grid.w end
     local w=math.min(920,self.width-48)
     return math.floor((self.width-w)/2)-4,w
 end
@@ -33,6 +34,16 @@ function M:measure(s)
 end
 
 function M:place(w, h)
+    if self.grid then
+        local g=self.grid
+        local x=g.x+(g.column-1)*(g.w+12)
+        local y=g.y
+        w=math.min(w,g.w);g.bottom=math.max(g.bottom,y+h+10)
+        g.column=g.column+1
+        if g.column>g.count then g.column=1;g.y=g.bottom end
+        self.next_y=g.bottom;self.same=false;self.last={x=x,y=y,w=w,h=h}
+        return x,y,w,h
+    end
     local left, available=self:area()
     local inset=self.section and 16 or 0
     w = math.min(w, available-inset*2)
@@ -53,10 +64,10 @@ end
 function M:control(text, w, h, kind, extra)
     local display, id = label(text)
     local _,available=self:area()
-    available=available-(self.section and 32 or 0)
+    available=available-(self.section and not self.grid and 32 or 0)
     local padding=(kind=='radio' or kind=='check') and 46 or 28
     w = math.min(math.max(w or 0,self:measure(display)+padding+4),available)
-    if kind=='slider' then w=available end
+    if kind=='slider' or self.grid then w=available end
     local rows=wrap.wrap(display,math.max(1,w-padding),function(s) return self:measure(s) end)
     local x, y, cw, ch = self:place(w, math.max(h or 36,#rows*21+14))
     self:command(kind or 'button', display, x, y, cw, ch, extra)
@@ -83,6 +94,13 @@ function M:make_gui()
     local d, g = self, {constant={Col={Button=1,Text=2}}}
     function g.TextUnformatted(text) d:text(text) end
     function g.SameLine() d.same=true end
+    -- Equal-width controls; narrow windows automatically reduce columns.
+    function g.BeginGrid(count,min_width)
+        local left,w=d:area();local inset=d.section and 16 or 0
+        w=w-inset*2;count=math.max(1,math.min(count,math.floor((w+12)/((min_width or 200)+12))))
+        d.grid={x=left+inset,w=(w-(count-1)*12)/count,count=count,column=1,y=d.next_y,bottom=d.next_y}
+    end
+    function g.EndGrid() if d.grid then d.next_y=d.grid.bottom;d.grid=nil;d.last=nil;d.same=false end end
     function g.Section(text)
         d:finish_section(); d.same=false
         local left,w=d:area()

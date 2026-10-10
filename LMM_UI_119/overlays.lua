@@ -11,7 +11,7 @@ local green,yellow,red=color(.15,1,.4,1),color(1,.84,.15,.95),color(1,.22,.22,1)
 local function text(h,w,x,y,s,px,ink)
     h.api.XPLMFontDrawString(h.fonts.normal,ink or text_ink,px or 12,w.x+x,w.y+y,s,0)
 end
-local function title(id,en) return id=="stick" and (en and "INPUT" or "操纵输入") or id=="throttle" and (en and "THROTTLE" or "油门") or "N1" end
+local function title(id,en) if id=="g_meter" then return "LIVE G" elseif id=="fpm_meter" then return "LIVE FPM" end; return id=="stick" and (en and "INPUT" or "操纵输入") or id=="throttle" and (en and "THROTTLE" or "油门") or "N1" end
 function M.new(host,ffi,model)
     -- Cache FFI struct views once: indexing the array in interpreted draw code
     -- otherwise creates temporary cdata objects for every vertex assignment.
@@ -158,6 +158,33 @@ function M:draw(w)
     if w.collapsed then text(h,w,8,9,(w.id=="throttle" and cfg.engine_combined and "THR + N1" or title(w.id,m.en)).." +",11,color(.82,.93,1,hover and .96 or .5));return end
     self:rect(w.x+w.w-10,w.y+3,7,1,color(r,g,b,.45))
     self:rect(w.x+w.w-4,w.y+3,1,7,color(r,g,b,.45))
+    if w.id=="g_meter" or w.id=="fpm_meter" then
+        local td=m.touchdown
+        text(h,w,8,w.h-17,cfg.live_combined and "LIVE G / FPM" or title(w.id,m.en),11)
+        self:rect(w.x+w.w-23,w.y+w.h-16,11,2,color(r,g,b,.6))
+        if td then
+            local function number_line(value,label,is_fpm,y)
+                local v=is_fpm and value and math.max(0,-value) or value
+                local ink=v and v>(is_fpm and 300 or 1.8) and red or v and v>(is_fpm and 250 or 1.5) and yellow or text_ink
+                text(h,w,10,y,label,math.min(22,w.w/9),ink)
+            end
+            local live=m.live_fpm
+            local sources=live and live:selected(cfg) or {}
+            local show_fpm=w.id=="fpm_meter" or cfg.live_combined
+            local total=(w.id=="g_meter" and 1 or 0)+(show_fpm and #sources or 0)
+            local row=0
+            local function next_y()row=row+1;return 24+(w.h-52)*(1-row/(total+1)) end
+            if w.id=="g_meter" then number_line(td.live_g,td.g_text,false,next_y()) end
+            if show_fpm then for _,source in ipairs(sources) do
+                local label=live:line(source,m.en)
+                local value=live.values[source];local v=value and math.max(0,-value)
+                local ink=v and v>300 and red or v and v>250 and yellow or text_ink
+                text(h,w,8,next_y(),label,math.min(18,(w.w-16)/math.max(10,#label*.58),(w.h-52)/math.max(1,total)*.7),ink)
+            end end
+        end
+        text(h,w,8,10,m.en and "Display only" or "仅实时显示",9)
+        return
+    end
     text(h,w,8,w.h-17,w.id=="stick" and (m.en and "INPUT" or "操纵输入") or w.id=="throttle" and (cfg.engine_combined and (m.en and "THR / N1 %" or "油门 / N1 %") or m.en and "THROTTLE %" or "油门 %") or "N1 %")
     self:rect(w.x+w.w-23,w.y+w.h-16,11,2,color(r,g,b,hover and .95 or .55))
     if w.id=="stick" then
@@ -265,10 +292,9 @@ function M:tick()
     local b=self.host.bounds; self.host.api.XPLMGetScreenBoundsGlobal(b,b+1,b+2,b+3)
     self.bounds={tonumber(b[0]),tonumber(b[1]),tonumber(b[2]),tonumber(b[3])}
     local left,top,right,bottom=unpack(self.bounds); local cfg=self.model.config
-    for _,id in ipairs({"settings","records","stick","throttle","n1"}) do
+    for _,id in ipairs({"settings","records","stick","throttle","n1","g_meter","fpm_meter"}) do
         local edge=id=="settings" or id=="records"
-        local visible=edge and cfg.edge or not edge and (cfg[id] or id=="stick" and self.model.debug)
-        if cfg.engine_combined and (id=="throttle" or id=="n1") then visible=id=="throttle" and (cfg.throttle or cfg.n1) end
+        local visible=self.model:visible(id,self.model.debug)
         local w=self.windows[id]
         if visible and not w then w=self:create(id) end
         if w then

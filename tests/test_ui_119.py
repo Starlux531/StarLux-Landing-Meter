@@ -455,7 +455,7 @@ class RecorderTests(unittest.TestCase):
                 if legacy:
                     self.assertEqual(l.eval('calls.fonts'),0)
                     self.assertEqual(l.eval('ui.settings_text("中文","English")'),'English')
-                    self.assertEqual(l.eval('ui.popup_language()'),language)
+                    self.assertEqual(l.eval('ui.popup_language()'),'en')
                     self.assertIsNone(l.eval('ui.native_ui.instance'))
                 else:
                     self.assertTrue(l.eval('ui.native_ui.instance.ready'))
@@ -534,7 +534,8 @@ class RecorderTests(unittest.TestCase):
             return result
         before,after=functions(old),functions(new)
         changed={k for k,v in before.items() if after.get(k)!=v}
-        allowed={'calculate_popup_position','log_tools.native_popup','log_tools.popup_language','log_tools.settings_text','save_settings','load_settings',
+        allowed={'refresh_popup_cache','log_tools.apply_centerline_score','process_landing_analysis','analyze_landing_impulse','log_tools.popup_mode_log_text','calculate_popup_position','log_tools.native_popup','log_tools.popup_language','log_tools.settings_text','save_settings','load_settings',
+                 'log_tools.legacy_font_size', # RC5 compatibility UI English, report language independent.
                  'ma_landing_meter_draw','ma_build_settings_window','ma_build_log_manager_window',
                  'ma_open_settings_window','ma_open_log_manager','position_label',
                  'log_tools.popup_font_metrics','log_tools.popup_measure_text','log_tools.draw_popup_glyphs',
@@ -545,9 +546,18 @@ class RecorderTests(unittest.TestCase):
                  'log_tools.process_apt_line', 'log_tools.finish_airport_block',
                  'log_tools.build_landing_log_payload', 'log_tools.finish_landing_log_write',
                  'ma_lmm118_shutdown',
+                 # RC9 adaptive background work / presentation, not scoring.
+                 'log_tools.begin_incremental_landing_log_write','log_tools.update_apt_index',
+                 'log_tools.native_initialize','log_tools.process_incremental_landing_log_write',
+                 'log_tools.write_rollout_report',
+                 # RC9 export status and completion gating; test_rc9.py.
+                 'log_tools.report_flash_state','log_tools.reset_report_notice',
+                 'log_tools.draw_database_status','log_tools.start_report_flash',
+                 'log_tools.fail_landing_log_write',
+                 'resolve_context_safely',
                  # beta7: whole-session bounce lifecycle; test_bounce_119.py.
                  'reset_bounce_state','begin_bounce_monitor','process_bounce_monitor',
-                 'finish_flare_trace','finish_second_touch_analysis','apply_bounce_score',
+                 'finish_flare_trace','finish_second_touch_analysis','apply_bounce_score','write_primary_math_audit','finalize_landing_analysis',
                  # beta8: report explains graded rollout; test_rollout_grading.py.
                  'status_explanation',
                  # RC3: bounded nearby land-airport retry replaces heliport-first

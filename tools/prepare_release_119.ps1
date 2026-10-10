@@ -4,13 +4,18 @@ $repo = Split-Path $PSScriptRoot -Parent
 $utf8 = [Text.UTF8Encoding]::new($false)
 $development = Get-Content -LiteralPath (Join-Path $repo 'development.json') -Raw | ConvertFrom-Json
 $developmentVersion = [string]$development.version
-$stable = $development.channel -eq 'stable' -and $developmentVersion -in @('1.1.9','1.1.9rc2','1.1.9rc4')
+$stable = $development.channel -eq 'stable' -and $developmentVersion -in @('1.1.9','1.1.9rc2','1.1.9rc4','1.1.9RC7','1.1.9RC9')
 if (!$stable -and ($development.channel -ne 'unpublished' -or $developmentVersion -notmatch '^(1\.1\.(9|10)-beta[1-9][0-9]*|1\.1\.9rc[2-9][0-9]*)$')) { throw 'Use stable 1.1.9 or an explicit unpublished 1.1.9rcN / 1.1.9-betaN / 1.1.10-betaN in development.json.' }
 $mainSource = [IO.File]::ReadAllText((Join-Path $repo 'StarLux_LMM_v1.1.9.lua'))
 if (!$mainSource.StartsWith("-- StarLux 落地率插件 v$developmentVersion`n") -and !$mainSource.StartsWith("-- StarLux 落地率插件 v$developmentVersion`r`n")) { throw 'Main source header must match development.json.' }
 # Local packaging for 1.1.9; this script does not publish to GitHub.
 $readerPath = Join-Path $repo 'LMM_Report_Reader.html'
 $reader = [IO.File]::ReadAllText($readerPath)
+if ($reader.Contains('LMM_MAP_JS_BEGIN')) {
+    foreach ($module in @('tools/analyzer/plan_map.js','tools/analyzer/plan_map.css')) {
+        if (!$reader.Replace("`r`n","`n").Contains([IO.File]::ReadAllText((Join-Path $repo $module)).Replace("`r`n","`n").Trim())) { throw 'Map source changed: run python tools/build_map_assets.py before packaging.' }
+    }
+}
 $reader = [regex]::Replace($reader, '(<small id="analyzerBuild"[^>]*>)[^<]*(</small>)', [Text.RegularExpressions.MatchEvaluator]{ param($m) $m.Groups[1].Value + $developmentVersion + $m.Groups[2].Value })
 $presets = [IO.File]::ReadAllText((Join-Path $repo '发行预设/analyzer-presets.json'))
 $embedded = '<script type="application/json" id="lmm-bundled-presets">' + $presets + '</script>'

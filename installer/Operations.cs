@@ -138,6 +138,7 @@ public sealed partial class MainForm
     }
     async Task UpdateInstaller()
     {
+        if (busy || checking) return;
         using var trace=InstallerTrace.Begin("installer-self-update");
         var selected = installerCatalog?.Releases.FirstOrDefault(); if (selected == null || Core.CompareVersion(selected.Version, SelfUpdater.Version) <= 0) return;
         if (Prompt(U.T("更新安装器", "Update installer"), U.T("将下载并校验安装器，然后关闭当前窗口、替换程序并重新启动。插件、配置和备份目录保持原位。\n\n新版本：", "Download and verify the installer, close this window, replace the executable and restart. Plugin files, settings and backup folders stay in place.\n\nNew version: ") + selected.Version, Yes, No) != DialogResult.OK) return;

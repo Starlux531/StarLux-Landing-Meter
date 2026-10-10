@@ -1,4 +1,4 @@
--- StarLux 落地率插件 v1.1.9rc4
+-- StarLux 落地率插件 v1.1.9RC9
 -- 适用于 X-Plane 12.4.4 + FlyWithLua (LuaJIT)，需同时安装 LMM_UI_119 文件夹。
 -- SDK 440 原生 Unicode 弹窗；旧版渲染安全回退；沿用 v1.1.7 数据采集与落地算法。
 
@@ -6,8 +6,8 @@
 -- 用户设置
 -- =========================
 
-local POPUP_MODE = "immediate"
--- "immediate" = 落地分析完成后立即显示
+local POPUP_MODE = "touchdown"
+-- "touchdown" = 触地即显示；压缩采样完成后固定着陆数值
 -- "taxi"      = 地速降低到 30 节以下时显示
 -- "stopped"   = 飞机停稳并持续 10 秒后显示
 -- "off"       = 不自动显示落地数据窗，但保留报告生成提示
@@ -20,7 +20,7 @@ local DETAILED_MATH_LOG = false
 -- false = 输出 v0.8.0 风格的简洁专业报告；true = 追加可完整复算的数学审计内容。
 -- 某些长行程起落架在 0.35 秒时仍未完成第一次压缩，因此把安全上限延长到 1.20 秒。
 -- 满足停止或反弹条件时仍会提前结束；若到达上限，报告会明确记录超时原因。
-local IMPACT_CAPTURE_MAX_SECONDS = 1.20
+local IMPACT_CAPTURE_MAX_SECONDS = 3.0
 local PRE_TOUCH_BUFFER_SECONDS = 0.50
 -- 物理候选优先取最后 100 ms 离地垂直速度中位数；250 ms P25 只在短窗缺样时备用。
 local PHYSICAL_FPM_WINDOW_SECONDS = 0.25
@@ -120,7 +120,7 @@ local LOG_MANAGER_PAGE_SIZE = 8
 local VS_SAMPLE_MAX_AGL_FT = 120
 
 -- G 稳健主值与物理闭合复核参数。
-local SAMPLE_BUFFER_SIZE = 256
+local SAMPLE_BUFFER_SIZE = 2048
 local MATH_AUDIT_SAMPLE_MAX = SAMPLE_BUFFER_SIZE
 local SECOND_TOUCH_AUDIT_SAMPLE_MAX = SAMPLE_BUFFER_SIZE
 local G_CURVE_PERCENTILE = 0.75
@@ -776,7 +776,7 @@ function LMM_CONTROL_REFS.input_candidate_is_active(candidate, slots, count)
 end
 
 function LMM_CONTROL_REFS.resolve_input_sources(slots, count)
-    -- 1.1.9rc4: sources are resolved while observing, never retrospectively.
+    -- 1.1.9RC9: sources are resolved while observing, never retrospectively.
     -- Existing samples retain their selected source and candidate raw values.
     return count
 end
@@ -1340,7 +1340,7 @@ do
     local directory=join_path(LMM_BASE_DIRECTORY,"LMM_UI_119")..PATH_SEPARATOR
     local chunks,errors={},{}
     for _,name in ipairs({"core_inputs.lua","core_visual_state.lua","core_experience.lua",
-        "core_recording.lua","core_rollout.lua","core_ils.lua","core_flare.lua"}) do
+        "core_recording.lua","core_rollout.lua","core_ils.lua","core_flare.lua","core_touchdown.lua","core_live.lua","core_work.lua"}) do
         local ok,chunk,err=pcall(loadfile,directory..name)
         if ok and type(chunk)=="function" then chunks[name]=chunk
         else errors[#errors+1]=name..": "..tostring(ok and err or chunk) end
@@ -1349,8 +1349,15 @@ do
         local ok,err=pcall(function()
             log_tools.dev=chunks["core_experience.lua"](directory).new(LMM_CONTROL_REFS,LMM_BASE_DIRECTORY..PATH_SEPARATOR)
             log_tools.flare_module=chunks["core_flare.lua"]()
+            log_tools.work=chunks["core_work.lua"]().new()
+            log_tools.live=chunks["core_live.lua"]().new()
+            log_tools.dev.live_fpm=log_tools.live
+            log_tools.touchdown_module=chunks["core_touchdown.lua"]()
+            log_tools.touchdown=log_tools.touchdown_module.new()
+            log_tools.dev.touchdown=log_tools.touchdown
             log_tools.recording=chunks["core_recording.lua"](log_tools.flare_module).new(LOG_DIRECTORY_PATH..PATH_SEPARATOR)
-            log_tools.recording.version="1.1.9rc4"
+            log_tools.recording.work=log_tools.work
+            log_tools.recording.version="1.1.9RC9"
             log_tools.dev.recording=log_tools.recording
             log_tools.rollout_module=chunks["core_rollout.lua"]()
             log_tools.ils_module=chunks["core_ils.lua"]()
@@ -1360,7 +1367,7 @@ do
         if not ok then errors[#errors+1]="Core initialization: "..tostring(err) end
     end
     if #errors>0 then
-        local lines={"[StarLux LMM 1.1.9rc4] STARTUP FAILED - LMM paused; other Lua scripts may continue.",
+        local lines={"[StarLux LMM 1.1.9RC9] STARTUP FAILED - LMM paused; other Lua scripts may continue.",
             "Install or repair the complete Compatibility package for XP 12.4.3; keep settings and logs.",
             "Scripts directory: "..tostring(LMM_BASE_DIRECTORY),"Expected modules: "..directory,
             "Do not install only the main Lua file. LMM_UI_118 is not a substitute for LMM_UI_119.",
@@ -1394,6 +1401,7 @@ do
     end
 end
 log_tools.native_ui = { attempted = false, force_compatibility = false }
+if log_tools.dev then log_tools.dev.compatibility=log_tools.native_ui.force_compatibility end
 -- 1.1.7 新增状态继续集中放入既有表中，避免 Lua 5.1 主代码块触及 200 个局部变量上限。
 log_tools.popup_style = {
     text_color_mode = "contrast",
@@ -1624,20 +1632,21 @@ end
 
 -- 全局语言：界面、弹窗、数据库提示、TXT 和插件启动的阅读器共用。
 function log_tools.settings_text(chinese, english)
-    -- The pre-12.4.4 ImGui atlas cannot guarantee CJK glyphs. Report and popup
-    -- language remain global; only the explicit legacy edition uses ASCII UI.
+    -- The compatibility edition keeps its UI in English; document_language
+    -- still controls TXT output and the launched browser analyzer.
     if log_tools.native_ui.force_compatibility then return english end
     return log_tools.ui_text(chinese, english)
 end
 
 function log_tools.popup_language()
+    if log_tools.native_ui.force_compatibility then return "en" end
     return runtime_state.document_language
 end
 
 function log_tools.legacy_font_size()
     -- Never change language to work around missing glyphs. Compatibility mode
     -- uses the standard Unicode font for Chinese, preserving the saved size.
-    return runtime_state.document_language == "zh" and "normal" or log_tools.popup_style.font_size
+    return log_tools.popup_language() == "zh" and "normal" or log_tools.popup_style.font_size
 end
 
 function log_tools.popup_text(chinese, english)
@@ -1679,6 +1688,7 @@ function log_tools.parse_rgb_setting(value, color)
 end
 
 function log_tools.reset_report_notice()
+    landing_jobs.report_error=nil
     landing_report_notice.text = ""
     landing_report_notice.file_name = ""
     landing_report_notice.path = ""
@@ -1689,6 +1699,7 @@ function log_tools.reset_report_notice()
 end
 
 function log_tools.start_report_flash(now)
+    if log_tools.report_export_status() then return end
     if landing_report_notice.ready == false
         or landing_report_notice.flash_started_at > 0
         or POPUP_MODE == "off"
@@ -1702,6 +1713,7 @@ function log_tools.start_report_flash(now)
 end
 
 function log_tools.report_flash_state(now)
+    if log_tools.report_export_status() then return false,false end
     if landing_report_notice.flash_started_at <= 0
         or now >= landing_report_notice.flash_until_time then
         return false, false
@@ -1763,7 +1775,7 @@ function log_tools.draw_popup_glyphs(x, y, value)
     elseif log_tools.legacy_font_size() == "small" then
         draw_string_Helvetica_10(x, y, value)
     else
-        draw_string(x, y, value)
+        if log_tools.popup_draw_color then draw_string(x,y,value,unpack(log_tools.popup_draw_color)) else draw_string(x, y, value) end
     end
 end
 
@@ -1777,6 +1789,29 @@ function log_tools.draw_popup_text(x, y, value)
     end
 end
 
+function log_tools.report_export_status()
+    local rec=log_tools.recording
+    if rec.saved_path then return nil end
+    if rec.export_failed or landing_jobs.report_error then return 'failed' end
+    if rec.export or rec.closed or landing_jobs.report_build or landing_jobs.log_write or landing_jobs.log_pending
+        or rec.file and rec.touch_time then return 'pending' end
+end
+function log_tools.report_export_notice_text()
+    if runtime_state.replay_active then return nil end
+    local status=log_tools.report_export_status()
+    if status=='pending' then return log_tools.popup_text("报告导出中，请勿关闭游戏", "Exporting report - please do not close X-Plane") end
+    if status=='failed' then return log_tools.popup_text("报告导出失败，请查看记录管理", "Report export failed - check the record manager") end
+end
+function log_tools.popup_report_line(now)
+    if runtime_state.replay_active or log_tools.compact_live(now) then return nil end
+    local pending=log_tools.report_export_notice_text()
+    if pending then return pending,true end
+    local flashing,lit=log_tools.report_flash_state(now)
+    if flashing then return landing_report_notice.text,lit end
+end
+function log_tools.popup_report_reserve()
+    return log_tools.popup_text("报告导出中，请勿关闭游戏", "Exporting report - please do not close X-Plane")
+end
 function log_tools.draw_database_status(screen_w, screen_h, now)
     local state = log_tools.runway_state
     local index = state.index
@@ -3042,7 +3077,7 @@ function log_tools.update_apt_index(now, radio_alt_ft, on_ground, local_vy_mps, 
         or bounce_state.monitoring == true
         or landing_jobs.context_pending == true
         or landing_jobs.log_pending == true
-        or landing_jobs.log_write ~= nil then
+        or landing_jobs.log_write ~= nil or landing_jobs.report_build or log_tools.recording.export then
         return false
     end
 
@@ -3052,6 +3087,7 @@ function log_tools.update_apt_index(now, radio_alt_ft, on_ground, local_vy_mps, 
         and math.abs(local_vy_mps) <= config.index_cruise_max_vertical_speed_mps
     if not safe_on_ground and not safe_in_cruise then return false end
     if now - index.last_step_at < index.adaptive_interval then return false end
+    if not log_tools.work:claim() then return false end
     index.last_step_at = now
 
     if index.save_active then
@@ -3456,11 +3492,6 @@ function log_tools.apply_centerline_score()
             landing_status = "ATTENTION"
         end
         -- Attention 保持黄色，避免 7–15 米区间被中心线规则直接推入红色。
-    end
-    if POPUP_MODE == "immediate" and landing_complete then
-        local popup_now = lmm_get_float("running_time_sec")
-        if popup_now <= 0 then popup_now = os.clock() end
-        show_until = math.max(show_until, popup_now + DISPLAY_SECONDS)
     end
 end
 
@@ -4252,7 +4283,7 @@ end
 
 local function refresh_popup_cache()
     popup_cache.lines[1] = landing_context_short_text()
-    popup_cache.lines[2] = string.format("%+d fpm | +%.2fG", landing_fpm, landing_g)
+    popup_cache.lines[2] = string.format("[%s] %+d fpm | +%.2fG", landing_analysis.flare_fpm_source,landing_fpm, landing_g)
     popup_cache.lines[3] = string.format("IAS %.0fkt | GS %.0fkt", landing_ias_kts, landing_gs_kts)
     popup_cache.lines[4] = string.format(log_tools.popup_text("迎角 %.1f° | %s", "AoA %.1f deg | %s"), landing_aoa_deg, format_roll_text(landing_roll_deg))
     local flare_trend = log_tools.popup_flare_trend_text(flare_analysis.trend_text)
@@ -4272,7 +4303,7 @@ local function refresh_popup_cache()
     popup_cache.centerline_text = log_tools.popup_centerline_text()
     if bounce_state.detected then
         if bounce_state.second_g_ready then
-            popup_cache.bounce_text = string.format(log_tools.popup_text("发生弹跳 | 二次 %+d fpm / +%.2fG", "Bounce detected | 2nd %+d fpm / +%.2fG"), bounce_state.second_fpm, bounce_state.second_curve_g)
+            popup_cache.bounce_text = string.format(log_tools.popup_text("发生弹跳 | 二次 物理 %+d fpm / +%.2fG", "Bounce detected | 2nd Physical %+d fpm / +%.2fG"), bounce_state.second_fpm, bounce_state.second_curve_g)
         else
             popup_cache.bounce_text = log_tools.popup_text("发生弹跳 | 正在分析第二次触地", "Bounce detected | Analysing second touchdown")
         end
@@ -5451,6 +5482,10 @@ local function analyze_landing_impulse()
     -- 主 G 窗口严格从首个接地帧开始；impact_start_time 仅为冲量积分保留上一离地帧。
     log_tools.calculate_local_event_g(landing_analysis.touch_time, end_time)
 
+    local event=log_tools.touchdown.events[1]
+    if event and event.mode=="delayed" and event.quality=="valid" then
+        landing_analysis.robust_event_g=event.g
+    end
     local high_threshold = 1.0 + math.max(0, peak_g - 1.0) * 0.80
     local impulse_delta = 0
     local high_duration = 0
@@ -5522,6 +5557,9 @@ local function analyze_landing_impulse()
             and "采用第一次接触后固定160 ms稳健P75 G；冲量仅用于物理闭合复核"
             or "固定160 ms样本不足，采用第一次压缩全段P75 G"
         landing_g = landing_analysis.robust_event_g
+        if event and event.mode=="delayed" and event.quality=="valid" then
+            landing_analysis.method="RC6 delayed-load robust window; fixed 160 ms retained for comparison"
+        end
         if landing_analysis.consistency_error > CONSISTENCY_MEDIUM_MAX_ERROR then
             landing_analysis.method = landing_analysis.method .. "；冲量闭合偏差较大，报告保留复核提示"
         end
@@ -5632,13 +5670,111 @@ function log_tools.native_initialize()
         return module.new({system = SYSTEM, root = SYSTEM_DIRECTORY or "",
             assets = directory})
     end)
-    if ok then ui.instance = result end
+    if ok then ui.instance = result;result.work=log_tools.work end
     ui.error = ok and (result.error or "") or tostring(result)
     refresh_popup_cache()
     if logMsg then
         logMsg(ui.instance and ui.instance.ready
-            and "[StarLux LMM] 1.1.9rc4 SDK 440 Unicode popup ready. " .. (ui.instance.version_info or "")
-            or "[StarLux LMM] 1.1.9rc4 legacy popup fallback: " .. ui.error)
+            and "[StarLux LMM] 1.1.9RC9 SDK 440 Unicode popup ready. " .. (ui.instance.version_info or "")
+            or "[StarLux LMM] 1.1.9RC9 legacy popup fallback: " .. ui.error)
+    end
+end
+
+-- Separate display cache from scoring/recording. No DataRef reads here.
+function log_tools.fpm_source_label(source,en)
+    if source=="PHYSICAL" then return en and "Physical" or "物理" end
+    if source=="AGL" then return en and "AGL estimate" or "AGL估算" end
+    if source=="VVI" then return "VVI" end
+    return en and "Source unrecorded" or "来源未记录"
+end
+function log_tools.compact_live(now)
+    return POPUP_MODE=="live" and log_tools.live:compact(now or current_sim_time())
+end
+function log_tools.pending_touch_popup()
+    return (POPUP_MODE=="live" or POPUP_MODE=="touchdown") and log_tools.live:pending()
+end
+function log_tools.full_popup_reserve()
+    local en=log_tools.popup_language()=="en"
+    local id=log_tools.dev.config.popup_fpm_source
+    local key=tostring(en)..id
+    if log_tools.full_reserve_key~=key then
+        log_tools.full_reserve_key=key
+        log_tools.full_reserve={
+            en and 'Landing calculation / Airport RWY 00L' or '着陆演算中 / 机场 RWY 00L',
+            '9.99 G | '..log_tools.live:reserve(id,en),
+            log_tools.popup_text('观测峰值 G: ','Observed peak G: ')..'9.99',
+            'IAS 999kt | GS 999kt',
+            en and 'AoA -99.9 deg | Roll -99.9 deg' or '迎角 -99.9° | 横滚 -99.9°',
+            en and 'Flare curvature 999.9 | unavailable' or '拉平曲率 999.9 | 不可用',
+            en and 'Wind 359/99kt / crosswind' or '风 359/99kt / 侧风',
+            en and 'Landing result / Monitoring bounce and rollout' or '着陆结果 / 继续监测弹跳与滑跑',
+            en and 'Centerline: -999.9 m / unavailable' or '中心线偏差: -999.9 m / 不可用'}
+    end
+    return log_tools.full_reserve
+end
+function log_tools.prewarm_popup()
+    local host=log_tools.native_ui.instance
+    if not host or not host.ready or log_tools.live.state~='recording' then return end
+    local reserve=log_tools.full_popup_reserve()
+    local key=log_tools.full_reserve_key..':'..log_tools.popup_style.font_px..':'..POPUP_LAYOUT
+        ..':'..tostring(SCREEN_WIDTH)..':'..tostring(SCREEN_HIGHT)
+    if key==log_tools.warmed_popup or not log_tools.work:claim() then return end
+    local lines={unpack(reserve,1,popup_cache.centerline_text~='' and 9 or 8)}
+    local ok=pcall(function()
+        host:present({lines=lines,size=log_tools.popup_style.font_px,vertical=POPUP_LAYOUT=='vertical'},nil,nil,true)
+        local with_notice={unpack(lines)};with_notice[#with_notice+1]=log_tools.popup_report_reserve()
+        host:present({lines=with_notice,size=log_tools.popup_style.font_px,vertical=POPUP_LAYOUT=='vertical'},nil,nil,true)
+    end)
+    if ok then log_tools.warmed_popup=key end
+end
+function log_tools.popup_display()
+    local td,live=log_tools.touchdown,log_tools.live
+    local en=log_tools.popup_language()=="en"
+    local now=current_sim_time()
+    if log_tools.compact_live(now) then
+        local id=log_tools.dev.config.popup_fpm_source
+        local state=live.state=='interrupted' and log_tools.popup_text("录制中断", "Recording interrupted")
+            or live.paused and log_tools.popup_text("录制暂停", "Recording paused")
+            or live.state=='calculating' and log_tools.popup_text("演算中", "Calculating")
+            or now-(live.started_at or now)<3 and log_tools.popup_text("SLM记录器已开始工作", "SLM recorder has started")
+            or log_tools.popup_text("记录中", "Recording")
+        return {state,td.g_text,live:line(id,en)},
+            {[2]=log_tools.touchdown_module.tone(td.live_g,false),[3]=log_tools.touchdown_module.tone(live.values[id],true)},
+            {[1]=log_tools.popup_text("SLM记录器已开始工作", "SLM recorder has started"),[2]="9.99 G",[3]=live:reserve(id,en)}
+    end
+    if log_tools.pending_touch_popup() then
+        local e=td.current
+        local id=log_tools.dev.config.popup_fpm_source
+        local g=e and e.done and e.g or td.live_g
+        local fpm=live.frozen_lines and live.frozen_lines[en and 'en' or 'zh'][id] or live:line(id,en)
+        local lines={log_tools.popup_text("着陆演算中", "Landing calculation"),
+            (g and string.format("%.2f G",g) or "-- G").." | "..fpm,
+            log_tools.popup_text("观测峰值 G: ","Observed peak G: ")..(td.observed_peak and string.format("%.2f",td.observed_peak) or "--")}
+        for i=3,6 do lines[#lines+1]=popup_cache.lines[i] end
+        lines[#lines+1]=e and e.done and log_tools.popup_text("着陆数值已采集，正在整理评价", "Touchdown captured; preparing rating")
+            or log_tools.popup_text("正在采集起落架压缩过程", "Capturing landing gear compression")
+        return lines,{[2]=log_tools.touchdown_module.tone(g,false),[3]=log_tools.touchdown_module.tone(td.observed_peak,false)},
+            log_tools.full_popup_reserve()
+    end
+    local lines,colors={popup_cache.lines[1]},{}
+    lines[2]=log_tools.fpm_source_label(landing_analysis.flare_fpm_source,en)..string.format(" %+d fpm | +%.2fG",landing_fpm,landing_g)
+    lines[3]=log_tools.popup_text("观测峰值 G: ","Observed peak G: ")..(td.observed_peak and string.format("%.2f",td.observed_peak) or "--")
+    colors[3]=log_tools.touchdown_module.tone(td.observed_peak,false)
+    for i=3,7 do lines[#lines+1]=popup_cache.lines[i] end
+    if td.active then lines[#lines]=lines[#lines]..log_tools.popup_text(" / 继续监测弹跳与滑跑", " / Monitoring bounce and rollout")
+    elseif td.finalized and td.status=='incomplete' then lines[#lines]=lines[#lines]..log_tools.popup_text(" / 记录未完成"," / Incomplete recording") end
+    return lines,colors,log_tools.full_popup_reserve()
+end
+function log_tools.dismiss_popup()
+    log_tools.touchdown.dismissed=true;log_tools.live.dismissed=true;show_until=0
+end
+function log_tools.sync_live(now,replay)
+    local event=log_tools.live:sync(log_tools.recording,log_tools.touchdown,landing_complete,now,replay)
+    if event=='started' then log_tools.reset_report_notice();show_until=0 end
+    if event=='touchdown' then refresh_popup_cache() end
+    if event=='complete' then
+        refresh_popup_cache()
+        if (POPUP_MODE=='live' or POPUP_MODE=='touchdown') and not log_tools.live.dismissed then show_until=now+DISPLAY_SECONDS end
     end
 end
 
@@ -5653,33 +5789,38 @@ function log_tools.native_popup(visible, now)
         return false
     end
     if log_tools.popup_style.renderer == "legacy" then ui.instance:hide(); return false end
+    local profile_started=log_tools.work.clock()
     local ok, err = pcall(function()
         if not visible then ui.instance:hide(); return end
-        if landing_report_notice.ready and landing_report_notice.flash_started_at <= 0 then
+        if landing_report_notice.ready and not log_tools.compact_live(now) and (POPUP_MODE~="live" or not log_tools.live.result_at or now-log_tools.live.result_at>=2) and landing_report_notice.flash_started_at <= 0 then
             log_tools.start_report_flash(now)
-            show_until = math.max(show_until, landing_report_notice.flash_until_time)
+            if POPUP_MODE~="live" and POPUP_MODE~="touchdown" then show_until = math.max(show_until, landing_report_notice.flash_until_time) end
         end
-        local lines = {}
-        for i = 1, 7 do lines[#lines + 1] = popup_cache.lines[i] end
-        if popup_cache.centerline_text ~= "" then lines[#lines + 1] = popup_cache.centerline_text end
-        if bounce_state.detected then lines[#lines + 1] = popup_cache.bounce_text end
-        if landing_surface.wet_warning and landing_status == "NICE" then
+        local lines,colors,reserve=log_tools.popup_display()
+        if not log_tools.compact_live(now) and popup_cache.centerline_text ~= "" then lines[#lines + 1] = popup_cache.centerline_text end
+        if not log_tools.compact_live(now) and bounce_state.detected then lines[#lines + 1] = popup_cache.bounce_text end
+        if not log_tools.compact_live(now) and landing_surface.wet_warning and landing_status == "NICE" then
             lines[#lines + 1] = popup_cache.warning_text
         end
-        local flashing, lit = log_tools.report_flash_state(now)
+        local report_line,report_lit=log_tools.popup_report_line(now)
         local hidden_line
-        if flashing then
-            lines[#lines + 1] = landing_report_notice.text
-            if not lit then hidden_line = #lines end
+        if POPUP_MODE=="live" and not log_tools.compact_live(now) and not log_tools.live:result_lit(now) then hidden_line=#lines end
+        if report_line then
+            lines[#lines+1]=report_line
+            -- Both states occupy one reserved row, so a completed export does
+            -- not add a second message or resize the popup during replacement.
+            reserve={unpack(reserve)};reserve[#lines]=log_tools.popup_report_reserve()
+            if not report_lit then hidden_line=#lines end
         end
-        if DEBUG_MODE then
+        if DEBUG_MODE and not log_tools.compact_live(now) then
             lines[#lines + 1] = string.format("DBG FPM source:%s", landing_analysis.flare_fpm_source)
             lines[#lines + 1] = string.format("DBG G pk:%.2f curve:%.2f eq:%.2f", debug_data.peak_g, debug_data.robust_g, debug_data.expected_max_g)
             lines[#lines + 1] = string.format("DBG err:%.0f%% %s %.2fms", debug_data.consistency_error * 100, debug_data.confidence, debug_data.analysis_ms)
         end
         local r, g, b = status_color(landing_status)
+        if log_tools.compact_live(now) or log_tools.pending_touch_popup() then r,g,b=.06,.20,.28 end
         local tr, tg, tb = log_tools.popup_text_color(r, g, b)
-        ui.instance:present({lines = lines, hidden_line = hidden_line,
+        ui.instance:present({lines = lines, line_colors=colors, reserve=reserve, on_close=log_tools.dismiss_popup, hidden_line = hidden_line,
             size = log_tools.popup_style.font_px, weight = log_tools.popup_style.font_weight,
             vertical = POPUP_LAYOUT == "vertical", color = {r, g, b},
             text_color = {tr, tg, tb}, alpha = panel_alpha(), position = calculate_popup_position,
@@ -5693,6 +5834,7 @@ function log_tools.native_popup(visible, now)
                 if finished then log_tools.dev.pending="save" end
             end})
     end)
+    log_tools.work:record('popup',profile_started)
     if not ok then
         ui.instance.ready, ui.instance.error = false, tostring(err)
         return log_tools.native_popup(false, now)
@@ -5725,6 +5867,7 @@ function log_tools.update_native_dialogs()
 end
 
 local function save_settings()
+    log_tools.settings_revision=(log_tools.settings_revision or 0)+1
     local file, err = io.open(SETTINGS_FILE_PATH, "w")
     if file == nil then
         settings_save_ok = false
@@ -5735,7 +5878,7 @@ local function save_settings()
     end
 
     file:write("# StarLux Landing Meter settings\n")
-    file:write("# document_language: global zh/en; all plugin UI, TXT and viewer launch language\n")
+    file:write("# document_language: zh/en; TXT and viewer launch language; Compatibility UI always English\n")
     file:write("# popup_color_*: red,green,blue values from 0 to 255\n")
     file:write("popup_mode=" .. POPUP_MODE .. "\n")
     file:write("document_language=" .. runtime_state.document_language .. "\n")
@@ -5803,10 +5946,13 @@ local function load_settings()
         local key, value = line:match("^%s*([%w_]+)%s*=%s*(.-)%s*$")
         log_tools.dev:read_setting(key, value)
         if key == "popup_mode" then
-            if value == "touchdown" then
-                POPUP_MODE = "immediate"
+            if value == "immediate" then
+                POPUP_MODE="live";migrated=true
+                logMsg("[StarLux LMM] RC7: migrated legacy immediate mode to Live calculation. Select After analysis for results only.")
+            elseif value == "touchdown" or value == "analyzed" then
+                POPUP_MODE = "touchdown"
                 migrated = true
-            elseif value == "immediate" or value == "taxi"
+            elseif value == "touchdown" or value == "live" or value == "taxi"
                 or value == "stopped" or value == "off" or value == "clean" then
                 POPUP_MODE = value
             end
@@ -6570,7 +6716,8 @@ local function position_log_label(position_id)
 end
 
 function log_tools.popup_mode_log_text()
-    if POPUP_MODE == "immediate" then return log_tools.ui_text("分析完成后立即显示", "Show immediately after analysis") end
+    if POPUP_MODE == "touchdown" then return log_tools.ui_text("触地后立刻弹出", "Show immediately after touchdown") end
+    if POPUP_MODE == "live" then return log_tools.ui_text("即时演算", "Live calculation") end
     if POPUP_MODE == "taxi" then return log_tools.ui_text("地速低于 30 kt 时显示", "Show after slowing below 30 kt") end
     if POPUP_MODE == "stopped" then return log_tools.ui_text("飞机停稳并持续 10 秒后显示", "Show after stopped for 10 seconds") end
     if POPUP_MODE == "clean" then return log_tools.ui_text("纯净模式（关闭全部自动提示）", "Clean mode (disable all automatic notices)") end
@@ -6593,7 +6740,7 @@ log_tools.report_translations = {
     { "固定接地窗口垂直投影G", "Projected vertical G in fixed touchdown window" },
     { "固定160ms窗口不满足最少样本与跨度要求，回退第一次压缩全段P75。", "The fixed 160 ms window does not meet the minimum sample and span requirements; falling back to full first-compression P75." },
     { "G采样与最终分支复算", "G-sampling and final-branch recalculation" },
-    { "样本有效: finalG=固定160ms P75（固定窗不足时回退全段P75）；样本无效: finalG=min(全段P75, FPM备用上限)。物理平均G和冲量闭合误差只用于复核。", "Valid samples: finalG=fixed 160 ms P75 (fall back to full-event P75 when the fixed window is insufficient); invalid samples: finalG=min(full-event P75, FPM fallback cap). Physics-derived average G and impulse-closure error are for review only." },
+    { "RC6: Valid samples use the fixed or confirmed delayed-load window; insufficient samples retain the FPM-capped fallback. Physics-average G and impulse closure are diagnostic only.", "Valid samples: finalG=fixed 160 ms P75 (fall back to full-event P75 when the fixed window is insufficient); invalid samples: finalG=min(full-event P75, FPM fallback cap). Physics-derived average G and impulse-closure error are for review only." },
     { "0.25秒聚合轨迹表（高精度复算输入）", "0.25 s Aggregated Trajectory Table (High-Precision Recalculation Input)" },
     { "未知（代码 ", "Unknown (code " },
     { "触地点未落入任何跑道几何包络", "Touchdown point did not fall within any runway geometry envelope" },
@@ -6669,7 +6816,7 @@ log_tools.report_translations = {
     { "FPM 与 G 分别分档，最终评价取较严重等级；拉平曲率暂不参与评分。", "FPM and G are rated independently; the more severe band is final. Flare curvature does not affect the rating." },
     { "长行程压缩达到采集上限，局部包络样本不足，采用全局第75百分位曲线G", "Long-travel compression reached the capture limit; local envelope insufficient, global P75 G selected" },
     { "轻柔接地：下降率不超过 100 fpm，且过载不超过 1.20 G", "Soft touchdown: vertical speed did not exceed 100 fpm and load did not exceed 1.20 G" },
-    { "评分说明: v1.1.9rc4 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。", "Rating note: flare curvature and control data in v1.1.9rc4 are for review only and do not affect the rating." },
+    { "评分说明: v1.1.9RC9 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。", "Rating note: flare curvature and control data in v1.1.9RC9 are for review only and do not affect the rating." },
     { "需注意：下降率不超过 300 fpm，且过载不超过 1.80 G", "Review advised: vertical speed did not exceed 300 fpm and load did not exceed 1.80 G" },
     { "不良落地：下降率超过 300 fpm，或过载超过 1.80 G", "Adverse landing: vertical speed exceeded 300 fpm or load exceeded 1.80 G" },
     { " 才为高可信；任一组超过阈值立即降低可信度并由 VVI 接管。", " for high confidence; exceeding the threshold on any pair lowers confidence and hands control to VVI." },
@@ -6679,7 +6826,7 @@ log_tools.report_translations = {
     { "高下降率事件采用触地前80 ms离地物理速度中位数", "High-sink-rate event uses the median airborne physical velocity in the 80 ms before touchdown" },
     { "物理轨迹（高下降率80 ms短窗复核）", "Physical trajectory (80 ms high-sink-rate review)" },
     { "显示值可能按界面位数四舍五入，复算请使用本节保留的高精度值。", "Displayed values may be rounded to interface precision; use the high-precision values retained here for recalculation." },
-    { "StarLux 落地率插件 v1.1.9rc4 - 单次落地记录", "StarLux Landing Meter v1.1.9rc4 - Landing Report" },
+    { "StarLux 落地率插件 v1.1.9RC9 - 单次落地记录", "StarLux Landing Meter v1.1.9RC9 - Landing Report" },
     { "中可信冲量，采用全局P75与160ms局部冲击包络的较大值", "Medium-confidence impulse; larger of global P75 and 160 ms local impact envelope selected" },
     { "中可信冲量，局部包络样本不足，采用全局第75百分位曲线G", "Medium-confidence impulse; local envelope insufficient, global P75 G selected" },
     { "跑道说明: 依据 scenery_packs.ini 优先级读取 apt.dat，并用跑道端点、触地坐标和地速向量完成几何匹配；位置采用飞机参考点，数值为约值。", "Runway note: apt.dat is read in scenery_packs.ini priority order and matched using runway endpoints, touchdown coordinates and the ground-velocity vector; positions use the aircraft reference point and are approximate." },
@@ -7756,8 +7903,8 @@ local function write_primary_math_audit(file)
     end
     file:write(string.format(
         log_tools.ui_text(
-            "最终稳健G=固定160ms P75 %.9f（全段P75参考 %.9f）=%.9f G。\n\n",
-            "Final robust G = fixed 160 ms P75 %.9f (full-event P75 reference %.9f) = %.9f G.\n\n"
+            "原固定160ms P75参考 %.9f（全段P75参考 %.9f）；所选稳健G=%.9f G，取值窗口见RC6接地事件。\n\n",
+            "Original fixed 160 ms P75 reference %.9f (full-event P75 reference %.9f); selected robust G = %.9f G. See RC6 event window.\n\n"
         ),
         landing_analysis.local_event_g,
         landing_analysis.curve_g,
@@ -7894,7 +8041,7 @@ local function write_primary_math_audit(file)
         fallback_g_cap(landing_fpm)
     ))
     file:write(string.format(
-        "样本有效: finalG=固定160ms P75（固定窗不足时回退全段P75）；样本无效: finalG=min(全段P75, FPM备用上限)。物理平均G和冲量闭合误差只用于复核。\n"
+        "RC6: Valid samples use the fixed or confirmed delayed-load window; insufficient samples retain the FPM-capped fallback. Physics-average G and impulse closure are diagnostic only.\n"
     ))
     file:write(string.format(
         "所有分支最终执行 clamp(1,5,finalG)；最终G高精度值 = %.9f G；界面显示 = %.2f G\n\n",
@@ -7936,9 +8083,9 @@ local function write_primary_math_audit(file)
     write_second_touch_math_audit(file)
 end
 
-function log_tools.write_rollout_report(file)
-    local rec=log_tools.recording
-    local r=log_tools.dev.route
+function log_tools.write_rollout_report(file,snapshot)
+    local rec=snapshot and snapshot.rec or log_tools.recording
+    local r=snapshot and snapshot.route or log_tools.dev.route
     local en=runtime_state.document_language=="en"
     local function line(cn,english,value) file:write((en and english or cn)..": "..tostring(value).."\n") end
     file:write(en and "\nRollout centreline grading\n" or "\n滑跑中心线考核\n")
@@ -7967,18 +8114,23 @@ function log_tools.write_rollout_report(file)
         or "每项仅触发一次，普通降级最多至黄色；早期快照仅包含当时已有证据，最终完整报告随滑跑更新。\n\n")
 end
 
-function log_tools.build_landing_log_payload(existing_path)
+function log_tools.build_landing_log_payload(existing_path, sink, snapshot)
     -- 先把报告组装到内存。实际文件写入由 landing_jobs 在后续帧分块完成。
     -- Source choices are already captured per sample; report generation never changes them.
     LMM_CONTROL_REFS.resolve_input_sources(flare_trace.slots, flare_trace.count)
     local log_path = existing_path or next_log_file_path()
     local output_chunks = {}
+    local cached_part,cache_bytes
+    local static_key=table.concat({tostring(landing_context.recording_id),runtime_state.document_language,
+        tostring(landing_analysis.math_log_enabled),tostring(flare_trace.start_time),tostring(flare_trace.count),
+        tostring(flare_trace.bucket_count),tostring(log_tools.dev.inputs.sequence)},"|")
     local raw_file = {}
     function raw_file:write(...)
         for i = 1, select("#", ...) do
             local value = select(i, ...)
             if value ~= nil then
-                output_chunks[#output_chunks + 1] = tostring(value)
+                if cached_part and cache_bytes<2097152 then cached_part[#cached_part+1]=tostring(value);cache_bytes=cache_bytes+#tostring(value) end
+                if sink then sink(tostring(value)) else output_chunks[#output_chunks + 1] = tostring(value) end
             end
         end
         return self
@@ -7989,7 +8141,7 @@ function log_tools.build_landing_log_payload(existing_path)
     local file = log_tools.make_report_writer(raw_file)
 
     file:write("\239\187\191")
-    file:write("StarLux 落地率插件 v1.1.9rc4 - 单次落地记录\n")
+    file:write("StarLux 落地率插件 v1.1.9RC9 - 单次落地记录\n")
     file:write("======================================================================\n\n")
     raw_file:write(log_tools.ui_text(
         "100 ft 节选（完整记录见末尾）\n接地阶段快照；滑跑可能仍在录制。\n\n",
@@ -8010,7 +8162,8 @@ function log_tools.build_landing_log_payload(existing_path)
     file:write("落地时间（本地时间）: " .. landing_timestamp .. "\n")
     file:write("最终评价: " .. status_short(landing_status) .. "\n")
     file:write("评价说明: " .. status_explanation(landing_status) .. "\n")
-    file:write("触地垂直速度: " .. vertical_speed_log_text(landing_fpm) .. "\n")
+    file:write("触地垂直速度: " .. "["..landing_analysis.flare_fpm_source.."] " .. vertical_speed_log_text(landing_fpm) .. "\n")
+    file:write("FPM source code: "..landing_analysis.flare_fpm_source.."\n")
     file:write("下降率取值: " .. fpm_source_log_text() .. "\n")
     file:write(string.format("最终过载: %.2f G\n", landing_g))
     if flare_analysis.valid then
@@ -8040,7 +8193,7 @@ function log_tools.build_landing_log_payload(existing_path)
     end
     file:write(string.format("IAS / GS: %.0f / %.0f kt\n", landing_ias_kts, landing_gs_kts))
     file:write("相对风: " .. landing_wind_relative_text .. "\n")
-    log_tools.write_rollout_report(raw_file)
+    log_tools.write_rollout_report(raw_file,snapshot)
     log_tools.write_flare_report(raw_file)
     if landing_context.centerline_penalty_applied then
         file:write("中心线评价: " .. landing_context.centerline_warning_text .. "\n")
@@ -8055,12 +8208,12 @@ function log_tools.build_landing_log_payload(existing_path)
         file:write("弹跳与两次触地\n")
         file:write("----------------------------------------------------------------------\n")
         file:write(string.format(
-            "第一次触地: %+d fpm / +%.2f G\n",
-            landing_fpm,
+            "第一次触地: [%s] %+d fpm / +%.2f G\n",
+            landing_analysis.flare_fpm_source,landing_fpm,
             landing_g
         ))
         file:write(string.format(
-            "第二次触地: %+d fpm / +%.2f G（触地帧 %.2f G，原始峰值 %.2f G）\n",
+            "第二次触地: [PHYSICAL] %+d fpm / +%.2f G（触地帧 %.2f G，原始峰值 %.2f G）\n",
             bounce_state.second_fpm,
             bounce_state.second_curve_g,
             bounce_state.second_touch_g,
@@ -8087,6 +8240,27 @@ function log_tools.build_landing_log_payload(existing_path)
         file:write("规则: Nice 降为 Stable，Stable 降为 Attention；任一次稳健 G 超过 1.80 时为 UNSTABLE。\n\n")
     end
 
+    do
+        local td=log_tools.touchdown
+        file:write(log_tools.ui_text("\n接地事件分析\n", "\nTouchdown event analysis\n"))
+        file:write("G algorithm: "..td.algorithm.."\n")
+        file:write("Touchdown state: "..td.status.."\n")
+        if td.observed_peak then file:write(string.format("Observed touchdown peak G: %.6f\n",td.observed_peak)) end
+        file:write("Bounce evidence: "..tostring(bounce_state.evidence or "waiting").."\n")
+        file:write("Confirmed bounce count: "..tostring(bounce_state.confirmed_count or 0).."\n")
+        file:write("Unconfirmed contact transitions: "..tostring(bounce_state.rejected_count or 0).."\n")
+        for _,e in ipairs(td.events) do
+            file:write(string.format("LMM_TOUCH_EVENT\t1\t%d\t%.6f\t%.6f\t%s\t%s\t%s\t%s\t%.6f\t%.6f\t%s\t%s\t%s\n",
+                e.index,e.start,e.finish,tostring(e.g or ""),tostring(e.peak or ""),e.mode,e.quality,
+                e.window_start,e.window_end,tostring(e.fpm or (e.index==1 and landing_fpm) or ""),e.reason,e.index==1 and landing_analysis.flare_fpm_source or "PHYSICAL"))
+        end
+        if td.summary_limited then file:write("Touchdown summary limit reached: 64; worst load retained\n") end
+    end
+    local cached=snapshot and log_tools.report_static_cache
+    if cached and cached.key==static_key then
+        for _,value in ipairs(cached.parts)do raw_file:write(value) end
+    else
+        if snapshot then cached_part={};cache_bytes=0 end
     file:write("二、100英尺后拉平轨迹\n")
     file:write("----------------------------------------------------------------------\n")
     file:write(string.format("原始采样频率: %.1f Hz\n", 1 / FLARE_CONFIG.sample_interval_seconds))
@@ -8123,8 +8297,8 @@ function log_tools.build_landing_log_payload(existing_path)
     file:write("记录到的离地阶段数: " .. tostring(flare_trace.airborne_episode_count) .. "\n")
     file:write("记录到的接触次数: " .. tostring(flare_trace.touch_count) .. "\n")
     file:write("轨迹下降率取值: " .. fpm_source_log_text() .. "\n")
-    file:write(string.format("100 ft 附近下降率: %.0f fpm\n", flare_analysis.entry_fpm))
-    file:write(string.format("触地下降率: %d fpm\n", landing_fpm))
+    file:write(string.format("100 ft 附近下降率: [%s] %.0f fpm\n", landing_analysis.flare_fpm_source,flare_analysis.entry_fpm))
+    file:write(string.format("触地下降率: [%s] %d fpm\n", landing_analysis.flare_fpm_source,landing_fpm))
     file:write(string.format("下降率净改善量: %+.0f fpm\n", flare_analysis.recovery_fpm))
     file:write(string.format("拉平曲率: %.1f fpm/s²\n", flare_analysis.metric))
     file:write(string.format("有符号平均曲率: %+.1f fpm/s²\n", flare_analysis.signed_mean_curvature))
@@ -8144,7 +8318,7 @@ function log_tools.build_landing_log_payload(existing_path)
         FLARE_CONFIG.oscillation_efficiency_max,
         FLARE_CONFIG.oscillation_worsening_ratio_min
     ))
-    file:write("评分说明: v1.1.9rc4 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。\n")
+    file:write("评分说明: v1.1.9RC9 的拉平曲率与操纵数据仅用于复盘展示，暂不参与评分。\n")
     file:write(string.format("曲率分析耗时: %.3f ms\n\n", flare_analysis.calculation_ms))
 
     if landing_analysis.math_log_enabled then
@@ -8391,6 +8565,9 @@ function log_tools.build_landing_log_payload(existing_path)
     end
     file:write("\n")
 
+        if cached_part and cache_bytes<2097152 then log_tools.report_static_cache={key=static_key,parts=cached_part} end
+        cached_part=nil
+    end
     file:write("四、飞行、位置与环境参考\n")
     file:write("----------------------------------------------------------------------\n")
     if landing_context.aircraft_file ~= "" then
@@ -8419,7 +8596,7 @@ function log_tools.build_landing_log_payload(existing_path)
 
     file:write("五、着陆数据复核\n")
     file:write("----------------------------------------------------------------------\n")
-    file:write("最终显示/评分 FPM: " .. vertical_speed_log_text(landing_fpm) .. "\n")
+    file:write("最终显示/评分 FPM: " .. "["..landing_analysis.flare_fpm_source.."] " .. vertical_speed_log_text(landing_fpm) .. "\n")
     file:write("FPM 采用源: " .. fpm_source_log_text() .. "\n")
     file:write("下降率取值说明: " .. landing_analysis.fpm_method .. "\n")
     if landing_analysis.physical_fpm_valid then
@@ -8503,7 +8680,7 @@ function log_tools.build_landing_log_payload(existing_path)
     return true, {
         path = log_path,
         recording_id = landing_context.recording_id,
-        content = table.concat(output_chunks),
+        content = not sink and table.concat(output_chunks) or nil,
         build_ms = 0
     }
 end
@@ -8514,6 +8691,9 @@ function log_tools.finish_landing_log_write(now, state)
     if close_ok == nil then
         return false, tostring(close_error)
     end
+
+    local renamed,rename_error=os.rename(state.path..".summary.tmp",state.path)
+    if not renamed then return false,tostring(rename_error) end
 
     if state.recording_id==log_tools.recording.id then
         log_tools.recording:attach_summary(state.content,state.path)
@@ -8527,7 +8707,7 @@ function log_tools.finish_landing_log_write(now, state)
         "落地报告已生成",
         "Landing report generated"
     )
-    landing_report_notice.ready = POPUP_MODE ~= "off"
+    landing_report_notice.ready = not log_tools.touchdown.active and POPUP_MODE ~= "off"
         and POPUP_MODE ~= "clean"
         and runtime_state.replay_active == false
     landing_report_notice.flash_started_at = 0
@@ -8537,9 +8717,9 @@ function log_tools.finish_landing_log_write(now, state)
         landing_report_notice.debug_until_time = now + REPORT_NOTICE_SECONDS
     end
     if landing_report_notice.ready
-        and (POPUP_MODE == "immediate" or runtime_state.deferred_popup_done) then
+        and (runtime_state.deferred_popup_done or POPUP_MODE == "touchdown" or POPUP_MODE == "live" and log_tools.live.result_at and now-log_tools.live.result_at>=2) then
         log_tools.start_report_flash(now)
-        show_until = math.max(show_until, landing_report_notice.flash_until_time)
+        if POPUP_MODE~="live" and POPUP_MODE~="touchdown" then show_until = math.max(show_until, landing_report_notice.flash_until_time) end
     end
 
     if logMsg then
@@ -8555,6 +8735,7 @@ function log_tools.finish_landing_log_write(now, state)
 end
 
 function log_tools.fail_landing_log_write(state, error_text)
+    landing_jobs.report_error=tostring(error_text)
     if state ~= nil and state.file ~= nil then
         pcall(function() state.file:close() end)
         state.file = nil
@@ -8567,10 +8748,17 @@ end
 
 function log_tools.process_incremental_landing_log_write(now)
     local state = landing_jobs.log_write
-    if state == nil then return end
+    if state == nil or not log_tools.work:claim() then return end
+    local started=log_tools.work.clock()
+    if state.finish_pending then
+        local finish_ok,finish_error=log_tools.finish_landing_log_write(now,state)
+        log_tools.work:record('report_write',started)
+        if not finish_ok then log_tools.fail_landing_log_write(state,finish_error) end
+        landing_jobs.log_write=nil;return
+    end
 
     if state.file == nil then
-        local file, open_error = io.open(state.path, "wb")
+        local file, open_error = io.open(state.path..".summary.tmp", "wb")
         if file == nil then
             log_tools.fail_landing_log_write(state, open_error)
             landing_jobs.log_write = nil
@@ -8580,46 +8768,76 @@ function log_tools.process_incremental_landing_log_write(now)
         state.write_started_clock = os.clock()
     end
 
-    local chunk_end = math.min(
-        state.length,
-        state.offset + landing_jobs.write_chunk_bytes - 1
-    )
-    local write_ok, write_error = state.file:write(
-        string.sub(state.content, state.offset, chunk_end)
-    )
-    if write_ok == nil then
-        log_tools.fail_landing_log_write(state, write_error)
-        landing_jobs.log_write = nil
-        return
+    local chunk,page,offset
+    if type(state.content)=='table' then
+        chunk,page,offset=log_tools.work:page_chunk(state.content,state.page,state.offset)
+    else
+        chunk=state.content:sub(state.offset,state.offset+log_tools.work.bytes-1)
+        page,offset=state.page,state.offset+#chunk
     end
-    state.offset = chunk_end + 1
-
-    if state.offset > state.length then
-        local finish_ok, finish_error = log_tools.finish_landing_log_write(now, state)
-        if not finish_ok then
-            log_tools.fail_landing_log_write(state, finish_error)
-        end
-        landing_jobs.log_write = nil
+    local write_ok,write_error=state.file:write(chunk)
+    log_tools.work:record('report_write',started)
+    if not write_ok then log_tools.fail_landing_log_write(state,write_error);landing_jobs.log_write=nil;return end
+    state.page,state.offset=page,offset
+    if type(state.content)=='table' and not state.content[state.page] or type(state.content)=='string' and state.offset>#state.content then
+        state.finish_pending=true
     end
 end
 
-function log_tools.begin_incremental_landing_log_write()
-    log_landing_summary()
-    local build_started = os.clock()
-    local call_ok, build_ok, result = pcall(log_tools.build_landing_log_payload)
-    if not call_ok or not build_ok then
-        local error_text = not call_ok and build_ok or result
-        log_tools.fail_landing_log_write(nil, error_text)
-        return false
+function log_tools.report_revision()
+    local c=landing_context
+    return table.concat({tostring(log_tools.recording.id),tostring(log_tools.touchdown.serial),landing_status,
+        tostring(c.airport_id),tostring(c.runway),tostring(c.runway_status),
+        tostring(log_tools.settings_revision or 0),runtime_state.document_language,
+        tostring(log_tools.dev.route and log_tools.dev.route.revision),log_tools.recording.phase,
+        tostring(log_tools.dev.inputs.sequence),tostring(flare_trace.count),tostring(flare_trace.bucket_count)},'|')
+end
+function log_tools.begin_incremental_landing_log_write(final)
+    if landing_jobs.report_build then return false end
+    landing_jobs.report_error=nil
+    local rec=log_tools.recording
+    local snapshot={rec={id=rec.id,done=rec.done,phase=rec.phase,touch_time=rec.touch_time,rollout_front_missing=rec.rollout_front_missing}}
+    if log_tools.dev.route then
+        local original=log_tools.dev.route;local copy={};for k,v in pairs(original)do copy[k]=v end
+        copy.evidence={};for i,v in ipairs(original.evidence or {})do copy.evidence[i]=v end
+        snapshot.route=setmetatable(copy,getmetatable(original))
     end
-
-    result.build_ms = (os.clock() - build_started) * 1000
-    result.offset = 1
-    result.length = string.len(result.content)
-    result.file = nil
-    result.write_started_clock = 0
-    landing_jobs.log_write = result
+    local builder=log_tools.build_landing_log_payload
+    landing_jobs.report_build=log_tools.work:build(function(path,sink)return builder(path,sink,snapshot)end,
+        final and rec.report_path or nil,log_tools.report_revision())
+    landing_jobs.report_build.final=final
+    landing_jobs.report_build.session=rec.id
     return true
+end
+function log_tools.process_report_build()
+    local task=landing_jobs.report_build
+    if not task or not log_tools.work:claim() then return end
+    if task.session~=log_tools.recording.id or runtime_state.replay_active then landing_jobs.report_build=nil;return end
+    if task.revision~=log_tools.report_revision() then
+        local final=task.final;landing_jobs.report_build=nil
+        log_tools.begin_incremental_landing_log_write(final);return
+    end
+    -- Report math appendices use the old sorting helpers. Give the coroutine
+    -- private scratch storage and restore flight-analysis storage on every yield.
+    local flight_scratch,flight_count=sort_scratch,sort_scratch_count
+    sort_scratch,sort_scratch_count=task.scratch or {},task.scratch_count or 0
+    local status,result=log_tools.work:step(task)
+    task.scratch,task.scratch_count=sort_scratch,sort_scratch_count
+    sort_scratch,sort_scratch_count=flight_scratch,flight_count
+    if status=='pending' then return end
+    landing_jobs.report_build=nil
+    if status=='error' then
+        log_tools.fail_landing_log_write(nil,result)
+        if task.final then log_tools.recording.error=tostring(result);log_tools.recording.export_failed=true end
+        return
+    end
+    if task.final then
+        log_tools.recording:attach_summary(result.content,result.path)
+        log_tools.recording.summary_dirty=false
+    else
+        result.offset=1;result.page=1;result.file=nil;result.write_started_clock=0
+        landing_jobs.log_write=result
+    end
 end
 
 local function schedule_landing_jobs(now)
@@ -8632,7 +8850,9 @@ end
 
 local function resolve_context_safely(now)
     landing_jobs.context_pending = false
+    local started=log_tools.work.clock()
     local call_ok, resolve_ok, reason = pcall(resolve_landing_context, now)
+    log_tools.work:record('context',started)
     if not call_ok then
         landing_context.airport_id = "UNKNOWN"
         landing_context.airport_name = ""
@@ -8656,14 +8876,17 @@ local function resolve_context_safely(now)
 end
 
 local function process_landing_jobs(now, allow_prefetch_scan)
-    if landing_jobs.context_pending == true and now >= landing_jobs.context_after then
+    log_tools.process_report_build()
+    if landing_jobs.context_pending == true and now >= landing_jobs.context_after and log_tools.work:claim() then
         resolve_context_safely(now)
     end
 
     local runway_state = log_tools.runway_state
     local may_scan = runway_state.mode ~= "prefetch" or allow_prefetch_scan == true
-    if (runway_state.active or runway_state.landing_search) and may_scan then
+    if (runway_state.active or runway_state.landing_search) and may_scan and log_tools.work:claim() then
+        local started=log_tools.work.clock()
         local call_ok, finished = pcall(log_tools.process_runway_resolver, now)
+        log_tools.work:record('context',started)
         if not call_ok then
             log_tools.finish_runway_resolver("unavailable", "apt.dat 解析异常: " .. tostring(finished))
             finished = true
@@ -8691,10 +8914,12 @@ local function process_landing_jobs(now, allow_prefetch_scan)
     -- 每帧最多写入一个固定小块；完成提示只在文件关闭成功后显示。
     log_tools.process_incremental_landing_log_write(now)
 
-    if landing_jobs.log_pending == true and now >= landing_jobs.log_after then
+    if landing_jobs.log_pending == true and now >= landing_jobs.log_after and not log_tools.work.claimed
+        and now>=log_tools.work.protected_until then
         -- 正常情况下机场查询会先完成；若模拟时间发生跳变，则在写文件前补做一次。
         if landing_jobs.context_pending == true then
-            resolve_context_safely(now)
+            if log_tools.work:claim() then resolve_context_safely(now) end
+            return
         end
         -- 报告最早在 8 秒写入；若分帧扫描尚未完成，则只等待到独立时间预算耗尽。
         if (log_tools.runway_state.active or log_tools.runway_state.landing_search) and now < landing_jobs.runway_deadline then
@@ -8720,6 +8945,11 @@ local function begin_bounce_monitor(now, radio_alt_ft)
     bounce_state.low_speed_since = nil
     bounce_state.climb_since = nil
     bounce_state.first_touch_height = radio_alt_ft or 0
+    bounce_state.ground_low=radio_alt_ft or 0
+    bounce_state.ground_low_time=now
+    bounce_state.confirmed_count=0
+    bounce_state.evidence="waiting"
+    bounce_state.rejected_count=0
     bounce_state.airborne_start_time = 0
     bounce_state.airborne_duration_seconds = 0
     bounce_state.airborne_peak_agl_ft = 0
@@ -8739,11 +8969,18 @@ local function apply_bounce_score(now)
     if bounce_state.detected == false
         or bounce_state.second_g_ready == false
         or landing_complete == false
-        or bounce_state.score_applied == true then
+        then
         return
     end
 
-    bounce_state.original_status = landing_status
+    if not bounce_state.score_applied then bounce_state.original_status = landing_status end
+    if bounce_state.score_applied then
+        if bounce_state.second_curve_g>G_ATTENTION_MAX then
+            landing_status="UNSTABLE";bounce_state.result_status=landing_status
+            log_tools.recording.summary_dirty=true;refresh_popup_cache()
+        end
+        return
+    end
     if landing_status == "UNSTABLE"
         or landing_g > G_ATTENTION_MAX
         or bounce_state.second_curve_g > G_ATTENTION_MAX then
@@ -8761,9 +8998,7 @@ local function apply_bounce_score(now)
         log_tools.recording.summary_dirty=true
     end
     refresh_popup_cache()
-    if POPUP_MODE == "immediate" then
-        show_until = now + DISPLAY_SECONDS
-    end
+
 end
 
 local function finish_second_touch_analysis(now)
@@ -8774,6 +9009,11 @@ local function finish_second_touch_analysis(now)
         false
     )
     local curve_g = scratch_percentile(G_CURVE_PERCENTILE)
+    local event=log_tools.touchdown.current
+    if event and event.index>1 and event.done then
+        if event.quality=="valid" then curve_g=event.g or curve_g end
+        event.fpm=bounce_state.second_fpm
+    end
     if count > 0 and curve_g ~= nil then
         bounce_state.second_curve_g = math.max(1.0, math.min(5.0, curve_g))
     else
@@ -8814,21 +9054,40 @@ local function process_bounce_monitor(now, on_ground, radio_alt_ft, local_vy_mps
         if clean_g ~= nil and clean_g > bounce_state.second_peak_g then
             bounce_state.second_peak_g = clean_g
         end
-        if now >= bounce_state.second_capture_until then
+        local leaving=on_ground==0 and was_on_ground==1
+        if leaving and log_tools.touchdown.active then log_tools.touchdown:finish(now,"airborne") end
+        if leaving or (log_tools.touchdown.active and log_tools.touchdown.current and log_tools.touchdown.current.done)
+            or (not log_tools.touchdown.active and now>=bounce_state.second_capture_until) then
             finish_second_touch_analysis(now)
         end
-        return
+        -- Start the next airborne interval on this same frame. Waiting for
+        -- capture completion used to lose rapid successive contact changes.
+        if not leaving then return end
     end
 
-    if bounce_state.phase == "waiting" then
+    if bounce_state.phase == "waiting" or bounce_state.phase == "confirmed" then
+        if on_ground==1 then
+            if not bounce_state.ground_low_time or now-bounce_state.ground_low_time>1.5 or radio_alt_ft<(bounce_state.ground_low or radio_alt_ft) then
+                bounce_state.ground_low=radio_alt_ft;bounce_state.ground_low_time=now
+            end
+        end
         if on_ground == 0 and was_on_ground == 1 then
             bounce_state.phase = "airborne"
             bounce_state.airborne_start_time = now
+            bounce_state.airborne_reference=bounce_state.ground_low or bounce_state.first_touch_height
+            bounce_state.geometry_up_seconds=0
+            bounce_state.geometry_previous_height=radio_alt_ft
+            bounce_state.geometry_previous_time=now
             bounce_state.airborne_peak_agl_ft = math.max(0, radio_alt_ft)
             bounce_state.airborne_peak_upward_mps = math.max(0, local_vy_mps)
         end
     elseif bounce_state.phase == "airborne" then
         if on_ground == 0 then
+            local dt=now-(bounce_state.geometry_previous_time or now)
+            if dt>0 and dt<=.2 and radio_alt_ft>(bounce_state.geometry_previous_height or radio_alt_ft)+.001 then
+                bounce_state.geometry_up_seconds=bounce_state.geometry_up_seconds+dt
+            end
+            bounce_state.geometry_previous_height=radio_alt_ft;bounce_state.geometry_previous_time=now
             bounce_state.airborne_peak_agl_ft = math.max(
                 bounce_state.airborne_peak_agl_ft,
                 radio_alt_ft
@@ -8845,12 +9104,19 @@ local function process_bounce_monitor(now, on_ground, radio_alt_ft, local_vy_mps
             local valid_bounce = bounce_state.airborne_duration_seconds
                     >= BOUNCE_CONFIG.min_airborne_seconds
                 and (
-                    bounce_state.airborne_peak_agl_ft-bounce_state.first_touch_height >= BOUNCE_CONFIG.min_peak_agl_ft
+                    (bounce_state.airborne_peak_agl_ft-bounce_state.airborne_reference >= BOUNCE_CONFIG.min_peak_agl_ft
+                        and bounce_state.geometry_up_seconds>=.08)
                     or bounce_state.airborne_peak_upward_mps >= BOUNCE_CONFIG.min_upward_mps
                 )
 
             if valid_bounce then
                 bounce_state.detected = true
+                bounce_state.confirmed_count=(bounce_state.confirmed_count or 0)+1
+                bounce_state.evidence=bounce_state.airborne_peak_upward_mps>=BOUNCE_CONFIG.min_upward_mps and "physical_upward" or "geometry_rebound"
+                if log_tools.touchdown.active then
+                    local td=log_tools.touchdown;td:begin_event(now)
+                    td:update(now,current_g,local_vy_mps,td.pitch or 0,td.roll or 0,1,radio_alt_ft,false)
+                end
                 bounce_state.phase = "second_capture"
                 bounce_state.second_touch_time = now
                 bounce_state.second_capture_until = now + BOUNCE_CONFIG.second_g_capture_seconds
@@ -8874,7 +9140,10 @@ local function process_bounce_monitor(now, on_ground, radio_alt_ft, local_vy_mps
                 bounce_state.second_curve_g = clean_touch_g
                 refresh_popup_cache()
             else
-                -- 极短的离地信号按接地状态抖动处理，继续等待真正弹跳。
+                bounce_state.rejected_count=(bounce_state.rejected_count or 0)+1
+                bounce_state.evidence="unconfirmed_contact_transition"
+                bounce_state.ground_low=radio_alt_ft
+                -- Unconfirmed contact transitions are retained as diagnostics, never penalized.
                 bounce_state.phase = "waiting"
                 bounce_state.airborne_start_time = 0
                 bounce_state.airborne_peak_agl_ft = 0
@@ -8886,6 +9155,8 @@ end
 
 local function finalize_landing_analysis(now)
     local started = os.clock()
+    local first_event=log_tools.touchdown.events[1]
+    if first_event then first_event.fpm=landing_fpm end
     landing_status = classify_landing(landing_fpm, landing_g, EXTERNAL_SCORE_HINT)
     landing_complete = true
     armed = false
@@ -8907,9 +9178,7 @@ local function finalize_landing_analysis(now)
 
     apply_bounce_score(now)
     refresh_popup_cache()
-    if POPUP_MODE == "immediate" then
-        show_until = now + DISPLAY_SECONDS
-    end
+
 
     schedule_landing_jobs(now)
     landing_analysis.finalize_ms = (os.clock() - started) * 1000
@@ -8918,32 +9187,12 @@ end
 
 local function process_landing_analysis(now, local_vy_mps)
     if landing_analysis.phase == "capture" then
-        if local_vy_mps >= IMPACT_STOP_VY_MPS then
-            if landing_analysis.stop_stable_frames == 0 then
-                landing_analysis.stop_candidate_time = now
-            end
-            landing_analysis.stop_stable_frames = landing_analysis.stop_stable_frames + 1
-        else
-            landing_analysis.stop_stable_frames = 0
-            landing_analysis.stop_candidate_time = 0
-        end
-
-        if local_vy_mps > 0.05 then
-            landing_analysis.capture_end_reason = "检测到垂直速度反向"
-            landing_analysis.impact_end_time = now
-            landing_analysis.end_time = now
-            landing_analysis.phase = "analyze_velocity"
-        elseif landing_analysis.stop_stable_frames >= IMPACT_STOP_STABLE_FRAMES then
-            -- 三帧只用于确认停止状态；物理减速时长截止到第一帧达到停止阈值的时刻。
-            landing_analysis.capture_end_reason = "垂直速度连续三帧进入稳定区"
-            landing_analysis.impact_end_time = landing_analysis.stop_candidate_time
-            landing_analysis.end_time = now
-            landing_analysis.phase = "analyze_velocity"
-        elseif now >= landing_analysis.capture_deadline then
-            landing_analysis.capture_end_reason = "达到1.20秒安全采集上限"
-            landing_analysis.impact_end_time = now
-            landing_analysis.end_time = now
-            landing_analysis.phase = "analyze_velocity"
+        local event=log_tools.touchdown.current
+        if event and event.done or now>=landing_analysis.capture_deadline then
+            landing_analysis.capture_end_reason=event and event.reason or "limit"
+            landing_analysis.impact_end_time=event and event.finish or now
+            landing_analysis.end_time=now
+            landing_analysis.phase="analyze_velocity"
         end
     elseif landing_analysis.phase == "analyze_velocity" then
         analyze_landing_velocity()
@@ -9046,16 +9295,21 @@ function ma_build_settings_window(wnd, x, y, gui)
         page=log_tools.settings_ui_tab
     end
     if page=="all" or page=="general" then
-    log_tools.dialog_section(imgui,"全局语言", "Global language")
-    if imgui.RadioButton((imgui.Tabs and "中文" or "Chinese").."##lmm_language_zh", runtime_state.document_language == "zh") then
+    if log_tools.native_ui.force_compatibility then
+        imgui.TextUnformatted("Report output language")
+        imgui.TextUnformatted("TXT reports and browser analyzer only. In-sim interfaces remain English.")
+    else log_tools.dialog_section(imgui,"全局语言", "Global language") end
+    if imgui.RadioButton((not log_tools.native_ui.force_compatibility and imgui.Tabs and "中文" or "Chinese").."##lmm_language_zh", runtime_state.document_language == "zh") then
         log_tools.set_global_language("zh")
     end
     imgui.SameLine()
     if imgui.RadioButton("English##lmm_language_en", runtime_state.document_language == "en") then
         log_tools.set_global_language("en")
     end
+    log_tools.dev:shortcut_settings(imgui,log_tools.settings_text,save_settings)
     log_tools.dialog_section(imgui,"落地数据弹窗时机", "Landing data popup timing")
-    if imgui.RadioButton(log_tools.settings_text("分析完成后立即显示", "Show immediately after analysis") .. "##lmm_immediate", POPUP_MODE == "immediate") then POPUP_MODE = "immediate"; save_settings() end
+    if imgui.RadioButton(log_tools.settings_text("即时演算（从记录开始显示）", "Live calculation (from recording start)") .. "##lmm_live", POPUP_MODE == "live") then POPUP_MODE = "live"; save_settings() end
+    if imgui.RadioButton(log_tools.settings_text("触地后立刻弹出", "Show immediately after touchdown") .. "##lmm_immediate", POPUP_MODE == "touchdown") then POPUP_MODE = "touchdown"; save_settings() end
     if imgui.RadioButton(log_tools.settings_text("地速低于 30 kt 时显示", "Show after slowing below 30 kt") .. "##lmm_taxi", POPUP_MODE == "taxi") then POPUP_MODE = "taxi"; save_settings() end
     if imgui.RadioButton(log_tools.settings_text("停稳并持续 10 秒后显示", "Show after stopped for 10 seconds") .. "##lmm_stopped", POPUP_MODE == "stopped") then POPUP_MODE = "stopped"; runtime_state.stopped_popup_since = 0; save_settings() end
     if imgui.RadioButton(log_tools.settings_text("不自动显示", "Do not show automatically") .. "##lmm_off", POPUP_MODE == "off") then POPUP_MODE = "off"; show_until = 0; runtime_state.stopped_popup_since = 0; save_settings() end
@@ -9211,7 +9465,9 @@ function ma_build_settings_window(wnd, x, y, gui)
         log_tools.dialog_section(imgui,"字体大小", "Font size")
         local changed, px = imgui.SliderInt(log_tools.settings_text("原生弹窗字号", "Native popup font size") .. "##lmm_font_px", log_tools.popup_style.font_px, 10, 32, "%d")
         if changed then log_tools.popup_style.font_px = px; save_settings() end
-        if log_tools.popup_style.renderer == "legacy" then imgui.TextUnformatted(log_tools.settings_text("兼容模式：中文使用标准字号。", "Compatibility: standard size for Chinese.")) end
+        if log_tools.popup_style.renderer == "legacy" then imgui.TextUnformatted(log_tools.native_ui.force_compatibility
+            and "Compatibility: English interface; report language is independent."
+            or log_tools.settings_text("兼容模式：中文使用标准字号。", "Compatibility: standard size for Chinese.")) end
     else
     imgui.TextUnformatted(log_tools.settings_text("原生字体未启用，已回退兼容显示。", "Native fonts unavailable; compatibility display is active."))
     if DEBUG_MODE then imgui.TextUnformatted(log_tools.settings_text("诊断详情：", "Diagnostic details: ") .. (log_tools.native_ui.error or "")) end
@@ -9221,7 +9477,9 @@ function ma_build_settings_window(wnd, x, y, gui)
     if imgui.RadioButton(log_tools.settings_text("标准", "Normal") .. "##lmm_size_normal", log_tools.popup_style.font_size == "normal") then log_tools.popup_style.font_size = "normal"; refresh_popup_cache(); save_settings() end
     imgui.SameLine()
     if imgui.RadioButton(log_tools.settings_text("大号 18", "Large 18") .. "##lmm_size_large", log_tools.popup_style.font_size == "large") then log_tools.popup_style.font_size = "large"; refresh_popup_cache(); save_settings() end
-    imgui.TextUnformatted(log_tools.settings_text("兼容模式：中文使用标准字号。", "Compatibility: standard size for Chinese."))
+    imgui.TextUnformatted(log_tools.native_ui.force_compatibility
+        and "Compatibility: English interface; report language is independent."
+        or log_tools.settings_text("兼容模式：中文使用标准字号。", "Compatibility: standard size for Chinese."))
     end
 
     log_tools.dialog_section(imgui,"字体粗细", "Font weight")
@@ -9245,7 +9503,7 @@ function ma_build_settings_window(wnd, x, y, gui)
         log_tools.dev:settings(imgui,log_tools.settings_text,DEBUG_MODE,save_settings)
     end
     log_tools.dialog_section(imgui,"预览与保存", "Preview and save")
-    if imgui.Button(log_tools.settings_text("预览弹窗 5 秒", "Preview popup for 5 seconds") .. "##lmm_preview", 220, 28) then refresh_popup_cache(); show_until = current_sim_time() + 5 end
+    if imgui.Button(log_tools.settings_text("预览弹窗 5 秒", "Preview popup for 5 seconds") .. "##lmm_preview", 220, 28) then log_tools.live.dismissed=false;log_tools.touchdown.dismissed=false;refresh_popup_cache(); show_until = current_sim_time() + 5 end
     log_tools.dialog_notice(imgui,settings_save_ok and log_tools.settings_text("设置已自动保存。", "Settings are saved automatically.") or log_tools.settings_text("警告：设置保存失败，请检查 FlyWithLua Log.txt。", "Warning: settings could not be saved. Check FlyWithLua Log.txt."), settings_save_ok and "success" or "error")
 end
 
@@ -9468,16 +9726,15 @@ function log_tools.record_frame(sample)
         sample.engine_count=log_tools.dev.engine_count
         sample.trace_fpm=sample.physical_fpm or sample.vvi
         sample.trace_fpm_source=sample.physical_fpm and "physical_velocity" or sample.vvi and "vvi" or nil
-        if rec.closed and not rec.export and not landing_jobs.log_write and not landing_jobs.log_pending
-            and bounce_state.phase~="second_capture" then
+        if rec.closed and not rec.export and not landing_jobs.log_write and not landing_jobs.report_build and not landing_jobs.log_pending
+            and bounce_state.phase~="second_capture" and not log_tools.touchdown.active then
             if rec.summary_dirty and rec.summary and rec.id==landing_context.recording_id and not rec.export_failed then
-                local ok,built,result=pcall(log_tools.build_landing_log_payload,rec.report_path)
-                if ok and built then
-                    rec:attach_summary(result.content,rec.report_path);rec.summary_dirty=false
-                else rec.error=tostring(ok and result or built);rec.export_failed=true end
+                log_tools.begin_incremental_landing_log_write(true)
+            elseif not rec.summary_dirty or not rec.summary then
+                if log_tools.work:claim() then rec:begin_export() end
             end
-            rec:begin_export()
         end
+
         local previous_id=rec.id
         local route=log_tools.dev.route
         local confirmed
@@ -9506,6 +9763,9 @@ function log_tools.record_frame(sample)
         if rec.saved_path and rec.saved_path~=log_tools.dev.last_recording_path then
             log_tools.dev.last_recording_path=rec.saved_path
             log_tools.register_log_filename(file_name_from_path(rec.saved_path))
+            landing_report_notice.text=log_tools.popup_text("落地报告已生成", "Landing report generated")
+            landing_report_notice.ready=POPUP_MODE~="off" and POPUP_MODE~="clean" and not log_tools.touchdown.active
+            landing_report_notice.flash_started_at=0
             if logMsg then logMsg("[StarLux LMM] Recording committed: "..rec.saved_path) end
         end
     end)
@@ -9517,6 +9777,7 @@ function log_tools.record_frame(sample)
 end
 
 function ma_landing_meter_update()
+    log_tools.update_clock=log_tools.work.clock()
     local now = current_sim_time()
     log_tools.dev:update(now,tostring(AIRCRAFT_PATH or PLANE_ICAO or "unknown") .. "|" .. tostring(AIRCRAFT_FILENAME or "") .. "|" .. tostring(PLANE_TAILNUMBER or ""))
     local action=log_tools.dev.pending
@@ -9546,10 +9807,18 @@ function ma_landing_meter_update()
     local heading_deg_mag = lmm_get_float("heading_deg_mag")
     local frame_period_sec = lmm_get_float("framerate_period_sec")
 
+    log_tools.work:begin_frame(now,frame_period_sec,on_ground==1 and was_on_ground==0)
     local radio_alt_ft = meters_to_feet(y_agl_m)
     local trace_altitude_ft = log_tools.flare_reference_height_ft(elevation_m, radio_alt_ft)
     local gs_kt = mps_to_kt(groundspeed_mps)
     local is_replay = lmm_get_int("is_in_replay") ~= 0
+    if not log_tools.touchdown.active and not is_replay then
+        log_tools.touchdown:update(now,LMM_DATAREFS.g_normal and current_g,LMM_DATAREFS.local_vy_mps and local_vy_mps,
+            pitch_deg,roll_deg,on_ground,radio_alt_ft,lmm_get_int("paused")~=0)
+    end
+    log_tools.live:update(now,LMM_DATAREFS.vs_fpm and vs_fpm,
+        LMM_DATAREFS.local_vy_mps and local_vy_mps*196.850394,
+        LMM_DATAREFS.y_agl_m and radio_alt_ft,lmm_get_int("paused")~=0,is_replay,log_tools.dev.inputs.identity)
     local true_heading = LMM_DATAREFS.heading_deg_true and lmm_get_float("heading_deg_true")
     log_tools.dev:update_wind(now,true_heading,LMM_DATAREFS.heading_deg_mag and heading_deg_mag,
         LMM_DATAREFS.wind_speed_kts and wind_speed_kts,LMM_DATAREFS.wind_heading_deg_mag and wind_heading_deg_mag)
@@ -9564,6 +9833,8 @@ function ma_landing_meter_update()
         wind_from=LMM_DATAREFS.wind_heading_deg_mag and wind_heading_deg_mag,
         identity=log_tools.dev.inputs.identity})
 
+    log_tools.sync_live(now,is_replay)
+
     -- 回放中的接地状态跳变不属于新的真实飞行，禁止采样、触发和写入报告。
     -- 退出回放时再清空一次瞬时状态，避免把回放末帧与实时首帧拼成一次假落地。
     if is_replay then
@@ -9576,10 +9847,12 @@ function ma_landing_meter_update()
             reset_math_audit()
             reset_flare_trace()
             reset_bounce_state()
+            log_tools.touchdown:close(false)
             runtime_state.stopped_popup_since = 0
             runtime_state.deferred_popup_done = false
             show_until = 0
             landing_jobs.context_pending = false
+            landing_jobs.report_build=nil
             landing_jobs.log_pending = false
             log_tools.cancel_runway_resolver("replay")
             log_tools.reset_report_notice()
@@ -9617,6 +9890,7 @@ function ma_landing_meter_update()
             reset_surface_watch(now)
             reset_flare_trace()
             reset_bounce_state()
+            log_tools.touchdown:close(false)
             landing_analysis.phase = "idle"
         end
         armed = true
@@ -9724,6 +9998,9 @@ function ma_landing_meter_update()
             roll_deg,
             current_g
         )
+        log_tools.touchdown:start(now)
+        log_tools.touchdown.dismissed=log_tools.live.dismissed or false
+
         begin_bounce_monitor(now, radio_alt_ft)
         begin_landing_analysis(now)
 
@@ -9754,16 +10031,27 @@ function ma_landing_meter_update()
     end
 
     -- 采样、速度分析、冲量分析和最终评分分布在不同更新帧执行。
+    log_tools.touchdown:update(now,LMM_DATAREFS.g_normal and current_g,LMM_DATAREFS.local_vy_mps and local_vy_mps,
+        pitch_deg,roll_deg,on_ground,radio_alt_ft,lmm_get_int("paused")~=0)
+    log_tools.analysis_clock=log_tools.work.clock()
     process_landing_analysis(now, local_vy_mps)
+    log_tools.work:record("analysis",log_tools.analysis_clock)
     process_bounce_monitor(now, on_ground, radio_alt_ft, local_vy_mps, current_g, gs_kt)
+    if log_tools.touchdown.active and not bounce_state.monitoring and landing_complete then
+        log_tools.touchdown:close(log_tools.recording.reason=="low_speed" or bounce_state.low_speed_since~=nil)
+        log_tools.recording.summary_dirty=true
+
+    end
+
+    log_tools.sync_live(now,false)
 
     -- 延迟弹窗模式只在分析完成后计时；停稳模式要求地速连续 10 秒不超过 1 节。
-    if POPUP_MODE == "taxi" and landing_complete == true and runtime_state.deferred_popup_done == false then
+    if POPUP_MODE == "taxi" and landing_complete == true and not log_tools.touchdown.active and runtime_state.deferred_popup_done == false then
         if gs_kt <= TAXI_POPUP_SPEED_KT then
             show_until = now + DISPLAY_SECONDS
             runtime_state.deferred_popup_done = true
         end
-    elseif POPUP_MODE == "stopped" and landing_complete == true and runtime_state.deferred_popup_done == false then
+    elseif POPUP_MODE == "stopped" and landing_complete == true and not log_tools.touchdown.active and runtime_state.deferred_popup_done == false then
         if on_ground == 1 and gs_kt <= runtime_state.stopped_speed_kt then
             if runtime_state.stopped_popup_since <= 0 then
                 runtime_state.stopped_popup_since = now
@@ -9786,6 +10074,12 @@ function ma_landing_meter_update()
     )
 
     was_on_ground = on_ground
+    log_tools.prewarm_popup()
+    log_tools.work:record('update',log_tools.update_clock)
+    if DEBUG_MODE and logMsg and now>=(log_tools.next_perf_log or 0) then
+        log_tools.next_perf_log=now+30;logMsg(log_tools.work:diagnostic())
+    end
+
 end
 
 -- =========================
@@ -9800,7 +10094,7 @@ function ma_landing_meter_draw()
         local ok,err=pcall(log_tools.dev.present,log_tools.dev,log_tools.native_ui.instance,DEBUG_MODE,log_tools.popup_language()=="en")
         if not ok and log_tools.dev.render_error~=tostring(err) then
             log_tools.dev.render_error=tostring(err)
-            logMsg("[LMM 1.1.9rc4] Overlay: "..tostring(err))
+            logMsg("[LMM 1.1.9RC9] Overlay: "..tostring(err))
         end
     end
     log_tools.update_native_dialogs()
@@ -9813,17 +10107,17 @@ function ma_landing_meter_draw()
         log_tools.draw_database_status(screen_w, screen_h, now)
         return
     end
-    local popup_visible = show_until > 0 and now <= show_until
+    local popup_visible = (log_tools.compact_live(now) or log_tools.pending_touch_popup() or show_until > 0 and now <= show_until) and not log_tools.live.dismissed and not log_tools.touchdown.dismissed
 
     if not log_tools.native_popup(popup_visible, now) and popup_visible then
-        if landing_report_notice.ready and landing_report_notice.flash_started_at <= 0 then
+        if landing_report_notice.ready and not log_tools.compact_live(now) and (POPUP_MODE~="live" or not log_tools.live.result_at or now-log_tools.live.result_at>=2) and landing_report_notice.flash_started_at <= 0 then
             log_tools.start_report_flash(now)
-            show_until = math.max(show_until, landing_report_notice.flash_until_time)
+            if POPUP_MODE~="live" and POPUP_MODE~="touchdown" then show_until = math.max(show_until, landing_report_notice.flash_until_time) end
         end
-        local report_flash_active, report_flash_visible = log_tools.report_flash_state(now)
-        local show_surface_warning = landing_surface.wet_warning and landing_status == "NICE"
-        local show_bounce_warning = bounce_state.detected
-        local show_centerline_line = popup_cache.centerline_text ~= ""
+        local report_line_text, report_line_visible = log_tools.popup_report_line(now)
+        local show_surface_warning = not log_tools.compact_live(now) and landing_surface.wet_warning and landing_status == "NICE"
+        local show_bounce_warning = not log_tools.compact_live(now) and bounce_state.detected
+        local show_centerline_line = not log_tools.compact_live(now) and popup_cache.centerline_text ~= ""
         local extra_line_count = show_centerline_line and 1 or 0
         if show_bounce_warning then
             extra_line_count = extra_line_count + 1
@@ -9831,17 +10125,18 @@ function ma_landing_meter_draw()
         if show_surface_warning then
             extra_line_count = extra_line_count + 1
         end
-        if report_flash_active then
+        if report_line_text then
             extra_line_count = extra_line_count + 1
         end
 
         -- 面板随实际文本宽度和真实行数自适应；字号决定排版，粗细只影响描画次数。
         local font_height, line_gap, bottom_padding, top_padding, minimum_panel_w =
             log_tools.popup_font_metrics(POPUP_LAYOUT)
-        local line_count = 7 + extra_line_count
+        local display_lines,display_colors,display_reserve=log_tools.popup_display()
+        local line_count = #display_lines + extra_line_count
         local maximum_text_w = 0
-        for i = 1, 7 do
-            maximum_text_w = math.max(maximum_text_w, log_tools.popup_measure_text(popup_cache.lines[i]))
+        for i,line in ipairs(display_lines) do
+            maximum_text_w = math.max(maximum_text_w, log_tools.popup_measure_text(display_reserve[i] or line))
         end
         if show_centerline_line then
             maximum_text_w = math.max(maximum_text_w, log_tools.popup_measure_text(popup_cache.centerline_text))
@@ -9852,8 +10147,8 @@ function ma_landing_meter_draw()
         if show_surface_warning then
             maximum_text_w = math.max(maximum_text_w, log_tools.popup_measure_text(popup_cache.warning_text))
         end
-        if report_flash_active then
-            maximum_text_w = math.max(maximum_text_w, log_tools.popup_measure_text(landing_report_notice.text))
+        if report_line_text then
+            maximum_text_w = math.max(maximum_text_w, log_tools.popup_measure_text(log_tools.popup_report_reserve()))
         end
         local left_padding = POPUP_LAYOUT == "vertical" and 14 or ACCENT_THICKNESS + 10
         local panel_w = math.max(minimum_panel_w, math.ceil(maximum_text_w + left_padding + 16))
@@ -9863,6 +10158,7 @@ function ma_landing_meter_draw()
         local x, y = calculate_popup_position(screen_w, screen_h, panel_w, panel_h)
         log_tools.legacy_popup_bounds={x=x,y=y,w=panel_w,h=panel_h,sw=screen_w,sh=screen_h}
         local r, g, b = status_color(landing_status)
+        if log_tools.compact_live(now) or log_tools.pending_touch_popup() then r,g,b=.06,.20,.28 end
         local text_r, text_g, text_b = log_tools.popup_text_color(r, g, b)
 
         -- 自定义状态底板配合透明度档位；导航查询和文件写入均已移出触地关键阶段。
@@ -9883,15 +10179,16 @@ function ma_landing_meter_draw()
 
         -- 基础七行与附加状态统一使用所选高对比字体色和粗细。
         glColor4f(text_r, text_g, text_b, 0.98)
-        log_tools.draw_popup_text(text_x, line_y1, popup_cache.lines[1])
-        log_tools.draw_popup_text(text_x, line_y1 - line_gap, popup_cache.lines[2])
-        log_tools.draw_popup_text(text_x, line_y1 - line_gap * 2, popup_cache.lines[3])
-        log_tools.draw_popup_text(text_x, line_y1 - line_gap * 3, popup_cache.lines[4])
-        log_tools.draw_popup_text(text_x, line_y1 - line_gap * 4, popup_cache.lines[5])
-        log_tools.draw_popup_text(text_x, line_y1 - line_gap * 5, popup_cache.lines[6])
-        log_tools.draw_popup_text(text_x, line_y1 - line_gap * 6, popup_cache.lines[7])
-
-        local alert_line_index = 7
+        for i,line in ipairs(display_lines) do
+            local c=display_colors[i]
+            log_tools.popup_draw_color=c or {text_r,text_g,text_b}
+            glColor4f(c and c[1] or text_r,c and c[2] or text_g,c and c[3] or text_b,.98)
+            if not (POPUP_MODE=="live" and not log_tools.compact_live(now) and i==#display_lines and not log_tools.live:result_lit(now)) then log_tools.draw_popup_text(text_x,line_y1-line_gap*(i-1),line) end
+        end
+        log_tools.popup_draw_color=nil
+        glColor4f(text_r,text_g,text_b,.98)
+        log_tools.draw_popup_text(x+panel_w-16,y+panel_h-14,"x")
+        local alert_line_index = #display_lines
         if show_centerline_line then
             log_tools.draw_popup_text(
                 text_x,
@@ -9916,12 +10213,12 @@ function ma_landing_meter_draw()
             )
             alert_line_index = alert_line_index + 1
         end
-        if report_flash_active then
-            if report_flash_visible then
+        if report_line_text then
+            if report_line_visible then
                 log_tools.draw_popup_text(
                     text_x,
                     line_y1 - line_gap * alert_line_index,
-                    landing_report_notice.text
+                    report_line_text
                 )
             end
         end
@@ -9972,17 +10269,24 @@ function ma_live_records() log_tools.dev:legacy_build("records") end
 function ma_live_stick() log_tools.dev:legacy_build("stick") end
 function ma_live_throttle() log_tools.dev:legacy_build("throttle") end
 function ma_live_n1() log_tools.dev:legacy_build("n1") end
+function ma_live_g_meter() log_tools.dev:legacy_build("g_meter") end
+function ma_live_fpm_meter() log_tools.dev:legacy_build("fpm_meter") end
+function ma_live_settings_draw(w,x,y) log_tools.dev:edge_draw("settings",x,y) end
+function ma_live_records_draw(w,x,y) log_tools.dev:edge_draw("records",x,y) end
+function ma_live_settings_click(w,x,y,status) log_tools.dev:edge_click("settings",x,y,status) end
+function ma_live_records_click(w,x,y,status) log_tools.dev:edge_click("records",x,y,status) end
 
 -- FlyWithLua's legacy click hook provides down/drag/up and resumes only handled clicks.
 function ma_lmm119_popup_mouse()
     local b=log_tools.legacy_popup_bounds
-    if not b or runtime_state.replay_active or current_sim_time()>show_until then
+    if not b or runtime_state.replay_active or (not log_tools.compact_live() and not log_tools.pending_touch_popup() and current_sim_time()>show_until) then
         log_tools.legacy_popup_drag=nil; return
     end
     local x,y=tonumber(MOUSE_X),tonumber(MOUSE_Y)
     if not x or not y then return end
     if MOUSE_STATUS=="down" then
         if x<b.x or x>b.x+b.w or y<b.y or y>b.y+b.h then return end
+        if x>=b.x+b.w-24 and y>=b.y+b.h-24 then log_tools.dismiss_popup();RESUME_MOUSE_CLICK=true;return end
         log_tools.legacy_popup_drag={x=x,y=y,left=b.x,bottom=b.y}
     elseif (MOUSE_STATUS=="drag" or MOUSE_STATUS=="up") and log_tools.legacy_popup_drag then
         local d=log_tools.legacy_popup_drag
@@ -9998,7 +10302,7 @@ function ma_lmm119_check_updates()
     local ok,err=pcall(function()
         if not log_tools.updates then
             local loader=assert(loadfile(join_path(LMM_BASE_DIRECTORY,"LMM_UI_119/core_updates.lua")))
-            log_tools.updates=loader().new({current="1.1.9rc4",path=join_path(LOG_DIRECTORY_PATH,log_tools.native_ui.force_compatibility and ".lmm-update-compatibility.txt" or ".lmm-update-standard.txt"),
+            log_tools.updates=loader().new({current="1.1.9RC9",path=join_path(LOG_DIRECTORY_PATH,log_tools.native_ui.force_compatibility and ".lmm-update-compatibility.txt" or ".lmm-update-standard.txt"),
                 variant=log_tools.native_ui.force_compatibility and "Compatibility" or "Standard"})
         end
         log_tools.updates:tick()
@@ -10017,6 +10321,11 @@ do_every_frame("ma_landing_meter_update()")
 do_every_draw("ma_landing_meter_draw()")
 
 function ma_lmm118_shutdown()
+    landing_jobs.report_build=nil
+    if landing_jobs.log_write and landing_jobs.log_write.file then
+        pcall(function()landing_jobs.log_write.file:close()end)
+        landing_jobs.log_write.file=nil
+    end
     log_tools.ils:close()
     log_tools.recording:shutdown()
     log_tools.native_shutdown()
@@ -10025,7 +10334,7 @@ if type(do_on_exit) == "function" then do_on_exit("ma_lmm118_shutdown()") end
 
 if logMsg then
     logMsg(string.format(
-        "[StarLux LMM] v1.1.9rc4 loaded successfully with %d direct XPLM DataRefs, persistent apt.dat indexing and optional control capture.",
+        "[StarLux LMM] v1.1.9RC9 loaded successfully with %d direct XPLM DataRefs, persistent apt.dat indexing and optional control capture.",
         #LMM_DATAREF_SPECS
     ))
 end

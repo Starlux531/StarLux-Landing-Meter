@@ -3,10 +3,14 @@ local Inputs=assert(loadfile(directory.."core_inputs.lua"))()
 local VisualState=assert(loadfile(directory.."core_visual_state.lua"))()
 local M={}; M.__index=M
 local defaults={edge=true,edge_right=false,edge_alpha=24,stick=false,stick_wind=true,throttle=false,n1=false,engine_combined=false,
+    g_meter=false,fpm_meter=false,live_combined=false,g_meter_size=180,fpm_meter_size=180,
+    fpm_vvi=true,fpm_physical=true,fpm_agl=true,popup_fpm_source=1,
+    g_meter_x=.60,g_meter_y=.22,fpm_meter_x=.75,fpm_meter_y=.22,g_meter_collapsed=false,fpm_meter_collapsed=false,
+    compat_edge_size=24,compat_edge_alpha=18,compat_edge_lightness=75,
     edge_settings_y=-1,edge_records_y=-1,stick_collapsed=false,throttle_collapsed=false,n1_collapsed=false,
-    edit=false,size=180,stick_size=180,throttle_size=180,n1_size=180,alpha=65,red=86,green=180,blue=235,
+    edit=true,size=180,stick_size=180,throttle_size=180,n1_size=180,alpha=65,red=86,green=180,blue=235,
     stick_x=.05,stick_y=.22,throttle_x=.23,throttle_y=.22,n1_x=.41,n1_y=.22,wind_interval=1,appearance=1,popup_free_x=-1,popup_free_y=-1}
-for _,id in ipairs({"stick","throttle","n1"}) do
+for _,id in ipairs({"stick","throttle","n1","g_meter","fpm_meter"}) do
     for _,key in ipairs({"alpha","red","green","blue"}) do defaults[id.."_"..key]=defaults[key] end
 end
 function M.new(refs,base)
@@ -75,9 +79,12 @@ function M:read_setting(key,value)
                 local min,max=0,255
                 if name:match("^popup_free_[xy]$") or name:match("^edge_.+_y$") then min,max=-1,1
                 elseif name:match("_[xy]$") then max=1
+                elseif name=="compat_edge_size" then min,max=20,48
+                elseif name=="compat_edge_lightness" then min,max=20,100
                 elseif name:find("size",1,true) then min,max=120,360
                 elseif name=="alpha" or name:match("_alpha$") then min,max=5,100
-                elseif name=="appearance" then min,max=1,4
+                elseif name=="popup_fpm_source" then min,max=1,3;n=math.floor(n)
+                elseif name=="appearance" then min,max=1,6
                 elseif name=="wind_interval" then min,max=.1,10 end
                 self.config[name]=math.max(min,math.min(max,n))
             end
@@ -123,35 +130,124 @@ function M:cycle(axis)
     local index=1; for i,id in ipairs(options) do if id==a.mode then index=i end end
     self:select_source(axis,options[index%#options+1])
 end
+local function section(gui,tr,zh,en)
+    if gui.Section then gui.Section(tr(zh,en)) else gui.Separator();gui.TextUnformatted(tr(zh,en)) end
+end
+local function grid(gui,count,width)
+    if gui.BeginGrid then gui.BeginGrid(count,width)
+    elseif gui.Columns and gui.GetContentRegionAvail then
+        local available=gui.GetContentRegionAvail()
+        gui.Columns(math.max(1,math.min(count,math.floor(available/width))),"lmm_live_grid",false)
+    end
+end
+local function grid_next(gui) if not gui.BeginGrid and gui.Columns and gui.GetContentRegionAvail then gui.NextColumn() end end
+local function grid_end(gui)
+    if gui.EndGrid then gui.EndGrid()
+    elseif gui.Columns and gui.GetContentRegionAvail then gui.Columns(1,"lmm_live_grid",false) end
+end
+local function slider(gui,label,value,lo,hi)
+    if not gui.BeginGrid and gui.SetNextItemWidth then
+        gui.TextUnformatted(label:match("^(.-)##") or label);gui.SetNextItemWidth(-1)
+        label="##"..(label:match("##(.*)$") or label)
+    end
+    return gui.SliderInt(label,value,lo,hi,"%d")
+end
+function M:shortcut_settings(gui,tr,save)
+    section(gui,tr,"贴边快捷按钮","Edge shortcuts")
+    local changed,v=gui.Checkbox(tr("显示贴边快捷按钮","Show edge shortcuts").."##live_edge",self.config.edge)
+    if changed then self.config.edge=v;save() end
+    gui.TextUnformatted(tr("沿侧边拖动可调整位置；隐藏后可从插件菜单打开设置。","Drag along the edge to reposition. Settings remain in the Plugins menu."))
+    grid(gui,3,210)
+    local rows=self.compatibility and {{"compat_edge_size","按钮大小","Shortcut size",20,48},{"compat_edge_alpha","按钮透明度","Shortcut opacity",5,100},{"compat_edge_lightness","按钮明暗","Shortcut lightness",20,100}}
+        or {{"edge_alpha","按钮透明度","Shortcut opacity",5,100}}
+    for _,row in ipairs(rows) do
+        local c,n=slider(gui,tr(row[2],row[3]).."##live_"..row[1],self.config[row[1]],row[4],row[5])
+        if c then self.config[row[1]]=n;save() end
+        grid_next(gui)
+    end
+    grid_end(gui)
+end
 function M:settings(gui,tr,debug,save)
-    gui.TextUnformatted(tr("实时覆盖层与快捷入口","Live overlays and edge shortcuts"))
-    for _,row in ipairs({{"edge","贴边快捷按钮","Edge shortcuts"},{"edge_right","贴右侧","Right edge"},
-        {"stick","摇杆组件","Input widget"},{"stick_wind","实时风向叠加","Live wind overlay"},{"throttle","油门组件","Throttle widget"},{"n1","N1 组件","N1 widget"},{"engine_combined","合并油门与 N1（使用油门组件位置）","Combine throttle + N1 (throttle position)"},{"edit","编辑布局（拖动标题）","Edit layout (drag titles)"}}) do
-        local changed,v=gui.Checkbox(tr(row[2],row[3]).."##live_"..row[1],self.config[row[1]])
-        if changed then self.config[row[1]]=v; save() end
+    local function choices(rows)
+        grid(gui,3,210)
+        for _,row in ipairs(rows) do
+            local key=row[1]
+            local combined=(key=='g_meter' or key=='fpm_meter') and 'live_combined'
+                or (key=='throttle' or key=='n1') and 'engine_combined'
+            local checked=self.config[key] and not (combined and self.config[combined])
+            local changed,v=gui.Checkbox(tr(row[2],row[3]).."##live_"..key,checked)
+            if changed then
+                self.config[row[1]]=v
+                -- Combined is a directly usable component, not a hidden modifier.
+                if v and combined then self.config[combined]=false end
+                if v and row[1]=='live_combined' then self.config.g_meter=false;self.config.fpm_meter=false end
+                if v and row[1]=='engine_combined' then self.config.throttle=false;self.config.n1=false end
+                save()
+            end
+            grid_next(gui)
+        end
+        grid_end(gui)
     end
-    gui.TextUnformatted(tr("配色修改对象","Appearance target"))
-    for i,row in ipairs({{"全部组件","All widgets"},{"摇杆","Input"},{"油门","Throttle"},{"N1","N1"}}) do
-        if gui.RadioButton(tr(row[1],row[2]).."##live_style_"..i,self.config.appearance==i) then self.config.appearance=i end
-    end
-    for _,row in ipairs({{"edge_alpha","快捷按钮透明度","Shortcut opacity",5,100},
-        {"stick_size","摇杆大小","Input size",120,360},{"throttle_size","油门大小","Throttle size",120,360},
-        {"n1_size","N1 大小","N1 size",120,360},{"alpha","组件透明度","Widget opacity",5,100},
-        {"red","红","Red",0,255},{"green","绿","Green",0,255},{"blue","蓝","Blue",0,255}}) do
-        local key=row[1]; local style=key=="alpha" or key=="red" or key=="green" or key=="blue"
-        local target=({"","stick_","throttle_","n1_"})[math.floor(self.config.appearance)] or ""
-        if style then key=target..key end
-        -- FlyWithLua's ImGui binding requires format even though C++ has a default.
-        local changed,v=gui.SliderInt(tr(row[2],row[3]).."##live_"..key,self.config[key],row[4],row[5],"%d")
+    section(gui,tr,"实时组件","Live widgets")
+    choices({{"fpm_meter","实时FPM组件","Live FPM widget"},{"g_meter","实时G值组件","Live G widget"},{"live_combined","实时G+FPM组件","Live G + FPM widget"}})
+    gui.Separator()
+    choices({{"throttle","实时油门杆组件","Live throttle widget"},{"n1","实时N1组件","Live N1 widget"},{"engine_combined","实时油门杆+N1组件","Live throttle + N1 widget"}})
+    gui.Separator()
+    choices({{"stick","操纵输入组件","Control input widget"},{"stick_wind","实时风向叠加","Live wind overlay"},{"edit","编辑布局（允许拖动）","Edit layout (allow dragging)"}})
+    section(gui,tr,"FPM 数据来源","FPM sources")
+    gui.TextUnformatted(tr("独立 FPM 来源（可多选）","FPM widget sources (multiple allowed)"))
+    grid(gui,3,230)
+    for i,key in ipairs({"fpm_vvi","fpm_physical","fpm_agl"}) do
+        local label=({tr("VVI 指示","VVI indication"),tr("物理垂直速度","Physical vertical speed"),tr("AGL 高度变化估算","AGL height-change estimate")})[i]
+        local changed,v=gui.Checkbox(label.."##live_"..key,self.config[key])
         if changed then
             self.config[key]=v
-            if style and target=="" then for _,id in ipairs({"stick","throttle","n1"}) do self.config[id.."_"..key]=v end end
+            if not (self.config.fpm_vvi or self.config.fpm_physical or self.config.fpm_agl) then self.config[key]=true end
             save()
         end
+        grid_next(gui)
     end
+    grid_end(gui)
+    gui.TextUnformatted(tr("即时演算 FPM 来源（独立设置）","Live-calculation FPM source (independent)"))
+    grid(gui,3,210)
+    for i,label in ipairs({"VVI",tr("物理","Physical"),tr("AGL估算","AGL estimate")}) do
+        if gui.RadioButton(label.."##popup_fpm_"..i,self.config.popup_fpm_source==i) then self.config.popup_fpm_source=i;save() end
+        grid_next(gui)
+    end
+    grid_end(gui)
+    gui.TextUnformatted(tr("来源缺失显示不可用；仅影响显示，不修改评分。","Missing sources show unavailable; display only, grading unchanged."))
+    section(gui,tr,"大小与外观","Size and appearance")
+    gui.TextUnformatted(tr("配色修改对象","Appearance target"))
+    grid(gui,3,210)
+    for i,row in ipairs({{"全部组件","All widgets"},{"摇杆","Input"},{"油门","Throttle"},{"N1","N1"},{"实时 G","Live G"},{"实时 FPM","Live FPM"}}) do
+        if gui.RadioButton(tr(row[1],row[2]).."##live_style_"..i,self.config.appearance==i) then self.config.appearance=i end
+        grid_next(gui)
+    end
+    grid_end(gui)
+    grid(gui,2,270)
+    for _,row in ipairs({
+        {"g_meter_size","实时 G 大小","Live G size",120,360},{"fpm_meter_size","实时 FPM 大小","Live FPM size",120,360},{"stick_size","摇杆大小","Input size",120,360},{"throttle_size","油门大小","Throttle size",120,360},
+        {"n1_size","N1 大小","N1 size",120,360},{"alpha","组件透明度","Widget opacity",5,100},
+        {"red","红","Red",0,255},{"green","绿","Green",0,255},{"blue","蓝","Blue",0,255}}) do
+        if not (self.compatibility and row[1]=="edge_alpha") then
+        local key=row[1]; local style=key=="alpha" or key=="red" or key=="green" or key=="blue"
+        local target=({"","stick_","throttle_","n1_","g_meter_","fpm_meter_"})[math.floor(self.config.appearance)] or ""
+        if style then key=target..key end
+        -- FlyWithLua's ImGui binding requires format even though C++ has a default.
+        local changed,v=slider(gui,tr(row[2],row[3]).."##live_"..key,self.config[key],row[4],row[5])
+        if changed then
+            self.config[key]=v
+            if style and target=="" then for _,id in ipairs({"stick","throttle","n1","g_meter","fpm_meter"}) do self.config[id.."_"..key]=v end end
+            save()
+        end
+        end
+        grid_next(gui)
+    end
+    grid_end(gui)
     if gui.Button(tr("恢复覆盖层默认布局","Reset overlay layout").."##live_reset") then
         for k,v in pairs(defaults) do if k:match("_[xy]$") or k:find("size",1,true) or k:match('_collapsed$') then self.config[k]=v end end; save()
     end
+    section(gui,tr,"录制与诊断","Recording and diagnostics")
     local wind_changed,wind_interval=gui.SliderFloat(tr("风采样间隔（秒）","Wind sample interval (seconds)").."##live_wind",self.config.wind_interval,.1,10,"%.1f")
     if wind_changed then self.config.wind_interval=wind_interval; save() end
     if self.recording then
@@ -184,8 +280,9 @@ function M:settings(gui,tr,debug,save)
     if self.notice then gui.TextUnformatted(self.notice) end
 end
 function M:visible(id,debug)
+    if self.config.live_combined and (id=="g_meter" or id=="fpm_meter") then return id=="g_meter" end
     if id=="settings" or id=="records" then return self.config.edge end
-    if self.config.engine_combined and (id=="throttle" or id=="n1") then return id=="throttle" and (self.config.throttle or self.config.n1) end
+    if self.config.engine_combined and (id=="throttle" or id=="n1") then return id=="throttle" end
     return self.config[id] or id=="stick" and debug
 end
 function M:present(host,debug,en)
@@ -199,23 +296,30 @@ function M:present(host,debug,en)
     else
         if self.renderer then self.renderer:destroy(); self.renderer=nil end
         if not SUPPORTS_FLOATING_WINDOWS then return end
-        for _,id in ipairs({"settings","records","stick","throttle","n1"}) do
+        for _,id in ipairs({"settings","records","stick","throttle","n1","g_meter","fpm_meter"}) do
             local edge=id=="settings" or id=="records"
             local visible=self:visible(id,debug)
             local w=self.legacy[id]
             local collapsed=not edge and self.config[id..'_collapsed']
-            local width=edge and 52 or collapsed and 126 or 245
-            local height=edge and 42 or collapsed and 32 or (id=="throttle" and self.config.engine_combined and math.max(120,40+32*(self.engine_count or 2)) or debug and 210 or 120)
+            local compact=edge and self.compatibility
+            local width=edge and (compact and self.config.compat_edge_size or 52) or collapsed and 126 or 245
+            local height=edge and (compact and width or 42) or collapsed and 32 or (id=="throttle" and self.config.engine_combined and math.max(120,40+32*(self.engine_count or 2)) or debug and 210 or 120)
             if visible and not w then
-                w=float_wnd_create(width,height,0,true)
-                self.legacy[id]=w; float_wnd_set_imgui_builder(w,"ma_live_"..id)
+                -- Raw FWL windows avoid ImGui's opaque host background and minimum
+                -- size/padding. This uses the old SDK draw API, never SDK 440 fonts.
+                w=float_wnd_create(width,height,0,not compact)
+                self.legacy[id]=w
+                if compact then
+                    float_wnd_set_ondraw(w,"ma_live_"..id.."_draw")
+                    float_wnd_set_onclick(w,"ma_live_"..id.."_click")
+                else float_wnd_set_imgui_builder(w,"ma_live_"..id) end
                 self.legacy_state[id]={}
             elseif not visible and w then float_wnd_destroy(w); self.legacy[id]=nil; w=nil end
             if w then
                 local sw,sh=SCREEN_WIDTH or 1920,SCREEN_HIGHT or 1080
                 local c=self.legacy_state[id];local pos=self.config['edge_'..id..'_y'] or -1
-                local x=edge and (self.config.edge_right and sw-52 or 0) or math.floor((sw-245)*(self.config[id.."_x"] or .1))
-                local y=edge and (pos>=0 and math.floor((sh-height)*pos) or math.floor(sh*.55)+(id=="settings" and 48 or 0)) or math.floor((sh-210)*(self.config[id.."_y"] or .2))
+                local x=edge and (self.config.edge_right and sw-width or 0) or math.floor((sw-245)*(self.config[id.."_x"] or .1))
+                local y=edge and (pos>=0 and math.floor((sh-height)*pos) or math.floor(sh*.55)+(id=="settings" and height+6 or 0)) or math.floor((sh-210)*(self.config[id.."_y"] or .2))
                 y=math.max(0,math.min(sh-height,y))
                 if c.width~=width or c.height~=height then
                     if float_wnd_set_geometry then float_wnd_set_geometry(w,x,y+height,x+width,y) end
@@ -224,6 +328,48 @@ function M:present(host,debug,en)
                 if c.x~=x or c.y~=y then float_wnd_set_position(w,x,y);c.x,c.y=x,y end
             end
         end
+    end
+end
+function M:edge_draw(id,x,y)
+    local c=self.legacy_state[id];if not c then return end
+    local size=c.width or self.config.compat_edge_size
+    local hover=type(MOUSE_X)=='number' and type(MOUSE_Y)=='number'
+        and MOUSE_X>=x and MOUSE_X<=x+size and MOUSE_Y>=y and MOUSE_Y<=y+size
+    local a=self.config.compat_edge_alpha/100
+    if hover or c.drag then a=math.max(.8,a) end
+    local light=self.config.compat_edge_lightness/100
+    XPLMSetGraphicsState(0,0,0,1,1,0,0)
+    glColor4f(light,light,light,a*.42);glRectf(x,y,x+size,y+size)
+    glColor4f(light,light,light,a)
+    glRectf(x,y,x+size,y+1);glRectf(x,y+size-1,x+size,y+size)
+    glRectf(x,y,x+1,y+size);glRectf(x+size-1,y,x+size,y+size)
+    -- XPLM draw_string replaces the GL color with opaque RGB. The legacy bitmap
+    -- font preserves glColor4f alpha, so letters fade together with the square.
+    draw_string_Helvetica_10(x+(size-7)/2,y+(size-10)/2,id=='settings' and 'S' or 'R')
+    if hover and not c.drag then
+        local label=id=='settings' and 'Settings' or 'Landing records'
+        local tx=self.config.edge_right and x-#label*8-10 or x+size+10
+        glColor4f(.05,.07,.09,.8);glRectf(tx-4,y-2,tx+#label*8+4,y+18)
+        glColor4f(.9,.94,1,.95);draw_string_Helvetica_10(tx,y+3,label)
+    end
+end
+function M:edge_click(id,x,y,status)
+    local c=self.legacy_state[id];if not c then return end
+    -- FWL supplies coordinates relative to the window bottom. Recover the
+    -- global mouse position before moving it to avoid drag feedback/jumping.
+    local global_y=(c.y or 0)+y
+    if status==1 then c.drag={start_y=global_y,y=c.y or 0};return end
+    local d=c.drag;if not d then return end
+    local delta=global_y-d.start_y
+    if math.abs(delta)>4 then d.moved=true end
+    if d.moved then
+        self.config['edge_'..id..'_y']=math.max(0,math.min(1,
+            (d.y+delta)/math.max(1,(SCREEN_HIGHT or 1080)-(c.height or self.config.compat_edge_size))))
+    end
+    if status==3 then
+        if d.moved then self.pending='save'
+        elseif x>=0 and x<=c.width and y>=0 and y<=c.height then self.pending=id end
+        c.drag=nil
     end
 end
 function M:legacy_build(id)
@@ -270,6 +416,22 @@ function M:legacy_build(id)
         g.SetCursorPosX(215)
         if g.Button('-##fold_'..id,18,16) then self.config[id..'_collapsed']=true;self.pending='save' end
         g.SetCursorPosX(x);g.SetCursorPosY(y)
+    end
+    if id=="g_meter" or id=="fpm_meter" then
+        local td=self.touchdown
+        if not td then g.TextUnformatted("Unavailable");return end
+        local function number_line(value,label,is_fpm)
+            local v=is_fpm and value and math.max(0,-value) or value
+            local ink=v and v>(is_fpm and 300 or 1.8) and 0xFF3838FF or v and v>(is_fpm and 250 or 1.5) and 0xFF26C7FF or 0xF5FFEFD1
+            styled(ink,function()g.TextUnformatted(label)end)
+        end
+        g.TextUnformatted("LIVE / display only")
+        if id=="g_meter" then number_line(td.live_g,td.g_text,false) end
+        if id=="fpm_meter" or self.config.live_combined then
+            local live=self.live_fpm
+            if live then for _,source in ipairs(live:selected(self.config)) do number_line(live.values[source],live:line(source,true),true) end end
+        end
+        return
     end
     if id=="stick" then
         if self.config.stick_wind then g.TextUnformatted("WIND FROM "..(self.wind.valid and self.wind.label or "N/A")) end

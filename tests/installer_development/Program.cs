@@ -22,11 +22,11 @@ if(args.Length==3 && args[1]=="--withdrawn-119-catalog-json") {
 if(args.Length==3 && args[1]=="--catalog-json") {
     using var network=new Network(Console.WriteLine,new CatalogSnapshotHandler(File.ReadAllText(args[2])));
     var catalog=Core.LabelReleases(await network.Catalog(default));
-    var current=catalog.Where(r=>r.Version==version).ToList();
+    var current=catalog.Where(r=>r.Version.Equals(version,StringComparison.OrdinalIgnoreCase)).ToList();
     Check(current.Count==4 && current.All(r=>r.IsLatest),"published stable release not discovered as four Latest variants");
-    if(version is "1.1.9rc2" or "1.1.9rc4") {
+    if(version is "1.1.9rc2" or "1.1.9rc4" or "1.1.9RC9") {
         var installers=await network.InstallerCatalog(default);
-        var expectedInstaller=version=="1.1.9rc4" ? "1.0.3" : "1.0.2";
+        var expectedInstaller=version=="1.1.9RC9" ? "1.0.4" : version=="1.1.9rc4" ? "1.0.3" : "1.0.2";
         Check(installers.Available && installers.Releases.First().Version==expectedInstaller,"installer self-update not discovered");
         Check(catalog.Where(r=>r.Version=="1.1.9").All(r=>Core.Variant(r)=="sdk440"),"withdrawn original Compatibility returned");
     }

@@ -13,6 +13,7 @@ def overlay_runtime():
                 stick=true,stick_size=180,stick_wind=true,size=180},
             wind={valid=true,calm=false,speed=10,dx=1,dy=0,label='270T 10.0kt'},
             inputs={axes={pitch={valid=true,value=0},roll={valid=true,value=0},yaw={valid=true,value=0}}}}
+        model.visible=assert(loadfile(ROOT..'LMM_UI_119/core_experience.lua'))(ROOT..'LMM_UI_119/').visible
         renderer=assert(loadfile(ROOT..'LMM_UI_119/overlays.lua'))().new(host,ffi,model)
         renderer:tick(); window=renderer.windows.stick
         polygons={}; texts={}

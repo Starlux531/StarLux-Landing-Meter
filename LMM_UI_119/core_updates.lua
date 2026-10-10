@@ -2,7 +2,7 @@
 local M={};M.__index=M
 local function version(s)
     if type(s)~='string' then return end
-    s=s:gsub('^v','')
+    s=s:lower():gsub('^v','')
     local a,b,c,tail=s:match('^(%d+)%.(%d+)%.(%d+)(.*)$')
     if not a then return end
     local rank,n=3,0

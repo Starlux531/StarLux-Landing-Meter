@@ -1,4 +1,4 @@
-"""Build OFL UI font subsets. Run with fonttools installed (see beta README).
+"""Build OFL UI font subsets. Run with fonttools installed (see docs/WORKSPACE.md).
 
 Inputs are the three upstream Noto CJK SC OTF files in .tools/font-sources.
 No fonts from the user's simulator or Windows installation are redistributed.
@@ -15,11 +15,13 @@ from fontTools.ttLib import TTFont
 
 
 def main():
-    text = (ROOT / 'StarLux_LMM_v1.1.8.lua').read_text(encoding='utf-8-sig')
+    text = (ROOT / 'StarLux_LMM_v1.1.9.lua').read_text(encoding='utf-8-sig')
+    for directory in ('LMM_UI_119',):
+        text += ''.join(p.read_text(encoding='utf-8-sig') for p in (ROOT/directory).glob('*.lua'))
     # All source glyphs, ASCII, common punctuation; full simulator CJK fallback
     # is added at runtime for identifiers/text outside this UI subset.
     unicodes = sorted(set(map(ord, text)) | set(range(32, 127)) | {0x2026, 0xFFFD})
-    out = ROOT / 'LMM_UI_118/fonts'
+    out = ROOT / 'LMM_UI_119/fonts'
     out.mkdir(parents=True, exist_ok=True)
     manifest = {'upstream': 'https://github.com/notofonts/noto-cjk/tree/main/Sans',
                 'license': 'SIL Open Font License 1.1', 'fonts': []}
@@ -33,7 +35,7 @@ def main():
         worker.populate(unicodes=unicodes)
         worker.subset(font)
         # Rename derivative to avoid representing a UI subset as the full font.
-        names = {1: 'LMM UI', 2: weight, 3: f'LMM UI {weight} 1.1.8beta',
+        names = {1: 'LMM UI', 2: weight, 3: f'LMM UI {weight} 1.1.9',
                  4: f'LMM UI {weight}', 6: f'LMMUI-{weight}', 16: 'LMM UI', 17: weight}
         for record in font['name'].names:
             if record.nameID in names:

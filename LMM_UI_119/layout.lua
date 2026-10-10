@@ -37,6 +37,8 @@ function M.characters(text)
 end
 
 function M.wrap(text, limit, measure)
+    -- Most popup rows fit. Avoid measuring every growing UTF-8 prefix.
+    if not text:find('\n',1,true) and measure(text)<=limit then return {text} end
     local chars, rows, current = M.characters(text), {}, ""
     for _, c in ipairs(chars) do
         if c == "\n" then

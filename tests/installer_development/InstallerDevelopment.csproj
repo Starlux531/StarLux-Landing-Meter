@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../installer/*.cs" Exclude="../../installer/Program.cs" />
+      <EmbeddedResource Include="../../installer/assets/startup.jpg" LogicalName="StarLux.Startup.jpg" />
   </ItemGroup>
 </Project>

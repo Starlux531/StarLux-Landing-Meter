@@ -8,7 +8,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 meta = json.loads((ROOT / 'development.json').read_text(encoding='utf-8'))
-assert (meta['channel'] == 'stable' and meta['version'] in ('1.1.9','1.1.9rc2','1.1.9rc4')) or (meta['channel'] == 'unpublished' and re.fullmatch(r'1\.1\.9rc[2-9][0-9]*',meta['version']))
+assert (meta['channel'] == 'stable' and meta['version'] in ('1.1.9','1.1.9rc2','1.1.9rc4','1.1.9RC7','1.1.9RC9')) or (meta['channel'] == 'unpublished' and re.fullmatch(r'1\.1\.9rc[2-9][0-9]*',meta['version'],re.I))
 version = meta['version']
 release = ROOT / 'dist' / version
 bundle = release / f'StarLux_LMM_Installer_{version}.zip'
@@ -34,6 +34,10 @@ names = [cn.name, en.name, f'Starlux_Analyzer_{version}.zip',
          f'StarLux_LMM_Installer_Only_{version}.zip', 'README_1.1.9.md', 'analyzer-presets.json']
 names += [f'StarLux_LMM_v{version}-{variant}-{language}.zip'
           for variant in ('Standard', 'Compatibility') for language in ('CN', 'International')]
+# Author-supplied RC9 demonstrations are release assets, not source-tree binaries.
+if version == '1.1.9RC9':
+    names += [name for name in ('RC9-Live-Calculation-CN.gif', 'RC9-Live-Calculation-EN.gif')
+              if (release / name).is_file()]
 for name in names:
     shutil.copyfile(release / name, publish / name)
 notes = f'RELEASE_NOTES_v{version}.md'

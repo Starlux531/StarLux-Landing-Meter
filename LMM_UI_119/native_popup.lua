@@ -77,6 +77,7 @@ end
 
 function M:draw()
     if not self.ready or not self.visible or not self.frame then return end
+    local started=self.work and self.work.clock()
     local f, l = self.frame, self.layout
     local x, y, w, h = self.x, self.y, l.width, l.height
     local r, g, b = unpack(f.color)
@@ -96,15 +97,25 @@ function M:draw()
     for i, row in ipairs(l.rows) do
         -- Blink visibility does not enter the layout key, so all three flashes
         -- keep their reserved space without loading fonts or resizing the box.
-        if row.source ~= f.hidden_line then
-            self.api.XPLMFontDrawString(font, text_color, l.size, x + l.left,
-                y + h - l.top - l.ascent - (i - 1) * l.gap, row.text, 0)
+        if row.source ~= f.hidden_line and not (f.reserve and f.reserve[row.source] and i>1 and l.rows[i-1].source==row.source) then
+            local c=f.line_colors and f.line_colors[row.source]
+            local ink=c and pack(c[1],c[2],c[3],.98) or text_color
+            local value=f.reserve and f.reserve[row.source] and f.lines[row.source] or row.text
+            local size=l.size
+            if f.reserve and f.reserve[row.source] then
+                local measured=self:measure(value,size)
+                if measured>w-l.left-10 then size=size*(w-l.left-10)/math.max(1,measured) end
+            end
+            self.api.XPLMFontDrawString(font, ink, size, x + l.left,
+                y + h - l.top - l.ascent - (i - 1) * l.gap, value, 0)
         end
     end
+    if f.on_close then self.api.XPLMFontDrawString(font,text_color,10,x+w-17,y+h-14,"x",0) end
     if f.on_resize then
         self:rect(x+w-10,y+3,7,1,border)
         self:rect(x+w-4,y+3,1,7,border)
     end
+    if self.work then self.work:record('popup_draw',started) end
 end
 
 function M:hide()
@@ -129,16 +140,23 @@ function M:destroy()
 end
 
 function M:measure(text, size)
+    self.width_cache=self.width_cache or {};self.width_count=self.width_count or 0
+    local key=size..':'..text
+    if self.width_cache[key] then return self.width_cache[key] end
     local max_width = 0
     for _, font in pairs(self.fonts) do
         local width = tonumber(self.api.XPLMFontMeasureString(font, size, text))
         assert(width and width == width and width >= 0 and width < 1000000, "Invalid font width")
         max_width = math.max(max_width, width)
     end
+    if self.width_count>=1024 then self.width_cache={};self.width_count=0 end
+    self.width_cache[key]=max_width;self.width_count=self.width_count+1
     return max_width
 end
 
 function M:metrics(size)
+    self.metric_cache=self.metric_cache or {}
+    if self.metric_cache[size] then return unpack(self.metric_cache[size]) end
     local ascent, descent, height = 0, 0, 0
     for _, font in pairs(self.fonts) do
         local m = self.font_metrics
@@ -149,10 +167,11 @@ function M:metrics(size)
         ascent, descent, height = math.max(ascent, m[0].lineAscent),
             math.max(descent, m[0].lineDescent), math.max(height, m[0].lineHeight)
     end
+    self.metric_cache[size]={ascent,descent,height}
     return ascent, descent, height
 end
 
-function M:present(frame, resizing, finished)
+function M:present(frame, resizing, finished, prepare_only)
     assert(self.ready, self.error or "Native popup unavailable")
     local bounds = self.bounds
     self.api.XPLMGetScreenBoundsGlobal(bounds, bounds + 1, bounds + 2, bounds + 3)
@@ -160,15 +179,28 @@ function M:present(frame, resizing, finished)
         tonumber(bounds[2]), tonumber(bounds[3])
     local sw, sh = right - left, top - bottom
     assert(sw > 0 and sh > 0, "Invalid desktop bounds")
-    local key = table.concat(frame.lines, "\30") .. "\31" .. frame.size .. ":" .. sw .. ":" .. sh
+    local layout_lines={}
+    for i,line in ipairs(frame.lines) do layout_lines[i]=frame.reserve and frame.reserve[i] or line end
+    local key = table.concat(layout_lines, "\30") .. "\31" .. frame.size .. ":" .. sw .. ":" .. sh
         .. ":" .. tostring(frame.vertical)
     if key ~= self.layout_key then
-        self.layout = layout.build(frame.lines, frame.size, math.max(1, sw - 20),
+        self.layouts=self.layouts or {};self.layout_count=self.layout_count or 0
+        local prepared=self.layouts[key]
+        if not prepared then
+        local started=self.work and self.work.clock()
+        prepared = layout.build(layout_lines, frame.size, math.max(1, sw - 20),
             math.max(1, sh - 20), frame.vertical,
             function(px) return self:metrics(px) end,
             function(text, px) return self:measure(text, px) end)
+        if self.work then self.work:record('layout',started) end
+        if self.layout_count>=8 then self.layouts={};self.layout_count=0 end
+        self.layouts[key]=prepared;self.layout_count=self.layout_count+1
+        end
+        if prepare_only then return end
+        self.layout=prepared
         self.layout_key = key
     end
+    if prepare_only then return end
     local x, y
     if resizing then
         local px,py=layout.resize_position(resizing,self.layout.width,self.layout.height,left,top,right,bottom)
@@ -188,6 +220,10 @@ function M:present(frame, resizing, finished)
 end
 
 function M:mouse(x,y,status)
+    if status==1 and self.visible and self.frame and self.frame.on_close and self.layout
+        and x>=self.x+self.layout.width-24 and x<self.x+self.layout.width-8 and y>=self.y+self.layout.height-24 and y<self.y+self.layout.height-8 then
+        self.frame.on_close();self:hide();return 1
+    end
     if not self.visible or not self.frame or not self.frame.on_move then return 0 end
     if status==1 then
         if x<self.x or x>self.x+self.layout.width or y<self.y or y>self.y+self.layout.height then return 0 end
