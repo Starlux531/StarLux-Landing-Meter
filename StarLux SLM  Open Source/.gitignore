@@ -1,0 +1,37 @@
+# X-Plane / FlyWithLua runtime logs
+*.log
+FlyWithLua_Debug.txt
+
+# User landing records and generated browser bridge
+LMM_Log/LMM_*.txt
+LMM_Log/LMM_Viewer.html
+LMM_Log/LMM_Viewer_Data.js
+LMM_Log/.lmm_index.tmp
+
+# Local archived flight-test records
+旧版备份/测试日志/
+
+# Local release packages
+*.zip
+.tools/
+tests/__pycache__/
+installer/bin/
+installer/obj/
+dist/StarLux_LMM_Installer/
+dist/StarLux_LMM_Installer_UI/
+dist/1.1.8/
+.pnpm-store/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local release review and work-in-progress documents
+RELEASE_CHECKLIST_v1.1.md
+docs/StarLux_LMM_v1.0_核心算法技术说明手册.pdf
+docs/video-assets/
+旧版备份/2026-07-29_*/
+旧版备份/Lua/StarLux_LMM_v1.0.lua
+旧版备份/Lua/StarLux_LMM_v1.1.lua
+旧版备份/阅读器/LMM_Report_Reader.html

@@ -1,0 +1,50 @@
+name: Bug 报告
+description: 报告可重复的软件问题
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: 感谢反馈。请不要在日志中公开个人敏感信息。
+  - type: input
+    id: versions
+    attributes:
+      label: 版本信息
+      description: 请填写 X-Plane、FlyWithLua 和 StarLux Landing Meter 版本。
+    validations:
+      required: true
+  - type: input
+    id: aircraft
+    attributes:
+      label: 使用机模
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请按顺序说明如何稳定复现问题。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果与相关日志
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已确认没有同时加载旧版本 Lua 文件。
+          required: true
+        - label: 我已检查并移除日志中的敏感信息。
+          required: true

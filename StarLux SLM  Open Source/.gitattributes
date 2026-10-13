@@ -1,0 +1,10 @@
+* text=auto
+*.lua text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+
+# Keep release archives binary if one is ever checked in intentionally.
+*.zip binary
+
+# PDF bytes must never pass through text line-ending normalization.
+*.pdf binary

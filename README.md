@@ -8,7 +8,7 @@ CN/EN 均含 Standard/Compatibility × 中/英文四种载荷。Standard 要求 
 
 **Public stable release 1.1.9RC9**, bundled with installer **1.0.4**. This cumulative update adds bounded touchdown observation, rebound fixes, live recorder status and source-labeled widgets, an enabled-by-default OSM plan view, clearer G review and adaptive report export. CN and ASCII-path EN bundles contain all four variants. Update the installer first, then install the complete plugin package.
 
-[累计更新 / Changelog](CHANGELOG.md) · [中英文发行说明 / Release notes](RELEASE_NOTES_v1.1.9RC9.md) · [安装说明 / Installation](README_1.1.9.md) · [路线图 / Roadmap](ROADMAP.md)
+[累计更新 / Changelog](StarLux%20SLM%20%20Open%20Source/CHANGELOG.md) · [中英文发行说明 / Release notes](StarLux%20SLM%20%20Open%20Source/RELEASE_NOTES_v1.1.9RC9.md) · [安装说明 / Installation](StarLux%20SLM%20%20Open%20Source/README_1.1.9.md) · [路线图 / Roadmap](StarLux%20SLM%20%20Open%20Source/ROADMAP.md)
 
 下一版本直接进入 **1.2.0 原生 XPL 重写**，为多平台移植打基础；1.1.x 不再安排后续错误修复版本。The next release line is the native XPL rewrite in 1.2.0; no further 1.1.x bug-fix releases are planned.
 
@@ -20,7 +20,7 @@ CN/EN 均含 Standard/Compatibility × 中/英文四种载荷。Standard 要求 
 
 Source-labeled FPM, landing G and the observed peak appear together. Live calculation starts with recorder status and expands at touchdown.
 
-![RC9 触地弹窗](docs/images/rc9-touchdown-popup.png)
+![RC9 触地弹窗](StarLux%20SLM%20%20Open%20Source/docs/images/rc9-touchdown-popup.png)
 
 ### OSM 地图与同步复盘 / OSM map and synchronized review
 
@@ -28,7 +28,7 @@ Source-labeled FPM, landing G and the observed peak appear together. Live calcul
 
 OSM, wind along track and vertical detail start enabled, with independent enlargement and synchronized playback. This screenshot shows a zoomed-in LOC-reference view; the default side view is wind, with an initial map scale of 0.71×.
 
-![RC9 OSM 与 LOC 复盘](docs/images/rc9-osm-plan.png)
+![RC9 OSM 与 LOC 复盘](StarLux%20SLM%20%20Open%20Source/docs/images/rc9-osm-plan.png)
 
 ### 为什么显示 G 区间 / Why show a G range?
 
@@ -36,7 +36,7 @@ OSM, wind along track and vertical detail start enabled, with independent enlarg
 
 Landing load changes through wheel contact, gear compression and possible subsequent contacts. A single reading can hide a later peak. RC9 shows the report's touchdown display value alongside the observed touchdown-event peak, connected by two markers, making their difference visible and easier to inspect. This provides more context than one isolated number; it is not a statistical confidence interval, and the raw peak does not automatically replace the rated G. Existing FPM/G grading remains unchanged. “Instantaneous touchdown” currently uses the report display field, not a newly extracted touchdown-frame sample.
 
-![RC9 触地读数与观测峰值双指针区间](docs/images/rc9-g-range.png)
+![RC9 触地读数与观测峰值双指针区间](StarLux%20SLM%20%20Open%20Source/docs/images/rc9-g-range.png)
 
 ### 即时演算动态演示 / Live-calculation demonstrations
 
@@ -65,7 +65,7 @@ Original user-supplied animations, approximately 62 MB (CN) and 95 MB (EN). Load
 Trajectory, controls, surfaces and power output share one timeline, with synchronized hover readouts, playback, scrubbing and fused/separated views.
 
 <p align="center">
-  <a href="docs/images/316f279efdc4f5dd509f893750489b25.gif"><img src="docs/images/316f279efdc4f5dd509f893750489b25.gif" alt="StarLux LMM synchronized trajectory and control-chart demonstration" width="820"></a>
+  <a href="StarLux%20SLM%20%20Open%20Source/docs/images/316f279efdc4f5dd509f893750489b25.gif"><img src="StarLux%20SLM%20%20Open%20Source/docs/images/316f279efdc4f5dd509f893750489b25.gif" alt="StarLux LMM synchronized trajectory and control-chart demonstration" width="820"></a>
 </p>
 
 <p align="center"><sub>作者提供的原始 GIF，约 10 MB。点击查看原图。 / Original author-provided GIF, about 10 MB; click to view.</sub></p>
@@ -77,7 +77,7 @@ Trajectory, controls, surfaces and power output share one timeline, with synchro
 Review touchdown values, rating sources, wind, attitude, runway geometry and control traces together. RGB themes and saved presets include zoom, layout and selected curves.
 
 <p align="center">
-  <a href="docs/images/2b87968938e5c0083bf0713c2a316422.png"><img src="docs/images/2b87968938e5c0083bf0713c2a316422.png" alt="Landing overview with rating breakdown, wind and touchdown attitude" width="1060"></a>
+  <a href="StarLux%20SLM%20%20Open%20Source/docs/images/2b87968938e5c0083bf0713c2a316422.png"><img src="StarLux%20SLM%20%20Open%20Source/docs/images/2b87968938e5c0083bf0713c2a316422.png" alt="Landing overview with rating breakdown, wind and touchdown attitude" width="1060"></a>
 </p>
 
 ## 游戏内设置与记录 / In-simulator settings and records
@@ -89,8 +89,8 @@ Separate Settings and Landing records menus, grouped settings, visible slider ha
 <table>
   <tr><th width="55%">设置与弹窗预览 / Settings &amp; popup preview</th><th width="45%">落地记录 / Landing records</th></tr>
   <tr>
-    <td valign="top"><a href="docs/images/ad0467ff32bf49a97a8ff26e8333cb02.png"><img src="docs/images/ad0467ff32bf49a97a8ff26e8333cb02.png" alt="Native Chinese settings grouped into five tabs" width="100%"></a></td>
-    <td valign="top"><a href="docs/images/4bf29d926c0911c3946c5de9234a522b.png"><img src="docs/images/4bf29d926c0911c3946c5de9234a522b.png" alt="Landing record browser with separate report and delete actions" width="100%"></a></td>
+    <td valign="top"><a href="StarLux%20SLM%20%20Open%20Source/docs/images/ad0467ff32bf49a97a8ff26e8333cb02.png"><img src="StarLux%20SLM%20%20Open%20Source/docs/images/ad0467ff32bf49a97a8ff26e8333cb02.png" alt="Native Chinese settings grouped into five tabs" width="100%"></a></td>
+    <td valign="top"><a href="StarLux%20SLM%20%20Open%20Source/docs/images/4bf29d926c0911c3946c5de9234a522b.png"><img src="StarLux%20SLM%20%20Open%20Source/docs/images/4bf29d926c0911c3946c5de9234a522b.png" alt="Landing record browser with separate report and delete actions" width="100%"></a></td>
   </tr>
 </table>
 
@@ -105,8 +105,8 @@ Click either full-page screenshot for original resolution. English UI can load h
 <table>
   <tr><th width="50%">青色主题 / Cyan theme</th><th width="50%">英文紫色主题 / English violet theme</th></tr>
   <tr>
-    <td valign="top"><a href="docs/images/6e496966fbd47394b60dcc42b4c3ff50.png"><img src="docs/images/6e496966fbd47394b60dcc42b4c3ff50.png" alt="Complete Chinese dashboard with cyan RGB theme" width="100%"></a></td>
-    <td valign="top"><a href="docs/images/5e6e9a8769d7caa1d042a6136d0aa93e.png"><img src="docs/images/5e6e9a8769d7caa1d042a6136d0aa93e.png" alt="Complete English dashboard with violet RGB theme and a Chinese source report" width="100%"></a></td>
+    <td valign="top"><a href="StarLux%20SLM%20%20Open%20Source/docs/images/6e496966fbd47394b60dcc42b4c3ff50.png"><img src="StarLux%20SLM%20%20Open%20Source/docs/images/6e496966fbd47394b60dcc42b4c3ff50.png" alt="Complete Chinese dashboard with cyan RGB theme" width="100%"></a></td>
+    <td valign="top"><a href="StarLux%20SLM%20%20Open%20Source/docs/images/5e6e9a8769d7caa1d042a6136d0aa93e.png"><img src="StarLux%20SLM%20%20Open%20Source/docs/images/5e6e9a8769d7caa1d042a6136d0aa93e.png" alt="Complete English dashboard with violet RGB theme and a Chinese source report" width="100%"></a></td>
   </tr>
 </table>
 
@@ -117,16 +117,16 @@ Click either full-page screenshot for original resolution. English UI can load h
 The original aggregated TXT trace remains available for checking recorded samples.
 
 <p align="center">
-  <a href="docs/images/389431ad037fa71f20b03bb7768d3164.png"><img src="docs/images/389431ad037fa71f20b03bb7768d3164.png" alt="Original TXT trajectory table with 0.25-second aggregated samples" width="760"></a>
+  <a href="StarLux%20SLM%20%20Open%20Source/docs/images/389431ad037fa71f20b03bb7768d3164.png"><img src="StarLux%20SLM%20%20Open%20Source/docs/images/389431ad037fa71f20b03bb7768d3164.png" alt="Original TXT trajectory table with 0.25-second aggregated samples" width="760"></a>
 </p>
 
 ## 完整进近与滑跑复盘 / Full approach and rollout analysis
 
-![完整记录、滑跑轨迹与同步时间轴](docs/images/lmm-119-full-flight-analysis.png)
+![完整记录、滑跑轨迹与同步时间轴](StarLux%20SLM%20%20Open%20Source/docs/images/lmm-119-full-flight-analysis.png)
 
 ## 触地俯视图 / Touchdown plan view
 
-![Touchdown and rollout on the runway](docs/images/lmm-119-touchdown-plan-en.png)
+![Touchdown and rollout on the runway](StarLux%20SLM%20%20Open%20Source/docs/images/lmm-119-touchdown-plan-en.png)
 
 ## 当前能力 / Features
 
@@ -156,16 +156,16 @@ FPM and G use the more severe band, followed by existing centerline/bounce adjus
 
 可选地图会联网请求 OpenFreeMap 底图，保留地图数据归属标注；报告、设置和机场缓存留在本机；插件和分析器不上传飞行数据。安装器联网查询官方 GitHub／Gitee Releases、下载发行包；Windows 插件也会后台查询官方 GitHub 发行元数据以提示更新。下载包不含作者的飞行 TXT、浏览器日志或个人配置；作者明确授权展示的截图与配色预设除外。
 
-The optional map requests basemap data from OpenFreeMap and retains attribution. Reports/settings/cache stay local. The installer contacts official release sources; the Windows plugin also checks official GitHub release metadata for update notices. Packages exclude personal flight TXT files and browser data; screenshots and sanitized appearance presets are explicitly author-approved. The installer is not yet code-signed; see the [installation guide](README_1.1.9.md) for safeguards and limitations.
+The optional map requests basemap data from OpenFreeMap and retains attribution. Reports/settings/cache stay local. The installer contacts official release sources; the Windows plugin also checks official GitHub release metadata for update notices. Packages exclude personal flight TXT files and browser data; screenshots and sanitized appearance presets are explicitly author-approved. The installer is not yet code-signed; see the [installation guide](StarLux%20SLM%20%20Open%20Source/README_1.1.9.md) for safeguards and limitations.
 
 ## 文档与反馈 / Documentation and feedback
 
-- [1.1.9 开发与兼容说明 / Installation and compatibility](README_1.1.9.md)
-- [安装器开发与构建 / Installer development](installer/README.md)
-- [更新记录 / Changelog](CHANGELOG.md)
+- [1.1.9 开发与兼容说明 / Installation and compatibility](StarLux%20SLM%20%20Open%20Source/README_1.1.9.md)
+- [安装器开发与构建 / Installer development](StarLux%20SLM%20%20Open%20Source/installer/README.md)
+- [更新记录 / Changelog](StarLux%20SLM%20%20Open%20Source/CHANGELOG.md)
 - [1.1.4 历史发布说明 / Archived release notes](旧版备份/2026-09-13_1.1.9开发前整理/v1.1.8-baseline/RELEASE_NOTES_v1.1.4.md)
 - [1.1.4 核心版本总结 / Historical technical summary](旧版备份/2026-09-13_1.1.9开发前整理/v1.1.8-baseline/docs/StarLux_LMM_v1.1.4_稳定测试版项目总结报告.md)
-- [贡献指南 / Contributing](CONTRIBUTING.md)
+- [贡献指南 / Contributing](StarLux%20SLM%20%20Open%20Source/CONTRIBUTING.md)
 
 报告问题时请附 XP、FlyWithLua、LMM、机模版本，是否回放／暂停，触地前后帧率，以及对应 TXT（分享前检查个人信息）。脚本被隔离时同时提供 `[StarLux LMM]` 日志。三至五份不同落地条件的报告有助于定位系统性偏差，单张 FPM/G 截图不能替代原始记录。
 
@@ -173,6 +173,6 @@ For bug reports, include versions, aircraft, replay/pause status, frame rate and
 
 ## 许可证 / License
 
-代码采用 [MIT License](LICENSE)，随包 LMM UI 字体采用 [SIL OFL 1.1](LMM_UI_119/fonts/OFL.txt)。X-Plane、FlyWithLua 等名称归其权利人所有，本项目与其官方开发者无隶属关系。
+代码采用 [MIT License](StarLux%20SLM%20%20Open%20Source/LICENSE)，随包 LMM UI 字体采用 [SIL OFL 1.1](StarLux%20SLM%20%20Open%20Source/LMM_UI_119/fonts/OFL.txt)。X-Plane、FlyWithLua 等名称归其权利人所有，本项目与其官方开发者无隶属关系。
 
 Code: MIT. Bundled fonts: SIL OFL 1.1. This project is not affiliated with the X-Plane or FlyWithLua developers.
